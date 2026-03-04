@@ -1,0 +1,173 @@
+'use strict';
+
+const nodemailer = require('nodemailer');
+const Timesheet = require('../../modules/timesheets/timesheet.model');
+const { TIMESHEET_STATUS } = require('../../constants');
+
+// ── Transporter ─────────────────────────────────────────────────────────────
+function createTransporter() {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
+    throw new Error('SMTP credentials not configured. Add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM to .env');
+  }
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: parseInt(process.env.SMTP_PORT) === 465,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
+
+// ── Report Data Fetcher ──────────────────────────────────────────────────────
+async function buildReportData(reportType, companyName = 'TimesheetPro', projectIds = []) {
+  const now = new Date();
+  const from = new Date(now);
+  from.setDate(from.getDate() - 7);
+
+  let statusFilter;
+  let reportTitle;
+
+  switch (reportType) {
+    case 'approved':
+      statusFilter = TIMESHEET_STATUS.APPROVED;
+      reportTitle = 'Approved Timesheets';
+      break;
+    case 'rejected':
+      statusFilter = TIMESHEET_STATUS.REJECTED;
+      reportTitle = 'Rejected Timesheets';
+      break;
+    case 'pending':
+      statusFilter = TIMESHEET_STATUS.SUBMITTED;
+      reportTitle = 'Pending (Submitted) Timesheets';
+      break;
+    case 'all':
+    default:
+      statusFilter = null; // no status filter
+      reportTitle = 'All Timesheets (Full Report)';
+      break;
+  }
+
+  const query = { weekStartDate: { $gte: from, $lte: now } };
+  if (statusFilter) query.status = statusFilter;
+
+  let timesheets = await Timesheet.find(query)
+    .populate('userId', 'name email employeeId department')
+    .populate('rows.projectId', 'name code')
+    .sort({ weekStartDate: -1 })
+    .limit(100)
+    .lean();
+
+  // Filter by project if specific projects selected
+  if (projectIds && projectIds.length > 0) {
+    const mongoose = require('mongoose');
+    const projIdStrings = projectIds.map(id => id.toString());
+    timesheets = timesheets.filter(ts =>
+      ts.rows?.some(row => row.projectId && projIdStrings.includes(row.projectId._id?.toString() || row.projectId.toString()))
+    );
+  }
+
+  return { timesheets, reportTitle, companyName, generatedAt: now.toISOString(), projectIds };
+}
+
+// ── HTML Email Builder ───────────────────────────────────────────────────────
+function buildEmailHTML({ timesheets, reportTitle, companyName, generatedAt }) {
+  const date = new Date(generatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+  const rows = timesheets.map((ts) => {
+    const name = ts.userId?.name || 'Unknown';
+    const empId = ts.userId?.employeeId || '—';
+    const dept = ts.userId?.department || '—';
+    const week = ts.weekStartDate ? new Date(ts.weekStartDate).toLocaleDateString('en-IN') : '—';
+    const hours = ts.totalHours ?? 0;
+    const status = ts.status || '—';
+    const statusColor = status === 'approved' ? '#22c55e' : status === 'rejected' ? '#ef4444' : '#f59e0b';
+
+    return `
+      <tr style="border-bottom:1px solid #e2e8f0">
+        <td style="padding:10px 14px;font-size:13px;color:#1e293b;font-weight:600">${name} <span style="color:#94a3b8;font-size:11px">#${empId}</span></td>
+        <td style="padding:10px 14px;font-size:13px;color:#475569">${dept}</td>
+        <td style="padding:10px 14px;font-size:13px;color:#475569">${week}</td>
+        <td style="padding:10px 14px;font-size:13px;color:#6366f1;font-weight:700;text-align:center">${hours}h</td>
+        <td style="padding:10px 14px;text-align:center">
+          <span style="background:${statusColor}20;color:${statusColor};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;text-transform:capitalize">${status}</span>
+        </td>
+      </tr>`;
+  }).join('');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>${reportTitle}</title></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:700px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px 40px">
+      <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800">${companyName}</h1>
+      <p style="margin:6px 0 0;color:#e0e7ff;font-size:14px">${reportTitle}</p>
+    </div>
+    <!-- Meta -->
+    <div style="padding:20px 40px;background:#f8fafc;border-bottom:1px solid #e2e8f0">
+      <p style="margin:0;font-size:12px;color:#64748b">Generated: <strong>${date} (IST)</strong> &nbsp;|&nbsp; Records: <strong>${timesheets.length}</strong></p>
+    </div>
+    <!-- Table -->
+    <div style="padding:24px 40px">
+      ${timesheets.length === 0
+        ? '<p style="text-align:center;color:#94a3b8;padding:40px 0">No records found for the selected period.</p>'
+        : `<table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="background:#f8fafc">
+                <th style="padding:10px 14px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:700">Employee</th>
+                <th style="padding:10px 14px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:700">Department</th>
+                <th style="padding:10px 14px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:700">Week</th>
+                <th style="padding:10px 14px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:700">Hours</th>
+                <th style="padding:10px 14px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:700">Status</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>`
+      }
+    </div>
+    <!-- Footer -->
+    <div style="padding:20px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center">
+      <p style="margin:0;font-size:11px;color:#94a3b8">${companyName} &mdash; Automated Timesheet Report &mdash; Do not reply to this email</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+// ── Public API ───────────────────────────────────────────────────────────────
+const emailService = {
+  /**
+   * Send report email to a list of recipient email addresses.
+   * @param {string[]} recipientEmails
+   * @param {string} reportType
+   * @param {string} companyName
+   */
+  async sendReportEmail(recipientEmails, reportType, companyName, projectIds = []) {
+    const transporter = createTransporter(); // throws if not configured
+    const data = await buildReportData(reportType, companyName, projectIds);
+    const html = buildEmailHTML(data);
+
+    await transporter.sendMail({
+      from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+      to: recipientEmails.join(','),
+      subject: `[${companyName}] ${data.reportTitle} — ${new Date().toLocaleDateString('en-IN')}`,
+      html,
+    });
+
+    return { sent: recipientEmails.length, reportTitle: data.reportTitle };
+  },
+
+  /**
+   * Build and return report data + HTML preview (no email sent).
+   */
+  async buildPreview(reportType, companyName, projectIds = []) {
+    const data = await buildReportData(reportType, companyName, projectIds);
+    return { html: buildEmailHTML(data), recordCount: data.timesheets.length };
+  },
+};
+
+module.exports = emailService;

@@ -1,0 +1,633 @@
+import React from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { timesheetAPI, projectAPI, userAPI } from '@/services/endpoints'
+import StatusBadge from '@/components/ui/StatusBadge'
+import Spinner from '@/components/ui/Spinner'
+import { format, getISOWeek } from 'date-fns'
+import {
+    Users, Clock, CheckCircle2, XCircle, Calendar,
+    Briefcase, Download, Eye, FileText, ChevronDown,
+    Search, ChevronLeft, ChevronRight, SlidersHorizontal,
+    X, RotateCcw, AlertCircle, Send, Save
+} from 'lucide-react'
+import toast from 'react-hot-toast'
+import PageHeader from '@/components/ui/PageHeader'
+import TimesheetDetailsModal from '../components/TimesheetDetailsModal'
+
+/* ─── Shared Modal Shell ─────────────────────────────────────── */
+function Modal({ open, onClose, maxWidth = 'max-w-md', children }) {
+    if (!open) return null
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' }}
+            onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+        >
+            <div className={`w-full ${maxWidth} bg-white dark:bg-black dark:border border-[#333333] midnight:border-[#1a1a1a] rounded-2xl shadow-2xl flex flex-col overflow-hidden`}
+                style={{ maxHeight: '90vh' }}>
+                {children}
+            </div>
+        </div>
+    )
+}
+
+/* ─── Reject Modal ───────────────────────────────────────────── */
+function RejectModal({ ts, onReject, onClose }) {
+    const [reason, setReason] = React.useState('')
+    const projects = ts.rows?.map(r => r.projectId?.name).filter(Boolean).join(', ') || '—'
+    return (
+        <Modal open onClose={onClose} maxWidth="max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-[#333333] midnight:border-[#1a1a1a] shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                        <XCircle size={20} className="text-red-500" />
+                    </div>
+                    <div>
+                        <h2 className="text-base font-bold text-slate-800 dark:text-white">Reject Timesheet</h2>
+                        <p className="text-xs text-slate-400">{ts.userId?.name || 'Employee'}</p>
+                    </div>
+                </div>
+                <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-[#111111] midnight:hover:bg-[#0a0a0a] transition-colors">
+                    <X size={18} />
+                </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+                <div className="p-3 bg-slate-50 dark:bg-[#0a0a0a] midnight:bg-[#050505] rounded-xl text-sm">
+                    <span className="text-xs text-slate-400 uppercase tracking-wider block mb-1">Projects</span>
+                    <span className="text-slate-700 dark:text-white font-medium">{projects}</span>
+                </div>
+                <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Reason for rejection *</label>
+                    <textarea
+                        className="input resize-none"
+                        rows={3}
+                        placeholder="Explain why the timesheet is being rejected…"
+                        value={reason}
+                        onChange={e => setReason(e.target.value)}
+                        autoFocus
+                    />
+                </div>
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t border-slate-100 dark:border-[#333333] midnight:border-[#1a1a1a] bg-slate-50 dark:bg-[#0a0a0a] midnight:bg-[#050505]">
+                <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+                <button
+                    onClick={() => {
+                        if (!reason.trim()) return toast.error('Please provide a reason')
+                        onReject(reason)
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
+                >
+                    <XCircle size={15} /> Reject
+                </button>
+            </div>
+        </Modal>
+    )
+}
+
+/* ─── Helpers ────────────────────────────────────────────────── */
+const formatDuration = (totalHours) => {
+    const h = Math.floor(Number(totalHours) || 0)
+    const m = Math.round(((Number(totalHours) || 0) - h) * 60)
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+const formatWeek = (weekStartDate) => {
+    try {
+        if (!weekStartDate) return '—'
+        let d = new Date(weekStartDate)
+        // Correct for UTC midnights shifted by local TZ
+        if (typeof weekStartDate === 'string' && weekStartDate.includes('T00:00:00')) {
+            const [y, m, day] = weekStartDate.split('T')[0].split('-').map(Number)
+            d = new Date(y, m - 1, day)
+        }
+        return `${format(d, 'yyyy')}-W${String(getISOWeek(d)).padStart(2, '0')}`
+    } catch { return '—' }
+}
+
+/* ─── Main Page ──────────────────────────────────────────────── */
+export default function AdminTimesheetPage() {
+    const queryClient = useQueryClient()
+
+    const [showFilters, setShowFilters] = React.useState(false)
+    const [search, setSearch] = React.useState('')
+    const [viewingTs, setViewingTs] = React.useState(null)
+    const [rejectTarget, setRejectTarget] = React.useState(null)
+
+    const [filters, setFilters] = React.useState({
+        employeeId: '',
+        userId: '',
+        status: '',
+        projectId: '',
+        year: '',
+        week: '',
+        page: 1,
+        limit: 10
+    })
+
+    /* ── Queries ── */
+    const { data: stats } = useQuery({
+        queryKey: ['timesheets', 'admin-stats'],
+        queryFn: () => timesheetAPI.getAdminSummary().then(r => r.data.data)
+    })
+
+    const { data: listData, isLoading, isError } = useQuery({
+        queryKey: ['timesheets', 'admin-list', filters, search],
+        queryFn: () => timesheetAPI.getAdminList({ ...filters, search }).then(r => r.data),
+        retry: false
+    })
+
+    const { data: filterOptions } = useQuery({
+        queryKey: ['timesheets', 'admin-filters'],
+        queryFn: () => timesheetAPI.getAdminFilters().then(r => r.data.data)
+    })
+
+    const { data: projects = [] } = useQuery({
+        queryKey: ['projects', 'all'],
+        queryFn: () => projectAPI.getAll({ limit: 1000 }).then(r => r.data.data || [])
+    })
+
+    const { data: employees = [] } = useQuery({
+        queryKey: ['employees', 'all'],
+        queryFn: () => userAPI.getAll({ limit: 1000 }).then(r => r.data.data || [])
+    })
+
+    /* ── Mutations ── */
+    const { mutate: approve } = useMutation({
+        mutationFn: (id) => timesheetAPI.approve(id),
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['timesheets'] }); toast.success('Timesheet approved!') },
+        onError: () => toast.error('Failed to approve timesheet'),
+    })
+
+    const { mutate: reject } = useMutation({
+        mutationFn: ({ id, reason }) => timesheetAPI.reject(id, reason),
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['timesheets'] }); toast.success('Timesheet rejected'); setRejectTarget(null) },
+        onError: () => toast.error('Failed to reject timesheet'),
+    })
+    const { mutate: submitOverride } = useMutation({
+        mutationFn: (id) => timesheetAPI.submit(id),
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['timesheets'] }); toast.success('Timesheet submitted!') },
+        onError: () => toast.error('Failed to submit timesheet'),
+    })
+
+    const activeFilterCount = [filters.employeeId, filters.userId, filters.status, filters.projectId, filters.year, filters.week].filter(Boolean).length
+
+    const resetFilters = () => setFilters({ employeeId: '', userId: '', status: '', projectId: '', year: '', week: '', page: 1, limit: 10 })
+
+    const handlePageChange = (newPage) => {
+        if (newPage < 1 || newPage > (listData?.pagination?.pages || 1)) return
+        setFilters(f => ({ ...f, page: newPage }))
+    }
+
+    /* ── CSV Export ── */
+    const handleExportCSV = async () => {
+        try {
+            // Fetch up to 1000 matching results for export (capped by backend MAX_LIMIT)
+            const res = await timesheetAPI.getAdminList({ ...filters, search, limit: 1000, page: 1 })
+            const rows = res.data.data || []
+
+            if (!rows.length) { toast.error('No data to export'); return }
+
+            const headers = ['Employee ID', 'Name', 'Week', 'Project Code', 'Project Name', 'Category', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Project Total', 'Week Total', 'Status', 'Submitted At']
+            const data = []
+
+            rows.forEach(ts => {
+                const empId = ts.userId?.employeeId || ''
+                const empName = ts.userId?.name || ''
+                const weekStr = formatWeek(ts.weekStartDate)
+                const status = ts.status || ''
+                const submittedAt = ts.submittedAt ? format(new Date(ts.submittedAt), 'yyyy-MM-dd') : ''
+
+                // For each project row in the week
+                ts.rows?.forEach(pRow => {
+                    const entries = pRow.entries || []
+                    // Build daily hours map
+                    const daysMap = {}
+                    entries.forEach(e => {
+                        const d = format(new Date(e.date), 'yyyy-MM-dd')
+                        daysMap[d] = e.hoursWorked || 0
+                    })
+
+                    // Get values for Mon-Sun (weekStartDate to weekStartDate + 6)
+                    const daily = []
+                    for (let i = 0; i < 7; i++) {
+                        const dateObj = new Date(ts.weekStartDate)
+                        dateObj.setDate(dateObj.getDate() + i)
+                        const dateStr = format(dateObj, 'yyyy-MM-dd')
+                        daily.push(formatDuration(daysMap[dateStr] || 0))
+                    }
+
+                    data.push([
+                        empId,
+                        empName,
+                        weekStr,
+                        pRow.projectId?.code || 'N/A',
+                        pRow.projectId?.name || 'Unknown',
+                        pRow.category || 'N/A',
+                        ...daily,
+                        formatDuration(pRow.totalHours || 0),
+                        formatDuration(ts.totalHours || 0),
+                        status,
+                        submittedAt
+                    ])
+                })
+            })
+            const csv = [headers, ...data].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+            const blob = new Blob([csv], { type: 'text/csv' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a'); a.href = url; a.download = `timesheets_export_${format(new Date(), 'yyyyMMdd')}.csv`; a.click()
+            URL.revokeObjectURL(url)
+            toast.success('All matching records exported!')
+        } catch (error) {
+            console.error('Export failed:', error)
+            toast.error('Failed to export CSV')
+        }
+    }
+
+    return (
+        <div className="space-y-6 animate-fade-in pb-10">
+            <PageHeader title="Manage Timesheets" subtitle="Review and approve submitted employee timesheets" />
+
+            {/* Stats Row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                {[
+                    { title: 'Total', value: stats?.totalTimesheets || 0, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+                    { title: 'Pending', value: stats?.pendingReview || 0, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+                    { title: 'Approved', value: stats?.approved || 0, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+                    { title: 'Rejected', value: stats?.rejected || 0, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
+                    { title: 'Drafts', value: stats?.drafts || 0, icon: Save, color: 'text-slate-400', bg: 'bg-slate-50 dark:bg-slate-900/20' },
+                    { title: 'Users', value: stats?.totalEmployees || 0, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20' },
+                    { title: 'Hours', value: formatDuration(stats?.totalHours || 0), icon: Clock, color: 'text-pink-500', bg: 'bg-pink-50 dark:bg-pink-900/20' },
+                ].map((st) => (
+                    <div key={st.title} className="card p-4 flex items-center gap-3">
+                        <div className={`p-2.5 rounded-xl ${st.bg} ${st.color} shrink-0`}><st.icon size={18} /></div>
+                        <div>
+                            <p className="text-lg font-bold text-slate-800 dark:text-white leading-none mb-0.5">{st.value}</p>
+                            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{st.title}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Toolbar */}
+            <div className="card p-3">
+                <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+                    {/* Search */}
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                            type="text"
+                            placeholder="Search employee name or ID..."
+                            className="input pl-9 h-9 text-sm w-full"
+                            value={search}
+                            onChange={(e) => { setSearch(e.target.value); setFilters(f => ({ ...f, page: 1 })) }}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        {/* Filter Button */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowFilters(p => !p)}
+                                className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showFilters || activeFilterCount > 0
+                                    ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
+                                    : 'border-slate-200 dark:border-[#333333] midnight:border-[#1a1a1a] text-slate-600 dark:text-[#e2e2e9] midnight:text-[#a0a0a5] hover:bg-slate-50 dark:hover:bg-[#111111] midnight:hover:bg-[#0a0a0a]'}`}
+                            >
+                                <SlidersHorizontal size={15} />
+                                Filters
+                                {activeFilterCount > 0 && (
+                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary-500 text-white text-[10px] font-bold">
+                                        {activeFilterCount}
+                                    </span>
+                                )}
+                                <ChevronDown size={14} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {/* Quick Clear */}
+                            {activeFilterCount > 0 && !showFilters && (
+                                <button
+                                    onClick={resetFilters}
+                                    className="px-2 h-9 text-xs font-semibold text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
+                                    title="Clear all filters"
+                                >
+                                    <X size={14} /> Clear
+                                </button>
+                            )}
+
+                            {/* Filter Dropdown */}
+                            {showFilters && (
+                                <>
+                                    <div className="fixed inset-0 z-20" onClick={() => setShowFilters(false)} />
+                                    <div className="absolute right-0 top-11 z-30 w-80 bg-white dark:bg-black border border-slate-200 dark:border-[#333333] midnight:border-[#1a1a1a] rounded-2xl shadow-2xl p-5 space-y-5">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Filter By</span>
+                                            {activeFilterCount > 0 && (
+                                                <button onClick={() => { resetFilters(); setShowFilters(false) }}
+                                                    className="text-xs text-primary-600 hover:text-primary-700 font-medium">
+                                                    Reset All
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-4">
+                                            {/* Employee ID */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Employee ID</label>
+                                                <select
+                                                    className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 cursor-pointer font-medium"
+                                                    value={filters.userId}
+                                                    onChange={e => setFilters(f => ({ ...f, userId: e.target.value, page: 1 }))}
+                                                >
+                                                    <option value="">All Employees</option>
+                                                    {employees?.map(emp => (
+                                                        <option key={emp._id} value={emp._id}>
+                                                            {emp.employeeId} — {emp.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Project */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Project</label>
+                                                <select
+                                                    className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 cursor-pointer font-medium"
+                                                    value={filters.projectId}
+                                                    onChange={e => setFilters(f => ({ ...f, projectId: e.target.value, page: 1 }))}
+                                                >
+                                                    <option value="">All Projects</option>
+                                                    {projects?.map(p => (
+                                                        <option key={p._id} value={p._id}>{p.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Status + Year (2-col) */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status</label>
+                                                    <select
+                                                        className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 cursor-pointer font-medium"
+                                                        value={filters.status}
+                                                        onChange={e => setFilters(f => ({ ...f, status: e.target.value, page: 1 }))}
+                                                    >
+                                                        <option value="">All Status</option>
+                                                        <option value="submitted">Pending</option>
+                                                        <option value="approved">Approved</option>
+                                                        <option value="rejected">Rejected</option>
+                                                        <option value="draft">Draft</option>
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Year</label>
+                                                    <select
+                                                        className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 cursor-pointer font-medium"
+                                                        value={filters.year}
+                                                        onChange={e => setFilters(f => ({ ...f, year: e.target.value, page: 1 }))}
+                                                    >
+                                                        <option value="">All Years</option>
+                                                        {filterOptions?.years?.map(y => (
+                                                            <option key={y} value={y}>{y}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Week */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Week</label>
+                                                <select
+                                                    className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 cursor-pointer font-medium"
+                                                    value={filters.week}
+                                                    onChange={e => setFilters(f => ({ ...f, week: e.target.value, page: 1 }))}
+                                                >
+                                                    <option value="">All Weeks</option>
+                                                    {filterOptions?.weeks?.map(w => (
+                                                        <option key={w} value={w}>{w}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                onClick={() => { resetFilters(); setShowFilters(false) }}
+                                                className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 dark:bg-[#111111] midnight:bg-[#0a0a0a] dark:text-[#e2e2e9] text-slate-600 midnight:text-[#a0a0a5] rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
+                                            >
+                                                Clear
+                                            </button>
+                                            <button
+                                                onClick={() => setShowFilters(false)}
+                                                className="flex-[2] h-11 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]"
+                                            >
+                                                Apply Filters
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <button onClick={handleExportCSV} className="flex items-center gap-2 px-3 h-9 rounded-lg border border-slate-200 dark:border-[#333333] midnight:border-[#1a1a1a] text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#111111] midnight:hover:bg-[#0a0a0a] transition-colors">
+                            <Download size={15} /> Export CSV
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Table */}
+            <div className="card p-0 overflow-hidden">
+                {isLoading ? (
+                    <div className="py-20 flex justify-center"><Spinner size="lg" /></div>
+                ) : (
+                    <div className="table-wrapper rounded-none border-0 shadow-none">
+                        <table className="w-full">
+                            <thead>
+                                <tr>
+                                    <th>Employee</th>
+                                    <th>Week</th>
+                                    <th>Projects</th>
+                                    <th className="text-center">Hours</th>
+                                    <th className="text-center">Status</th>
+                                    <th className="text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {isError ? (
+                                    <tr>
+                                        <td colSpan={6} className="py-16 text-center">
+                                            <AlertCircle size={32} className="mx-auto text-red-300 mb-2" />
+                                            <p className="text-red-400 text-sm font-semibold">Failed to load timesheets</p>
+                                            <button onClick={() => queryClient.invalidateQueries({ queryKey: ['timesheets', 'admin-list'] })}
+                                                className="text-xs text-primary-600 hover:underline mt-1">Try again</button>
+                                        </td>
+                                    </tr>
+                                ) : listData?.data?.length > 0 ? (
+                                    listData.data.map((ts) => {
+                                        const projectsText = ts.rows?.map(r => r.projectId?.name).filter(Boolean).join(', ') || '—'
+                                        const userId = ts.userId?._id || ts.userId
+                                        return (
+                                            <tr key={ts._id}>
+                                                <td>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center text-white font-bold text-xs shrink-0">
+                                                            {(ts.userId?.name || '?').charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-slate-800 dark:text-white">{ts.userId?.name || '—'}</p>
+                                                            <p className="text-[10px] text-slate-400 font-mono">{ts.userId?.employeeId || '—'}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <p className="text-sm font-medium text-slate-600 dark:text-white">{formatWeek(ts.weekStartDate)}</p>
+                                                    {ts.submittedAt && (
+                                                        <p className="text-[10px] text-slate-400">
+                                                            Submitted {format(new Date(ts.submittedAt), 'MMM d')}
+                                                        </p>
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    <p className="text-sm text-slate-600 dark:text-white max-w-[200px] truncate" title={projectsText}>
+                                                        {projectsText}
+                                                    </p>
+                                                </td>
+                                                <td className="text-center">
+                                                    <span className="font-bold text-slate-800 dark:text-white font-mono text-sm">
+                                                        {formatDuration(ts.totalHours)}
+                                                    </span>
+                                                </td>
+                                                <td className="text-center">
+                                                    <StatusBadge status={ts.status === 'submitted' ? 'pending' : ts.status} />
+                                                </td>
+                                                <td className="text-right">
+                                                    <div className="flex justify-end items-center gap-1">
+                                                        {/* View */}
+                                                        <button
+                                                            onClick={() => setViewingTs({ weekStartDate: ts.weekStartDate, userId })}
+                                                            title="View Details"
+                                                            className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                                                        >
+                                                            <Eye size={16} />
+                                                        </button>
+                                                        {/* Reject / Approve */}
+                                                        {ts.status === 'submitted' && (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => setRejectTarget(ts)}
+                                                                    title="Reject"
+                                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                                >
+                                                                    <XCircle size={16} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => approve(ts._id)}
+                                                                    title="Approve"
+                                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                                                                >
+                                                                    <CheckCircle2 size={16} />
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        {/* Submit Override */}
+                                                        {ts.status === 'draft' && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (window.confirm(`Are you sure you want to submit this timesheet on behalf of ${ts.userId?.name || 'the employee'}?`)) {
+                                                                        submitOverride(ts._id)
+                                                                    }
+                                                                }}
+                                                                title="Submit for Employee"
+                                                                className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                                                            >
+                                                                <Send size={16} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td colSpan={6} className="py-20 text-center">
+                                            <Search size={40} className="mx-auto text-slate-200 mb-3" />
+                                            <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No timesheets found</p>
+                                            {activeFilterCount > 0 && (
+                                                <button onClick={resetFilters} className="mt-2 text-xs text-primary-600 hover:underline font-semibold">
+                                                    Clear filters
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {/* Pagination */}
+                {listData?.pagination && listData.pagination.pages > 1 && (
+                    <div className="px-6 py-4 border-t border-slate-100 dark:border-[#333333] midnight:border-[#1a1a1a] flex items-center justify-between">
+                        <p className="text-xs text-slate-500">
+                            Showing <span className="font-bold text-slate-700 dark:text-white">
+                                {Math.min(listData.pagination.total, (filters.page - 1) * filters.limit + 1)}
+                            </span> – <span className="font-bold text-slate-700 dark:text-white">
+                                {Math.min(listData.pagination.total, filters.page * filters.limit)}
+                            </span> of <span className="font-bold text-slate-700 dark:text-white">
+                                {listData.pagination.total}
+                            </span>
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                onClick={() => handlePageChange(filters.page - 1)}
+                                disabled={filters.page === 1}
+                                className="p-1.5 rounded-lg border border-slate-200 dark:border-[#333333] midnight:border-[#1a1a1a] text-slate-500 hover:bg-slate-50 dark:hover:bg-[#111111] midnight:hover:bg-[#0a0a0a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronLeft size={15} />
+                            </button>
+                            {[...Array(Math.min(listData.pagination.pages, 7))].map((_, i) => {
+                                const page = i + 1
+                                return (
+                                    <button
+                                        key={page}
+                                        onClick={() => handlePageChange(page)}
+                                        className={`w-8 h-8 text-xs font-bold rounded-lg transition-colors ${filters.page === page
+                                            ? 'bg-primary-600 text-white shadow-sm'
+                                            : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                    >
+                                        {page}
+                                    </button>
+                                )
+                            })}
+                            <button
+                                onClick={() => handlePageChange(filters.page + 1)}
+                                disabled={filters.page === listData.pagination.pages}
+                                className="p-1.5 rounded-lg border border-slate-200 dark:border-[#333333] midnight:border-[#1a1a1a] text-slate-500 hover:bg-slate-50 dark:hover:bg-[#111111] midnight:hover:bg-[#0a0a0a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronRight size={15} />
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* ══ Reject Modal ══ */}
+            {rejectTarget && (
+                <RejectModal
+                    ts={rejectTarget}
+                    onReject={(reason) => reject({ id: rejectTarget._id, reason })}
+                    onClose={() => setRejectTarget(null)}
+                />
+            )}
+
+            {/* ══ View Details Modal ══ */}
+            {viewingTs && (
+                <TimesheetDetailsModal
+                    isOpen={!!viewingTs}
+                    weekStartDate={viewingTs.weekStartDate}
+                    userId={viewingTs.userId}
+                    onClose={() => setViewingTs(null)}
+                />
+            )}
+        </div>
+    )
+}

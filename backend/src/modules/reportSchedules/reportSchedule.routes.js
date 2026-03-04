@@ -1,0 +1,144 @@
+'use strict';
+
+const express = require('express');
+const router = express.Router();
+const asyncHandler = require('../../shared/utils/asyncHandler');
+const ApiResponse = require('../../shared/utils/apiResponse');
+const ReportSchedule = require('./reportSchedule.model');
+const User = require('../users/user.model');
+const emailService = require('../../shared/services/email.service');
+const Settings = require('../settings/settings.model');
+const { authenticate } = require('../../middleware/auth.middleware');
+const { authorize } = require('../../middleware/rbac.middleware');
+
+router.use(authenticate);
+router.use(authorize('admin', 'manager'));
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+async function getCompanyName() {
+  const s = await Settings.findOne().lean();
+  return s?.general?.companyName || 'TimesheetPro';
+}
+
+// ── GET /api/v1/report-schedules — list all ──────────────────────────────────
+router.get('/', asyncHandler(async (req, res) => {
+  const schedules = await ReportSchedule.find()
+    .populate('recipientIds', 'name email')
+    .sort({ createdAt: -1 })
+    .lean();
+  ApiResponse.success(res, { data: schedules });
+}));
+
+// ── POST /api/v1/report-schedules — create ───────────────────────────────────
+router.post('/', asyncHandler(async (req, res) => {
+  const { name, frequency, scheduledTime, reportType, recipientIds, projectIds, isActive } = req.body;
+
+  if (!name?.trim()) {
+    return ApiResponse.error(res, { message: 'Schedule name is required', statusCode: 400 });
+  }
+  if (!recipientIds?.length) {
+    return ApiResponse.error(res, { message: 'At least one recipient is required', statusCode: 400 });
+  }
+
+  const schedule = await ReportSchedule.create({
+    name: name.trim(),
+    frequency: frequency || 'weekly',
+    scheduledTime: scheduledTime || '09:00',
+    reportType: reportType || 'approved',
+    recipientIds: recipientIds || [],
+    projectIds: projectIds || [],
+    isActive: isActive !== false,
+    createdBy: req.user._id,
+  });
+
+  ApiResponse.success(res, { message: 'Schedule created', data: schedule, statusCode: 201 });
+}));
+
+// ── PUT /api/v1/report-schedules/:id — update ────────────────────────────────
+router.put('/:id', asyncHandler(async (req, res) => {
+  const { name, frequency, scheduledTime, reportType, recipientIds, projectIds, isActive } = req.body;
+
+  const schedule = await ReportSchedule.findByIdAndUpdate(
+    req.params.id,
+    {
+      $set: {
+        ...(name !== undefined && { name: name.trim() }),
+        ...(frequency !== undefined && { frequency }),
+        ...(scheduledTime !== undefined && { scheduledTime }),
+        ...(reportType !== undefined && { reportType }),
+        ...(recipientIds !== undefined && { recipientIds }),
+        ...(projectIds !== undefined && { projectIds }),
+        ...(isActive !== undefined && { isActive }),
+      },
+    },
+    { new: true, runValidators: true }
+  ).populate('recipientIds', 'name email');
+
+  if (!schedule) {
+    return ApiResponse.notFound(res, 'Schedule not found');
+  }
+
+  ApiResponse.success(res, { message: 'Schedule updated', data: schedule });
+}));
+
+// ── DELETE /api/v1/report-schedules/:id — delete (stops auto-send) ───────────
+router.delete('/:id', asyncHandler(async (req, res) => {
+  const schedule = await ReportSchedule.findByIdAndDelete(req.params.id);
+  if (!schedule) return ApiResponse.notFound(res, 'Schedule not found');
+  ApiResponse.success(res, { message: 'Schedule deleted. Auto-send has been stopped.' });
+}));
+
+// ── POST /api/v1/report-schedules/:id/send-now — manual fire ─────────────────
+router.post('/:id/send-now', asyncHandler(async (req, res) => {
+  const schedule = await ReportSchedule.findById(req.params.id).lean();
+  if (!schedule) return ApiResponse.notFound(res, 'Schedule not found');
+
+  const users = await User.find({ _id: { $in: schedule.recipientIds } }, 'email name').lean();
+  const emails = users.map(u => u.email).filter(Boolean);
+
+  if (!emails.length) {
+    return ApiResponse.error(res, { message: 'No valid email recipients found', statusCode: 400 });
+  }
+
+  const companyName = await getCompanyName();
+
+  let result;
+  try {
+    result = await emailService.sendReportEmail(emails, schedule.reportType, companyName, schedule.projectIds || []);
+  } catch (err) {
+    // Save failed history
+    const doc = await ReportSchedule.findById(schedule._id);
+    if (doc) await doc.addHistory({ status: 'failed', recipientCount: 0, reportTitle: schedule.reportType, error: err.message });
+    return ApiResponse.error(res, {
+      message: err.message.includes('SMTP') ? 'SMTP not configured. Check .env file.' : `Email failed: ${err.message}`,
+      statusCode: 400,
+    });
+  }
+
+  // Save success history
+  const doc = await ReportSchedule.findById(schedule._id);
+  if (doc) await doc.addHistory({ status: 'success', recipientCount: result.sent, reportTitle: result.reportTitle });
+
+  ApiResponse.success(res, { message: `Report sent to ${result.sent} recipient(s)`, data: result });
+}));
+
+// ── GET /api/v1/report-schedules/:id/history — history for one schedule ──────
+router.get('/:id/history', asyncHandler(async (req, res) => {
+  const schedule = await ReportSchedule.findById(req.params.id, 'name history').lean();
+  if (!schedule) return ApiResponse.notFound(res, 'Schedule not found');
+  ApiResponse.success(res, { data: schedule.history });
+}));
+
+// ── POST /api/v1/report-schedules/preview — preview HTML ─────────────────────
+router.post('/preview', asyncHandler(async (req, res) => {
+  const { reportType = 'approved', projectIds = [] } = req.body;
+  const companyName = await getCompanyName();
+  try {
+    const preview = await emailService.buildPreview(reportType, companyName, projectIds);
+    ApiResponse.success(res, { data: preview });
+  } catch (err) {
+    ApiResponse.error(res, { message: `Preview failed: ${err.message}`, statusCode: 500 });
+  }
+}));
+
+module.exports = router;

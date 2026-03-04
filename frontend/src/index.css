@@ -1,0 +1,487 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Dynamic Theme CSS Variables ────────────────────────────────────────────── */
+:root {
+  --color-primary: #6366f1;
+  --color-primary-rgb: 99 102 241;
+}
+
+/* Dynamic primary color utilities */
+.text-primary {
+  color: var(--color-primary) !important;
+}
+
+.bg-primary {
+  background-color: var(--color-primary) !important;
+}
+
+.border-primary {
+  border-color: var(--color-primary) !important;
+}
+
+.ring-primary {
+  --tw-ring-color: var(--color-primary) !important;
+}
+
+.hover\:bg-primary\/90:hover {
+  background-color: color-mix(in srgb, var(--color-primary) 90%, transparent);
+}
+
+.bg-primary\/5 {
+  background-color: rgb(var(--color-primary-rgb) / 0.05) !important;
+}
+
+.bg-primary\/10 {
+  background-color: rgb(var(--color-primary-rgb) / 0.1) !important;
+}
+
+.bg-primary\/20 {
+  background-color: rgb(var(--color-primary-rgb) / 0.2) !important;
+}
+
+.shadow-primary\/20 {
+  --tw-shadow-color: rgb(var(--color-primary-rgb) / 0.2);
+}
+
+.accent-primary {
+  accent-color: var(--color-primary);
+}
+
+/* ─── Base Styles ────────────────────────────────────────────────────────────── */
+@layer base {
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  *:focus {
+    outline: none;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-primary) !important;
+    outline-offset: 2px !important;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-800 font-sans antialiased accent-primary;
+  }
+
+  .dark body {
+    background-color: #000000;
+    color: #e2e2e9;
+  }
+
+  .midnight body {
+    color: #a0a0a5;
+  }
+
+  h1 {
+    @apply text-3xl font-bold tracking-tight;
+  }
+
+  h2 {
+    @apply text-2xl font-semibold;
+  }
+
+  h3 {
+    @apply text-lg font-semibold;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full;
+  }
+}
+
+/* ─── Component Layer ────────────────────────────────────────────────────────── */
+@layer components {
+
+  /* Cards */
+  .card {
+    @apply bg-white rounded-2xl border border-slate-100 p-6 transition-shadow duration-200;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  }
+
+  .dark .card {
+    background-color: #000000;
+    border-color: #333333;
+  }
+
+  .midnight .card {
+    border-color: #1a1a1a;
+  }
+
+  .card-hover:hover {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer;
+  }
+
+  .btn-primary {
+    @apply btn bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply btn bg-slate-100 text-slate-700 hover:bg-slate-200 focus:ring-slate-400 active:scale-95;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-slate-600 hover:bg-slate-100 focus:ring-slate-300 active:scale-95;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs rounded-lg;
+  }
+
+  .btn-lg {
+    @apply px-6 py-3 text-base rounded-xl;
+  }
+
+  /* Form inputs */
+  .input {
+    @apply w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500;
+  }
+
+  .dark .input {
+    background-color: #000000;
+    border-color: #333333;
+    color: #ffffff;
+  }
+
+  .midnight .input {
+    border-color: #1a1a1a;
+    color: #a0a0a5;
+  }
+
+  .input-error {
+    @apply border-red-500 focus:ring-red-500;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-slate-700 mb-1.5;
+  }
+
+  .dark .label {
+    color: #e2e2e9;
+  }
+
+  .midnight .label {
+    color: #a0a0a5;
+  }
+
+  .error-msg {
+    @apply text-xs text-red-600 mt-1;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply bg-green-50 text-green-600;
+  }
+
+  .badge-warning {
+    @apply bg-amber-50 text-amber-600;
+  }
+
+  .badge-danger {
+    @apply bg-red-50 text-red-600;
+  }
+
+  .badge-info {
+    @apply bg-blue-50 text-blue-600;
+  }
+
+  .badge-gray {
+    @apply bg-slate-100 text-slate-600;
+  }
+
+  /* Table */
+  .table-wrapper {
+    @apply overflow-x-auto rounded-2xl border border-slate-100;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  }
+
+  thead tr {
+    @apply bg-slate-50 border-b border-slate-100;
+  }
+
+  thead th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider;
+  }
+
+  tbody tr {
+    @apply border-b border-slate-50 hover:bg-slate-50 transition-colors duration-150;
+  }
+
+  .dark tbody tr {
+    @apply border-[#333333] hover:bg-transparent;
+  }
+
+  .dark tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+  }
+
+  .dark tbody tr:active,
+  .dark tbody tr.selected,
+  .dark tbody tr.active {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .midnight tbody tr {
+    @apply border-[#1a1a1a] hover:bg-transparent;
+  }
+
+  .midnight tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.01) !important;
+  }
+
+  .midnight tbody tr:active,
+  .midnight tbody tr.selected,
+  .midnight tbody tr.active {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+  }
+
+  tbody td {
+    @apply px-4 py-3.5 text-sm text-slate-700;
+  }
+
+  /* Sidebar */
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 transition-all duration-200 cursor-pointer hover:bg-slate-50 hover:text-slate-800;
+  }
+
+  .sidebar-link.active {
+    @apply bg-indigo-50 text-indigo-700 font-semibold;
+  }
+
+  .dark .sidebar-link {
+    @apply text-slate-400 hover:bg-white/5 hover:text-white;
+  }
+
+  .dark .sidebar-link.active {
+    background-color: rgba(79, 70, 229, 0.15);
+    color: #a5b4fc;
+  }
+
+  .page-header {
+    @apply flex items-center justify-between mb-6;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-slate-800;
+  }
+}
+
+/* ─── Utility Layer ──────────────────────────────────────────────────────────── */
+@layer utilities {
+  .gradient-primary {
+    @apply bg-gradient-to-br from-primary-500 to-primary-700;
+  }
+
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent;
+  }
+
+  .shadow-card {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  }
+
+  .shadow-card-hover {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+}
+
+/* ─── Animations ─────────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* ─── React Big Calendar Dark Mode (Black & White) ────────────── */
+.dark .rbc-month-view,
+.dark .rbc-time-view,
+.dark .rbc-header,
+.dark .rbc-day-bg,
+.dark .rbc-month-row,
+.dark .rbc-time-header,
+.dark .rbc-time-content,
+.dark .rbc-timeslot-group,
+.dark .rbc-time-slot,
+.dark .rbc-day-slot .rbc-time-slot {
+  border-color: #333333 !important;
+  background-color: #000000 !important;
+  color: #e2e2e9 !important;
+}
+
+.midnight .rbc-month-view,
+.midnight .rbc-time-view,
+.midnight .rbc-header,
+.midnight .rbc-day-bg,
+.midnight .rbc-month-row,
+.midnight .rbc-time-header,
+.midnight .rbc-time-content,
+.midnight .rbc-timeslot-group,
+.midnight .rbc-time-slot,
+.midnight .rbc-day-slot .rbc-time-slot {
+  border-color: #1a1a1a !important;
+  color: #a0a0a5 !important;
+}
+
+.dark .rbc-off-range-bg {
+  background-color: #0a0a0a !important;
+}
+
+.midnight .rbc-off-range-bg {
+  background-color: #050505 !important;
+}
+
+.dark .rbc-today {
+  background-color: #111111 !important;
+}
+
+.dark .rbc-event {
+  background-color: #e2e2e9 !important;
+  color: #000000 !important;
+  border: 1px solid #000000 !important;
+}
+
+.midnight .rbc-event {
+  background-color: #a0a0a5 !important;
+}
+
+.dark .rbc-toolbar button {
+  color: #e2e2e9 !important;
+  border-color: #333333 !important;
+}
+
+.midnight .rbc-toolbar button {
+  color: #a0a0a5 !important;
+  border-color: #1a1a1a !important;
+}
+
+.dark .rbc-toolbar button:hover,
+.dark .rbc-toolbar button:active,
+.dark .rbc-toolbar button.rbc-active {
+  background-color: #333333 !important;
+  color: #e2e2e9 !important;
+}
+
+.midnight .rbc-toolbar button:hover,
+.midnight .rbc-toolbar button:active,
+.midnight .rbc-toolbar button.rbc-active {
+  background-color: #1a1a1a !important;
+  color: #a0a0a5 !important;
+}
+
+/* ─── Global Dark Mode Component Overrides ────────────── */
+/* Remove forced B&W on badges in dark modes */
+.dark .badge {
+  @apply border-current;
+}
+
+.dark .text-gradient {
+  background: none !important;
+  -webkit-text-fill-color: #e2e2e9 !important;
+  color: #e2e2e9 !important;
+}
+
+.midnight .text-gradient {
+  -webkit-text-fill-color: #a0a0a5 !important;
+  color: #a0a0a5 !important;
+}
+
+.dark .gradient-primary {
+  background: #000000 !important;
+  color: #e2e2e9 !important;
+  border: 1px solid #333333 !important;
+}
+
+.midnight .gradient-primary {
+  color: #a0a0a5 !important;
+  border: 1px solid #1a1a1a !important;
+}
+
+/* Remove forced B&W on buttons in dark modes */
+.dark .btn-primary {
+  @apply bg-primary-500 text-white border-transparent hover:bg-primary-600;
+}
+
+.dark .btn-danger {
+  @apply bg-danger-500 text-white border-transparent hover:bg-danger-600;
+}
+
+.dark .btn-secondary,
+.dark .btn-ghost {
+  background-color: #000000 !important;
+  color: #e2e2e9 !important;
+  border: 1px solid #333333 !important;
+}
+
+.midnight .btn-secondary,
+.midnight .btn-ghost {
+  color: #a0a0a5 !important;
+  border: 1px solid #1a1a1a !important;
+}
+
+.dark .btn:active {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: transparent !important;
+}
+
+.midnight .btn:active {
+  background-color: #2a2a35 !important;
+  border-color: transparent !important;
+}

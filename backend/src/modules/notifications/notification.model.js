@@ -1,0 +1,49 @@
+'use strict';
+
+const mongoose = require('mongoose');
+
+const notificationSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    type: {
+      type: String,
+      enum: ['leave_applied', 'leave_approved', 'leave_rejected', 'leave_cancelled', 'timesheet_submitted', 'timesheet_approved', 'timesheet_rejected'],
+      required: true,
+    },
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    message: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    isRead: {
+      type: Boolean,
+      default: false,
+    },
+    refId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    refModel: {
+      type: String,
+      enum: ['Leave', 'Timesheet', null],
+      default: null,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
+
+const Notification = mongoose.model('Notification', notificationSchema);
+module.exports = Notification;
