@@ -24,6 +24,7 @@ import {
     getWeek
 } from 'date-fns'
 import toast from 'react-hot-toast'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { clsx } from 'clsx'
 
 const DEFAULT_TASK_TYPES = [
@@ -53,12 +54,32 @@ import PageHeader from '@/components/ui/PageHeader'
 
 export default function TimesheetEntryPage() {
     const queryClient = useQueryClient()
+    const [searchParams] = useSearchParams()
+    const editId = searchParams.get('id')           // direct timesheet _id for edit
+    const initialDateStr = searchParams.get('date') || searchParams.get('weekStart')
+
     const { general } = useSettingsStore()
     const workingHoursPerDay = general?.workingHoursPerDay || 8
     const weekStartDay = general?.weekStartDay || 'monday' // 'monday' or 'sunday'
     const weekStartsOn = weekStartDay === 'sunday' ? 0 : 1
 
-    const [currentDate, setCurrentDate] = useState(new Date())
+    const [currentDate, setCurrentDate] = useState(() => {
+        if (!initialDateStr) return new Date()
+        try {
+            // Handle ISO strings (like 2026-03-02T00:00:00.000Z) or YYYY-MM-DD
+            if (initialDateStr.includes('T')) {
+                return new Date(initialDateStr)
+            }
+            const parts = initialDateStr.trim().split(/[- /]/).map(Number)
+            if (parts.length >= 3) {
+                return new Date(parts[0], parts[1] - 1, parts[2])
+            }
+            return new Date(initialDateStr)
+        } catch (e) {
+            console.error('Failed to parse date:', initialDateStr)
+            return new Date()
+        }
+    })
 
     // Calculate week range
     const weekStart = useMemo(() => startOfWeek(currentDate, { weekStartsOn }), [currentDate, weekStartsOn])
@@ -99,63 +120,99 @@ export default function TimesheetEntryPage() {
         return [...new Set([...standard, ...eligible])]
     }, [tsSettings])
 
-    // Fetch existing timesheets for the week
+    // Fetch existing timesheet for the week.
+    // If editing by ID, fetch directly to avoid date-range mismatch.
     const { data: existingTimesheets, isLoading } = useQuery({
-        queryKey: ['timesheets', 'week', format(weekStart, 'yyyy-MM-dd')],
-        queryFn: () => timesheetAPI.getAll({
-            from: format(weekStart, 'yyyy-MM-dd'),
-            to: format(addDays(weekStart, 6), 'yyyy-MM-dd')
-        }).then(r => r.data.data),
+        queryKey: ['timesheets', 'week', format(weekStart, 'yyyy-MM-dd'), editId],
+        queryFn: async () => {
+            if (editId) {
+                // Fetch the specific draft document directly
+                const res = await timesheetAPI.getById(editId)
+                const doc = res.data?.data
+                return doc ? [doc] : []
+            }
+
+            // Otherwise fetch by date range
+            const getMonday = (d) => {
+                const dt = new Date(d)
+                const day = dt.getDay()
+                const diff = day === 0 ? -6 : 1 - day
+                dt.setDate(dt.getDate() + diff)
+                dt.setHours(0, 0, 0, 0)
+                return dt
+            }
+            const mondays = new Set()
+            weekDays.forEach(day => mondays.add(format(getMonday(day), 'yyyy-MM-dd')))
+            const mondayList = [...mondays].sort()
+            const from = mondayList[0]
+            const to = format(addDays(weekStart, 13), 'yyyy-MM-dd')
+
+            const r = await timesheetAPI.getAll({ from, to })
+            return r.data?.data || r.data?.timesheets || (Array.isArray(r.data) ? r.data : [])
+        },
+        staleTime: 0,
     })
 
     // Sync existing timesheets to rows if available
     useEffect(() => {
+        // Don't reset rows while still loading – avoids flash of zeros
+        if (existingTimesheets === undefined) return
+
         if (existingTimesheets && existingTimesheets.length > 0) {
-            // "One Model Per Week": All rows are in the first (and only) timesheet document
-            const weekTs = existingTimesheets[0]
+            // Map rows and merge data across all relevant week documents (e.g. Mon-start and Sun-start overlaps)
+            const rowMap = new Map() // Key: projectId + category
 
-            // Map rows and ensure no duplicates by (projectId + category)
-            const seenKeys = new Set()
-            const mappedRows = []
+            existingTimesheets.forEach(ts => {
+                if (!ts.rows) return
 
-            weekTs.rows.forEach(r => {
-                const projectId = r.projectId?._id || r.projectId
-                const category = r.category || 'Select Task'
-                const key = `${projectId}-${category.toLowerCase()}`
+                ts.rows.forEach(r => {
+                    const pid = r.projectId?._id || r.projectId
+                    const projectIdStr = pid ? pid.toString() : 'unknown'
+                    const category = (r.category || 'Select Task').trim()
+                    const key = `${projectIdStr}-${category.toLowerCase()}`
 
-                if (seenKeys.has(key)) return // Skip duplicates
-                seenKeys.add(key)
-
-                const hours = Array(7).fill('00:00')
-                weekDays.forEach((day, i) => {
-                    const dayStr = format(day, 'yyyy-MM-dd')
-                    const entry = r.entries?.find(e => {
-                        // Safe date comparison: use ISO date portion (YYYY-MM-DD) for UTC midnight comparison
-                        try {
-                            const eDateStr = (typeof e.date === 'string' ? e.date : new Date(e.date).toISOString()).split('T')[0]
-                            return eDateStr === dayStr
-                        } catch { return false }
-                    })
-                    if (entry) {
-                        const h = Math.floor(entry.hoursWorked)
-                        const m = Math.round((entry.hoursWorked - h) * 60)
-                        hours[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                    if (!rowMap.has(key)) {
+                        rowMap.set(key, {
+                            id: r._id || `temp-${Math.random()}`,
+                            _id: r._id,
+                            projectId: pid,
+                            taskType: category,
+                            dayHours: Array(7).fill('00:00'),
+                            status: ts.status
+                        })
                     }
-                })
 
-                mappedRows.push({
-                    _id: r._id,
-                    id: r._id || Date.now() + Math.random(),
-                    projectId,
-                    taskType: category,
-                    dayHours: hours
+                    const targetRow = rowMap.get(key)
+
+                    // Map each entry to the displayed weekday column
+                    weekDays.forEach((day, i) => {
+                        const dayStr = format(day, 'yyyy-MM-dd')
+                        const entry = r.entries?.find(e => {
+                            if (!e.date) return false
+                            // Standardize both dates to YYYY-MM-DD for comparison
+                            try {
+                                const eDateStr = format(new Date(e.date), 'yyyy-MM-dd')
+                                return eDateStr === dayStr
+                            } catch (err) { return false }
+                        })
+
+                        if (entry) {
+                            const hours = entry.hoursWorked || 0
+                            const h = Math.floor(hours)
+                            const m = Math.round((hours - h) * 60)
+                            targetRow.dayHours[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                        }
+                    })
                 })
             })
-            setRows(mappedRows.length > 0 ? mappedRows : [{ id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00') }])
+
+            const finalRows = Array.from(rowMap.values())
+            setRows(finalRows.length > 0 ? finalRows : [{ id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00') }])
         } else {
+            // Data loaded but no records found for this week
             setRows([{ id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00') }])
         }
-    }, [existingTimesheets, weekStart])
+    }, [existingTimesheets, weekStart, weekDays])
 
     // Mutation for bulk saving
     const bulkSaveMutation = useMutation({

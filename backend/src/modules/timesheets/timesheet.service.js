@@ -602,7 +602,7 @@ const timesheetService = {
   },
 
   async getAdminSummary(query = {}) {
-    const filter = {};
+    const filter = { status: { $ne: TIMESHEET_STATUS.DRAFT } };
     if (query.userId) filter.userId = new mongoose.Types.ObjectId(query.userId);
 
     const stats = await Timesheet.aggregate([
@@ -638,7 +638,11 @@ const timesheetService = {
     const filter = {};
 
     if (query.userId) filter.userId = query.userId;
-    if (query.status) filter.status = query.status;
+    if (query.status) {
+      filter.status = query.status;
+    } else {
+      filter.status = { $ne: TIMESHEET_STATUS.DRAFT };
+    }
     if (query.projectId) {
        filter['rows.projectId'] = query.projectId;
     }

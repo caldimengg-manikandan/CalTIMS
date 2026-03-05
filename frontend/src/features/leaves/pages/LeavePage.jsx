@@ -359,7 +359,7 @@ function LeaveDetailModal({ leave, onClose, onApprove, onReject }) {
                     )}
                 </div>
             </div>
-            {leave.status === 'pending' && (
+            {leave.status === 'pending' && onApprove && onReject && (
                 <div className="flex gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0">
                     <button onClick={() => { onClose(); onReject(leave) }}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-sm font-semibold transition-colors">
@@ -419,6 +419,8 @@ function AdminLeaveView() {
             toast.success('Leave approved!')
             queryClient.invalidateQueries({ queryKey: ['leaves-admin'] })
             queryClient.invalidateQueries({ queryKey: ['calendar-leaves'] })
+            queryClient.invalidateQueries({ queryKey: ['employees'] })
+            queryClient.invalidateQueries({ queryKey: ['leave-balance'] })
         },
         onError: (err) => toast.error(err.response?.data?.message || 'Failed to approve'),
     })
@@ -440,6 +442,7 @@ function AdminLeaveView() {
             toast.success('Leave eligibility updated!')
             setEditTarget(null)
             queryClient.invalidateQueries({ queryKey: ['employees'] })
+            queryClient.invalidateQueries({ queryKey: ['leave-balance'] })
         },
         onError: (err) => toast.error(err.response?.data?.message || 'Failed to update eligibility'),
     })

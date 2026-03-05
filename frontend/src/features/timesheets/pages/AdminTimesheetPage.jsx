@@ -248,13 +248,12 @@ export default function AdminTimesheetPage() {
             <PageHeader title="Manage Timesheets" subtitle="Review and approve submitted employee timesheets" />
 
             {/* Stats Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {[
                     { title: 'Total', value: stats?.totalTimesheets || 0, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
                     { title: 'Pending', value: stats?.pendingReview || 0, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20' },
                     { title: 'Approved', value: stats?.approved || 0, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
                     { title: 'Rejected', value: stats?.rejected || 0, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
-                    { title: 'Drafts', value: stats?.drafts || 0, icon: Save, color: 'text-slate-400', bg: 'bg-slate-50 dark:bg-slate-900/20' },
                     { title: 'Users', value: stats?.totalEmployees || 0, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20' },
                     { title: 'Hours', value: formatDuration(stats?.totalHours || 0), icon: Clock, color: 'text-pink-500', bg: 'bg-pink-50 dark:bg-pink-900/20' },
                 ].map((st) => (
@@ -373,7 +372,6 @@ export default function AdminTimesheetPage() {
                                                         <option value="submitted">Pending</option>
                                                         <option value="approved">Approved</option>
                                                         <option value="rejected">Rejected</option>
-                                                        <option value="draft">Draft</option>
                                                     </select>
                                                 </div>
                                                 <div className="space-y-2">
@@ -526,20 +524,6 @@ export default function AdminTimesheetPage() {
                                                                     <CheckCircle2 size={16} />
                                                                 </button>
                                                             </>
-                                                        )}
-                                                        {/* Submit Override */}
-                                                        {ts.status === 'draft' && (
-                                                            <button
-                                                                onClick={() => {
-                                                                    if (window.confirm(`Are you sure you want to submit this timesheet on behalf of ${ts.userId?.name || 'the employee'}?`)) {
-                                                                        submitOverride(ts._id)
-                                                                    }
-                                                                }}
-                                                                title="Submit for Employee"
-                                                                className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
-                                                            >
-                                                                <Send size={16} />
-                                                            </button>
                                                         )}
                                                     </div>
                                                 </td>

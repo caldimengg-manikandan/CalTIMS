@@ -66,7 +66,9 @@ async function createLeaveTimesheets(leave, approverId) {
 
   const weeks = groupByWeek(workingDays);
   const category = leave.leaveType.charAt(0).toUpperCase() + leave.leaveType.slice(1);
-  const hoursPerDay = leave.isHalfDay ? 4.5 : 9;
+  let hoursPerDay = 8;
+  if (leave.isHalfDay) hoursPerDay = 4;
+  if (leave.leaveType === LEAVE_TYPES.LOP) hoursPerDay = 0;
 
   for (const { weekStart, weekEnd, dates } of weeks) {
     const entries = dates.map((date) => ({
@@ -142,14 +144,18 @@ const leaveService = {
     const user = await User.findById(userId);
     if (!user) throw new AppError('User not found', 404);
 
-    const { startDate, endDate, leaveType, totalDays } = data;
+    let { startDate, endDate, leaveType, totalDays } = data;
     const sd = new Date(startDate);
     const ed = new Date(endDate);
 
     // 1. Check leave types and balance
-    if (user.leaveBalance[leaveType] !== undefined) {
-      if (user.leaveBalance[leaveType] < totalDays) {
-        throw new AppError(`Insufficient ${leaveType} leave balance. Available: ${user.leaveBalance[leaveType]} days.`, 400);
+    if (user.leaveBalance && user.leaveBalance.has(leaveType)) {
+      const currentBalance = user.leaveBalance.get(leaveType);
+      if (currentBalance === 0) {
+        leaveType = LEAVE_TYPES.LOP;
+        data.leaveType = leaveType;
+      } else if (currentBalance < totalDays) {
+        throw new AppError(`Insufficient ${leaveType} leave balance. Available: ${currentBalance} days.`, 400);
       }
     }
 
@@ -235,9 +241,10 @@ const leaveService = {
 
     const user = leave.userId;
     // Deduct balance
-    if (user.leaveBalance && user.leaveBalance[leave.leaveType] !== undefined) {
-      user.leaveBalance[leave.leaveType] -= leave.totalDays;
-      if (user.leaveBalance[leave.leaveType] < 0) user.leaveBalance[leave.leaveType] = 0;
+    if (user.leaveBalance && user.leaveBalance.has(leave.leaveType)) {
+      let currentBalance = user.leaveBalance.get(leave.leaveType) || 0;
+      currentBalance -= leave.totalDays;
+      user.leaveBalance.set(leave.leaveType, Math.max(0, currentBalance));
       await user.save();
     }
 

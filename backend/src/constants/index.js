@@ -24,6 +24,7 @@ const LEAVE_TYPES = Object.freeze({
   ANNUAL: 'annual',
   SICK: 'sick',
   CASUAL: 'casual',
+  LOP: 'lop',
 });
 
 const PROJECT_STATUS = Object.freeze({

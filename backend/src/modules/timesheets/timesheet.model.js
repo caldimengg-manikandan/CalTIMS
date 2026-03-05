@@ -75,6 +75,10 @@ const timesheetSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    isIncomplete: {
+      type: Boolean,
+      default: false,
+    },
     submittedAt: {
       type: Date,
       default: null,
@@ -144,6 +148,7 @@ timesheetSchema.pre('save', function (next) {
   }
   
   this.totalHours = grandTotal;
+  this.isIncomplete = grandTotal < 40;
   next();
 });
 

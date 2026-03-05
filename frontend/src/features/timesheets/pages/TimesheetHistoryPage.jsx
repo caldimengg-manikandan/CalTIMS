@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { timesheetAPI, userAPI } from '@/services/endpoints'
 import { useAuthStore } from '@/store/authStore'
+import { useNavigate } from 'react-router-dom'
 import StatusBadge from '@/components/ui/StatusBadge'
 import Spinner from '@/components/ui/Spinner'
 import { format } from 'date-fns'
@@ -10,6 +11,8 @@ import {
     Filter,
     Download,
     Eye,
+    Pencil,
+    Trash2,
     ChevronLeft,
     ChevronRight,
     XCircle,
@@ -28,6 +31,8 @@ const STATUSES = ['All Status', 'draft', 'submitted', 'approved', 'rejected']
 
 export default function TimesheetHistoryPage() {
     const { user } = useAuthStore()
+    const navigate = useNavigate()
+    const queryClient = useQueryClient()
     const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager'
 
     const [page, setPage] = useState(1)
@@ -50,6 +55,15 @@ export default function TimesheetHistoryPage() {
             limit: 10,
             ...filters
         }).then(r => r.data),
+    })
+
+    const { mutate: deleteTimesheet } = useMutation({
+        mutationFn: (id) => timesheetAPI.delete(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['timesheets'] });
+            toast.success('Draft deleted successfully');
+        },
+        onError: () => toast.error('Failed to delete draft'),
     })
 
     const handleFilterChange = (key, value) => {
@@ -317,12 +331,37 @@ export default function TimesheetHistoryPage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-5 text-center">
-                                            <button
-                                                onClick={() => handleViewDetails(row.weekStartDate, row.userId?._id || row.userId)}
-                                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
-                                            >
-                                                <Eye size={18} />
-                                            </button>
+                                            <div className="flex items-center justify-center gap-1">
+                                                <button
+                                                    onClick={() => handleViewDetails(row.weekStartDate, row.userId?._id || row.userId)}
+                                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
+                                                    title="View Details"
+                                                >
+                                                    <Eye size={18} />
+                                                </button>
+                                                {resolveStatus(row.statuses) === 'draft' && (
+                                                    <>
+                                                        <button
+                                                            onClick={() => navigate(`/timesheets?id=${row._id}&date=${format(new Date(row.weekStartDate), 'yyyy-MM-dd')}`)}
+                                                            className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
+                                                            title="Edit Draft"
+                                                        >
+                                                            <Pencil size={18} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                if (window.confirm('Are you sure you want to delete this draft?')) {
+                                                                    deleteTimesheet(row._id)
+                                                                }
+                                                            }}
+                                                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
+                                                            title="Delete Draft"
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
