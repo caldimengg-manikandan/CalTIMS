@@ -75,6 +75,11 @@ router.post('/backfill-timesheets', authorize('admin', 'manager'), asyncHandler(
   });
 }));
 
+router.get('/filter-options', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+  const options = await leaveService.getFilterOptions();
+  ApiResponse.success(res, { data: options });
+}));
+
 router.get('/balance/:userId', asyncHandler(async (req, res) => {
   const balance = await leaveService.getBalance(req.params.userId);
   ApiResponse.success(res, { data: balance });

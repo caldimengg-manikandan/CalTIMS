@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bell, CheckCheck, X, Calendar, Clock, AlertCircle, Trash2 } from 'lucide-react'
 import { notificationAPI } from '@/services/endpoints'
 import { formatDistanceToNow } from 'date-fns'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
 const typeIcons = {
@@ -15,31 +16,71 @@ const typeIcons = {
     timesheet_rejected: { icon: Clock, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-black' },
 }
 
-function NotificationItem({ notif, onRead }) {
+function NotificationItem({ notif, onRead, onClose }) {
+    const navigate = useNavigate()
     const meta = typeIcons[notif.type] || { icon: AlertCircle, color: 'text-slate-400', bg: 'bg-slate-50' }
     const Icon = meta.icon
 
+    const handleClick = () => {
+        // Mark as read
+        if (!notif.isRead) {
+            onRead(notif._id)
+        }
+
+        // Navigate based on type
+        if (notif.type.startsWith('leave_')) {
+            navigate('/leaves')
+        } else if (notif.type.startsWith('timesheet_')) {
+            if (notif.type === 'timesheet_submitted') {
+                navigate('/timesheets/manage')
+            } else {
+                navigate('/timesheets')
+            }
+        }
+        onClose()
+    }
+
+    // Attempt to highlight Leave ID or anything resembling "LEV0000"
+    const formatMessage = (msg) => {
+        const parts = msg.split(/(\bLEV\d+\b)/g)
+        return parts.map((part, i) => {
+            if (/^LEV\d+$/.test(part)) {
+                return <span key={i} className="font-mono font-bold text-primary-600 dark:text-primary-400 underline decoration-primary-300 underline-offset-2">{part}</span>
+            }
+            return part
+        })
+    }
+
     return (
         <div
-            onClick={() => !notif.isRead && onRead(notif._id)}
-            className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-white dark:hover:text-black transition-colors border-b border-slate-50 dark:border-white/50 last:border-0 ${!notif.isRead ? 'bg-primary-50/40 dark:bg-black' : ''}`}
+            onClick={handleClick}
+            className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors border-b border-slate-50 dark:border-white/5 last:border-0 ${!notif.isRead ? 'bg-primary-50/40 dark:bg-primary-950/20' : ''}`}
         >
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${meta.bg}`}>
                 <Icon size={16} className={meta.color} />
             </div>
             <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                    <p className={`text-sm font-semibold leading-tight ${notif.isRead ? 'text-slate-600 dark:text-white' : 'text-slate-800 dark:text-white'}`}>
+                    <p className={`text-sm font-semibold leading-tight ${notif.isRead ? 'text-slate-600 dark:text-slate-200' : 'text-slate-800 dark:text-white'}`}>
                         {notif.title}
                     </p>
                     {!notif.isRead && (
                         <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-1" />
                     )}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-white mt-0.5 line-clamp-2 leading-relaxed">{notif.message}</p>
-                <p className="text-xs text-slate-400 mt-1">
-                    {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2 leading-relaxed">
+                    {formatMessage(notif.message)}
                 </p>
+                <div className="flex items-center gap-2 mt-1">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-tighter">
+                        {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                    </p>
+                    {notif.refModel && (
+                        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1 rounded font-medium">
+                            {notif.refModel}
+                        </span>
+                    )}
+                </div>
             </div>
         </div>
     )
@@ -160,8 +201,8 @@ export default function NotificationBell() {
                                     }}
                                     disabled={clearAllMutation.isPending}
                                     className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-all duration-200 ${confirmClear
-                                            ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-sm px-3'
-                                            : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20'
+                                        ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-sm px-3'
+                                        : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20'
                                         }`}
                                 >
                                     <Trash2 size={13} />
@@ -191,6 +232,7 @@ export default function NotificationBell() {
                                     key={n._id}
                                     notif={n}
                                     onRead={(id) => markReadMutation.mutate(id)}
+                                    onClose={() => setOpen(false)}
                                 />
                             ))
                         )}

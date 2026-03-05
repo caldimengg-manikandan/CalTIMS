@@ -130,9 +130,11 @@ export default function AdminTimesheetPage() {
         queryFn: () => timesheetAPI.getAdminSummary().then(r => r.data.data)
     })
 
+    const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''
+
     const { data: listData, isLoading, isError } = useQuery({
-        queryKey: ['timesheets', 'admin-list', filters, search],
-        queryFn: () => timesheetAPI.getAdminList({ ...filters, search }).then(r => r.data),
+        queryKey: ['timesheets', 'admin-list', filters, effectiveSearch],
+        queryFn: () => timesheetAPI.getAdminList({ ...filters, search: effectiveSearch }).then(r => r.data),
         retry: false
     })
 
@@ -275,7 +277,7 @@ export default function AdminTimesheetPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
                             type="text"
-                            placeholder="Search employee name or ID..."
+                            placeholder="Search overall (min. 2 characters)..."
                             className="input pl-9 h-9 text-sm w-full"
                             value={search}
                             onChange={(e) => { setSearch(e.target.value); setFilters(f => ({ ...f, page: 1 })) }}

@@ -62,6 +62,7 @@ export const leaveAPI = {
   syncTimesheet: (id) => api.patch(`/leaves/${id}/sync-timesheet`),
   backfillTimesheets: () => api.post('/leaves/backfill-timesheets'),
   getCalendar: (params) => api.get('/leaves/calendar', { params }),
+  getFilterOptions: () => api.get('/leaves/filter-options'),
 }
 
 export const announcementAPI = {

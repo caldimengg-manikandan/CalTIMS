@@ -377,10 +377,12 @@ export default function ProjectsPage() {
         queryFn: () => userAPI.getAll({ role: 'manager' }).then(r => r.data.data)
     })
 
+    const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''
+
     // Main filtered query
     const { data, isLoading } = useQuery({
-        queryKey: ['projects', { search, status, selectedProjId, managerId }],
-        queryFn: () => projectAPI.getAll({ search, status, code: selectedProjId, managerId }).then(r => r.data),
+        queryKey: ['projects', { search: effectiveSearch, status, selectedProjId, managerId }],
+        queryFn: () => projectAPI.getAll({ search: effectiveSearch, status, code: selectedProjId, managerId }).then(r => r.data),
     })
 
     const projects = data?.data || []
@@ -455,7 +457,7 @@ export default function ProjectsPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
                             type="text"
-                            placeholder="Search project name..."
+                            placeholder="Search overall (min. 2 characters)..."
                             className="input pl-9 h-9 text-sm w-full"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}

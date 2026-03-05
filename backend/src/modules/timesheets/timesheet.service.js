@@ -10,11 +10,65 @@ const { parsePagination, buildPaginationMeta, buildSort } = require('../../share
 const { getWeekStart, getWeekEnd } = require('../../shared/utils/dateHelpers');
 const notificationService = require('../notifications/notification.service');
 
+// ─── Leave-aware weekly hours calculator ─────────────────────────────────────
+// This is the canonical implementation of the timesheet hour calculation rules:
+//
+//   IF entry.isLeave AND leaveType in [annual, sick, casual]
+//       → hours = 8 (full paid day) or 4 (half-day, when hoursWorked === 4)
+//   IF entry.isLeave AND leaveType === 'lop'
+//       → hours = 0  (Loss of Pay: not counted)
+//   ELSE (normal work entry)
+//       → hours = entry.hoursWorked
+//
+// Weekly total < 40  →  isIncomplete = true
+//
+function calculateWeeklyHours(rows) {
+  const PAID_LEAVE_TYPES = ['annual', 'sick', 'casual'];
+  let totalHours = 0;
+
+  for (const row of rows) {
+    for (const entry of row.entries || []) {
+      if (entry.isLeave) {
+        const lt = (entry.leaveType || '').toLowerCase();
+        if (lt === 'lop') {
+          // LOP: Loss of Pay — contributes 0 hours
+          totalHours += 0;
+        } else if (PAID_LEAVE_TYPES.includes(lt)) {
+          // Paid leave: respect stored hoursWorked (8 full day / 4 half-day)
+          // Fall back to 8 if somehow 0 was stored
+          totalHours += (entry.hoursWorked > 0 ? entry.hoursWorked : 8);
+        } else {
+          // Legacy entry without leaveType — trust hoursWorked
+          totalHours += (entry.hoursWorked || 0);
+        }
+      } else {
+        // Normal work entry
+        totalHours += (entry.hoursWorked || 0);
+      }
+    }
+  }
+
+  return {
+    totalHours,
+    isIncomplete: totalHours < 40,
+  };
+}
+
+/**
+ * Internal helper to fetch weekStartDay from settings
+ */
+async function getWeekStartDay() {
+  const Settings = mongoose.model('Settings');
+  const settings = await Settings.findOne().select('general.weekStartDay').lean();
+  return settings?.general?.weekStartDay || 'monday';
+}
+
 const timesheetService = {
   // ─── Core CRUD ──────────────────────────────────────────────────────────────
   async create(data, userId) {
-    const weekStart = getWeekStart(data.weekStartDate);
-    const weekEnd = getWeekEnd(weekStart);
+    const wsd = await getWeekStartDay();
+    const weekStart = getWeekStart(data.weekStartDate, wsd);
+    const weekEnd = getWeekEnd(weekStart, wsd);
 
     // Ensure no existing timesheet for this week
     const existing = await Timesheet.findOne({ userId, weekStartDate: weekStart });
@@ -76,11 +130,12 @@ const timesheetService = {
 
     if (query.status) filter.status = query.status;
     if (query.from || query.to) {
+      const wsd = await getWeekStartDay();
       filter.weekStartDate = {};
       // Use getWeekStart to normalize inputs to UTC midnight if possible, 
       // or at least use Date.UTC to avoid server TZ issues.
-      if (query.from) filter.weekStartDate.$gte = getWeekStart(new Date(query.from));
-      if (query.to) filter.weekStartDate.$lte = getWeekStart(new Date(query.to));
+      if (query.from) filter.weekStartDate.$gte = getWeekStart(new Date(query.from), wsd);
+      if (query.to) filter.weekStartDate.$lte = getWeekStart(new Date(query.to), wsd);
     }
 
     const [timesheets, total] = await Promise.all([
@@ -104,9 +159,10 @@ const timesheetService = {
     if (!dataArray.length) return [];
     
     // 1. Group input by week (redundant since usually one week is sent, but safe)
+    const wsd = await getWeekStartDay();
     const weeksMap = new Map();
     for (const data of dataArray) {
-      const ws = getWeekStart(data.weekStartDate).toISOString();
+      const ws = getWeekStart(data.weekStartDate, wsd).toISOString();
       if (!weeksMap.has(ws)) weeksMap.set(ws, []);
       weeksMap.get(ws).push(data);
     }
@@ -114,7 +170,7 @@ const timesheetService = {
     const results = [];
     for (const [wsIso, rowsData] of weeksMap.entries()) {
       const weekStart = new Date(wsIso);
-      const weekEnd = getWeekEnd(weekStart);
+      const weekEnd = getWeekEnd(weekStart, wsd);
 
       let timesheet = await Timesheet.findOne({ userId, weekStartDate: weekStart });
 
@@ -132,13 +188,24 @@ const timesheetService = {
         throw new AppError(`Cannot update a ${timesheet.status} timesheet for week ${weekStart.toDateString()}`, 400);
       }
 
-      // Sync rows: Replace existing rows with current UI state
-      // (This matches the frontend's pattern where it sends all current rows)
-      timesheet.rows = rowsData.map(row => ({
+      // Sync rows: Replace only work rows, leave system rows (leaves/holidays) intact
+      // 1. Filter out existing work rows (rows that have a projectId that matches our inputs)
+      const inputPids = new Set(rowsData.map(r => r.projectId.toString()));
+      const systemRows = timesheet.rows.filter(r => {
+        const pid = (r.projectId?._id || r.projectId || '').toString();
+        // A row is "system" if it's LEAVE-SYS or if it's NOT in our current input set
+        // But to be safe, we only preserve LEAVE-SYS rows or rows marked as leave
+        return pid === 'LEAVE-SYS' || r.category === 'Leave' || r.category === 'Holiday' || 
+               ['annual', 'sick', 'casual', 'lop'].includes(r.category?.toLowerCase());
+      });
+
+      const newWorkRows = rowsData.map(row => ({
         projectId: row.projectId,
         category: row.category || 'Development',
         entries: row.entries
       }));
+
+      timesheet.rows = [...systemRows, ...newWorkRows];
 
       await this.validateLimits(timesheet);
       await timesheet.save();
@@ -191,10 +258,29 @@ const timesheetService = {
     // Reuses bulkUpsert to save, then sets status to SUBMITTED
     const savedTimesheets = await this.bulkUpsert(dataArray, userId);
     
+    const user = await User.findById(userId).select('name employeeId');
+    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id');
+
     for (const ts of savedTimesheets) {
       ts.status = TIMESHEET_STATUS.SUBMITTED;
       ts.submittedAt = new Date();
       await ts.save();
+
+      // Notify Admins and Managers for each week submitted
+      const weekStr = ts.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const year = ts.weekStartDate.getFullYear();
+      
+      const notificationPromises = approvers.map(approver => 
+        notificationService.create({
+          userId: approver._id,
+          type: 'timesheet_submitted',
+          title: 'Timesheet Submitted',
+          message: `${user.name} (${user.employeeId}) has submitted a timesheet for the week of ${weekStr} (${year}).`,
+          refId: ts._id,
+          refModel: 'Timesheet',
+        })
+      );
+      await Promise.all(notificationPromises);
     }
     
     return savedTimesheets;
@@ -215,6 +301,25 @@ const timesheetService = {
     ts.status = TIMESHEET_STATUS.SUBMITTED;
     ts.submittedAt = new Date();
     await ts.save();
+
+    // Notify Admins and Managers
+    const user = await User.findById(ts.userId).select('name employeeId');
+    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id');
+    const weekStr = ts.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const year = ts.weekStartDate.getFullYear();
+
+    const notificationPromises = approvers.map(approver => 
+      notificationService.create({
+        userId: approver._id,
+        type: 'timesheet_submitted',
+        title: 'Timesheet Submitted',
+        message: `${user.name} (${user.employeeId}) has submitted a timesheet for the week of ${weekStr} (${year}).`,
+        refId: ts._id,
+        refModel: 'Timesheet',
+      })
+    );
+    await Promise.all(notificationPromises);
+
     return ts;
   },
 
@@ -234,11 +339,14 @@ const timesheetService = {
 
     // Notify employee
     const approver = await User.findById(approverId).select('name');
+    const weekStr = timesheet.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const year = timesheet.weekStartDate.getFullYear();
+
     await notificationService.create({
       userId: timesheet.userId,
       type: 'timesheet_approved',
       title: '✅ Timesheet Approved',
-      message: `Your timesheet for the week of ${timesheet.weekStartDate.toDateString()} has been approved by ${approver?.name || 'Admin'}.`,
+      message: `Your timesheet for the week of ${weekStr} (${year}) has been approved by ${approver?.name || 'Admin'}.`,
       refId: timesheet._id,
       refModel: 'Timesheet',
     });
@@ -256,11 +364,14 @@ const timesheetService = {
     await timesheet.save();
 
     const approver = await User.findById(approverId).select('name');
+    const weekStr = timesheet.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const year = timesheet.weekStartDate.getFullYear();
+
     await notificationService.create({
       userId: timesheet.userId,
       type: 'timesheet_rejected',
       title: '❌ Timesheet Rejected',
-      message: `Your timesheet for the week of ${timesheet.weekStartDate.toDateString()} was rejected by ${approver?.name || 'Admin'}: "${reason}".`,
+      message: `Your timesheet for the week of ${weekStr} (${year}) was rejected by ${approver?.name || 'Admin'}: "${reason}".`,
       refId: timesheet._id,
       refModel: 'Timesheet',
     });
@@ -288,12 +399,56 @@ const timesheetService = {
     filter.userId = new mongoose.Types.ObjectId(requestor._id);
 
     if (query.status && query.status !== 'All Status') filter.status = query.status;
+
+    if (query.search && query.search.trim().length >= 2) {
+      const searchRegex = new RegExp(query.search.trim(), 'i');
+      filter.$or = [
+        { 'rows.category': searchRegex },
+        { rejectionReason: searchRegex },
+        { status: searchRegex }
+      ];
+      
+      // Also search by project name/code if possible
+      const projects = await Project.find({
+        $or: [{ name: searchRegex }, { code: searchRegex }]
+      }).distinct('_id');
+      
+      if (projects.length > 0) {
+        filter.$or.push({ 'rows.projectId': { $in: projects } });
+      }
+    }
+
+    // Support year + optional month filtering
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     if (query.year && query.year !== 'All Years') {
        const year = parseInt(query.year);
-       filter.weekStartDate = {
-         $gte: new Date(Date.UTC(year, 0, 1)),
-         $lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999))
-       };
+       if (query.month && query.month !== 'All Months') {
+         const monthIndex = MONTHS.indexOf(query.month);
+         if (monthIndex !== -1) {
+           // Filter to specific month: weekStartDate can fall in that month
+           filter.weekStartDate = {
+             $gte: new Date(Date.UTC(year, monthIndex, 1)),
+             $lte: new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999))
+           };
+         }
+       } else {
+         filter.weekStartDate = {
+           $gte: new Date(Date.UTC(year, 0, 1)),
+           $lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999))
+         };
+       }
+    } else if (query.month && query.month !== 'All Months') {
+      // Month filter without year: use current year
+      const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const monthIndex = MONTHS.indexOf(query.month);
+      if (monthIndex !== -1) {
+        const now = new Date();
+        const year = now.getUTCFullYear();
+        filter.weekStartDate = {
+          $gte: new Date(Date.UTC(year, monthIndex, 1)),
+          $lte: new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999))
+        };
+      }
     }
 
     const [timesheets, total] = await Promise.all([
@@ -313,7 +468,7 @@ const timesheetService = {
       id: ts._id,
       weekStartDate: ts.weekStartDate,
       weekEndDate: ts.weekEndDate,
-      projects: ts.rows.map(r => r.projectId?.name || 'Unknown'),
+      projects: ts.rows.map(r => r.projectId?.name || (r.projectId?.code === 'LEAVE-SYS' || r.category?.toLowerCase().includes('leave') ? 'Leave' : r.category || 'Unknown')),
       projectCodes: ts.rows.map(r => r.projectId?.code || 'N/A'),
       totalHours: ts.totalHours,
       statuses: [ts.status], // Array for compatibility with frontend logic
@@ -646,9 +801,23 @@ const timesheetService = {
     if (query.projectId) {
        filter['rows.projectId'] = query.projectId;
     }
+
+    if (query.search && query.search.trim().length >= 2) {
+      const searchRegex = new RegExp(query.search.trim(), 'i');
+      const [userIds, projectIds] = await Promise.all([
+        User.find({ $or: [{ name: searchRegex }, { employeeId: searchRegex }] }).distinct('_id'),
+        Project.find({ $or: [{ name: searchRegex }, { code: searchRegex }] }).distinct('_id')
+      ]);
+
+      filter.$or = [
+        { status: searchRegex },
+        { rejectionReason: searchRegex },
+        { userId: { $in: userIds } },
+        { 'rows.projectId': { $in: projectIds } }
+      ];
+    }
     
-    // Search by employee name or ID if user filters by text (optional implementation detail)
-    // For now, support direct filters
+    // Search by division or location
     if (query.division || query.location) {
        const userIds = await User.find({
           ...(query.division && { division: query.division }),
@@ -696,3 +865,4 @@ const timesheetService = {
 };
 
 module.exports = timesheetService;
+module.exports.calculateWeeklyHours = calculateWeeklyHours;

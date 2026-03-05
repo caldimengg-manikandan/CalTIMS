@@ -46,7 +46,7 @@ export default function Sidebar() {
     const { sidebarOpen, toggleSidebar } = useUIStore()
     const { general } = useSettingsStore()
 
-    const companyName = general?.companyName || 'TIMS'
+    const companyName = general?.companyName || 'CALTIMS'
 
     return (
         <aside className={clsx(

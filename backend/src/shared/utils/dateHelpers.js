@@ -5,24 +5,38 @@
  */
 
 /**
- * Get the start of the week (Monday) for a given date
+ * Get the start of the week for a given date.
+ * @param {Date|string} date 
+ * @param {string} weekStartDay 'monday' or 'sunday' (default 'monday')
  */
-const getWeekStart = (date = new Date()) => {
+const getWeekStart = (date = new Date(), weekStartDay = 'monday') => {
   const d = new Date(date);
-  const day = d.getUTCDay();
-  // If it's Sunday (0), we want to go back 6 days to Monday.
-  // Otherwise, go back (day - 1) days.
-  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+  const day = d.getUTCDay(); // 0 = Sunday, 1 = Monday, ...
+  
+  let diff;
+  if (weekStartDay.toLowerCase() === 'sunday') {
+    // If it's Sunday (0), diff is 0. 
+    // Otherwise, go back 'day' days.
+    diff = d.getUTCDate() - day;
+  } else {
+    // Monday start (default)
+    // If it's Sunday (0), go back 6 days.
+    // Otherwise, go back (day - 1) days.
+    diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+  }
+  
   d.setUTCDate(diff);
   d.setUTCHours(0, 0, 0, 0);
   return d;
 };
 
 /**
- * Get the end of the week (Sunday) for a given date
+ * Get the end of the week for a given date
+ * @param {Date|string} date 
+ * @param {string} weekStartDay 'monday' or 'sunday' (default 'monday')
  */
-const getWeekEnd = (date = new Date()) => {
-  const start = getWeekStart(date);
+const getWeekEnd = (date = new Date(), weekStartDay = 'monday') => {
+  const start = getWeekStart(date, weekStartDay);
   const end = new Date(start);
   end.setUTCDate(start.getUTCDate() + 6);
   end.setUTCHours(23, 59, 59, 999);
