@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bell, CheckCheck, X, Calendar, Clock, AlertCircle, Trash2 } from 'lucide-react'
+import { Bell, CheckCheck, X, Calendar, Clock, AlertCircle, Trash2, Ticket, MessageSquare, CheckCircle } from 'lucide-react'
 import { notificationAPI } from '@/services/endpoints'
 import { formatDistanceToNow } from 'date-fns'
-import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
 const typeIcons = {
@@ -14,47 +14,20 @@ const typeIcons = {
     timesheet_submitted: { icon: Clock, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-black' },
     timesheet_approved: { icon: Clock, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
     timesheet_rejected: { icon: Clock, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-black' },
+    incident_created: { icon: Ticket, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-black' },
+    incident_updated: { icon: Ticket, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-black' },
+    incident_response: { icon: MessageSquare, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-black' },
+    incident_resolved: { icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
 }
 
-function NotificationItem({ notif, onRead, onClose }) {
-    const navigate = useNavigate()
+function NotificationItem({ notif, onRead }) {
     const meta = typeIcons[notif.type] || { icon: AlertCircle, color: 'text-slate-400', bg: 'bg-slate-50' }
     const Icon = meta.icon
 
-    const handleClick = () => {
-        // Mark as read
-        if (!notif.isRead) {
-            onRead(notif._id)
-        }
-
-        // Navigate based on type
-        if (notif.type.startsWith('leave_')) {
-            navigate('/leaves')
-        } else if (notif.type.startsWith('timesheet_')) {
-            if (notif.type === 'timesheet_submitted') {
-                navigate('/timesheets/manage')
-            } else {
-                navigate('/timesheets')
-            }
-        }
-        onClose()
-    }
-
-    // Attempt to highlight Leave ID or anything resembling "LEV0000"
-    const formatMessage = (msg) => {
-        const parts = msg.split(/(\bLEV\d+\b)/g)
-        return parts.map((part, i) => {
-            if (/^LEV\d+$/.test(part)) {
-                return <span key={i} className="font-mono font-bold text-primary-600 dark:text-primary-400 underline decoration-primary-300 underline-offset-2">{part}</span>
-            }
-            return part
-        })
-    }
-
     return (
         <div
-            onClick={handleClick}
-            className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors border-b border-slate-50 dark:border-white/5 last:border-0 ${!notif.isRead ? 'bg-primary-50/40 dark:bg-primary-950/20' : ''}`}
+            onClick={() => !notif.isRead && onRead(notif._id)}
+            className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-white dark:hover:text-black transition-colors border-b border-slate-50 dark:border-white/50 last:border-0 ${!notif.isRead ? 'bg-primary-50/40 dark:bg-black' : ''}`}
         >
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${meta.bg}`}>
                 <Icon size={16} className={meta.color} />
@@ -68,19 +41,10 @@ function NotificationItem({ notif, onRead, onClose }) {
                         <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-1" />
                     )}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2 leading-relaxed">
-                    {formatMessage(notif.message)}
+                <p className="text-xs text-slate-500 dark:text-white mt-0.5 line-clamp-2 leading-relaxed">{notif.message}</p>
+                <p className="text-xs text-slate-400 mt-1">
+                    {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
                 </p>
-                <div className="flex items-center gap-2 mt-1">
-                    <p className="text-[10px] text-slate-400 uppercase tracking-tighter">
-                        {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
-                    </p>
-                    {notif.refModel && (
-                        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1 rounded font-medium">
-                            {notif.refModel}
-                        </span>
-                    )}
-                </div>
             </div>
         </div>
     )
@@ -92,11 +56,11 @@ export default function NotificationBell() {
     const dropdownRef = useRef(null)
     const queryClient = useQueryClient()
 
-    // Poll unread count every 30s
+    // Poll unread count every 5s for on-time updates
     const { data: countData } = useQuery({
         queryKey: ['notif-unread-count'],
         queryFn: () => notificationAPI.getUnreadCount().then(r => r.data.data),
-        refetchInterval: 30000,
+        refetchInterval: 5000,
     })
 
     const unreadCount = countData?.count || 0
@@ -105,6 +69,7 @@ export default function NotificationBell() {
         queryKey: ['notifications'],
         queryFn: () => notificationAPI.getAll({ limit: 20 }).then(r => r.data.data),
         enabled: open,
+        refetchInterval: 5000, // Keep list fresh while open
     })
 
     const notifications = notifData?.notifications || []

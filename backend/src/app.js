@@ -24,6 +24,7 @@ const notificationRoutes = require('./modules/notifications/notification.routes'
 const settingsRoutes = require('./modules/settings/settings.routes');
 const reportScheduleRoutes = require('./modules/reportSchedules/reportSchedule.routes');
 const taskRoutes = require('./modules/tasks/task.routes');
+const incidentRoutes = require('./modules/incidents/incident.routes');
 const schedulerService = require('./shared/services/scheduler.service');
 
 const app = express();
@@ -42,7 +43,7 @@ app.use(
 // ─── Rate Limiting ───────────────────────────────────────────────────────────
 const globalLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX) || 500, 
+  max: parseInt(process.env.RATE_LIMIT_MAX) || 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many requests, please try again later.' },
@@ -97,6 +98,7 @@ app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/report-schedules', reportScheduleRoutes);
 app.use('/api/v1/tasks', taskRoutes);
+app.use('/api/v1/incidents', incidentRoutes);
 
 // ─── Start Scheduler ────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {

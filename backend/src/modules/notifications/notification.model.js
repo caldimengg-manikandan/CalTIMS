@@ -11,7 +11,11 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['leave_applied', 'leave_approved', 'leave_rejected', 'leave_cancelled', 'timesheet_submitted', 'timesheet_approved', 'timesheet_rejected'],
+      enum: [
+        'leave_applied', 'leave_approved', 'leave_rejected', 'leave_cancelled',
+        'timesheet_submitted', 'timesheet_approved', 'timesheet_rejected',
+        'incident_created', 'incident_updated', 'incident_resolved', 'incident_response'
+      ],
       required: true,
     },
     title: {
@@ -34,7 +38,7 @@ const notificationSchema = new mongoose.Schema(
     },
     refModel: {
       type: String,
-      enum: ['Leave', 'Timesheet', null],
+      enum: ['Leave', 'Timesheet', 'Incident', null],
       default: null,
     },
   },
