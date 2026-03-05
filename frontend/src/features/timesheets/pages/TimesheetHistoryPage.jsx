@@ -17,8 +17,10 @@ import {
     ChevronRight,
     XCircle,
     Calendar,
+    AlertTriangle,
 } from 'lucide-react'
 import TimesheetDetailsModal from '../components/TimesheetDetailsModal'
+import CreateIncidentModal from '@/components/incidents/CreateIncidentModal'
 import PageHeader from '@/components/ui/PageHeader'
 
 const YEARS = ['All Years', '2026', '2025', '2024']
@@ -45,6 +47,8 @@ export default function TimesheetHistoryPage() {
     const [selectedWeek, setSelectedWeek] = useState(null)
     const [selectedUserId, setSelectedUserId] = useState(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
+    const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false)
+    const [incidentTimesheetId, setIncidentTimesheetId] = useState(null)
 
 
 
@@ -361,6 +365,16 @@ export default function TimesheetHistoryPage() {
                                                         </button>
                                                     </>
                                                 )}
+                                                <button
+                                                    onClick={() => {
+                                                        setIncidentTimesheetId(row._id);
+                                                        setIsIncidentModalOpen(true);
+                                                    }}
+                                                    className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
+                                                    title="Report Issue"
+                                                >
+                                                    <AlertTriangle size={18} />
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -427,6 +441,16 @@ export default function TimesheetHistoryPage() {
                 onClose={() => setIsModalOpen(false)}
                 weekStartDate={selectedWeek}
                 userId={selectedUserId}
+            />
+
+            <CreateIncidentModal
+                isOpen={isIncidentModalOpen}
+                onClose={() => {
+                    setIsIncidentModalOpen(false);
+                    setIncidentTimesheetId(null);
+                }}
+                relatedTimesheetId={incidentTimesheetId}
+                onSuccess={() => { /* maybe refresh list or just notify user */ }}
             />
         </div >
     )

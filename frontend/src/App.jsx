@@ -25,6 +25,8 @@ const CalendarPage = lazy(() => import('@/features/calendar/pages/CalendarPage')
 const ReportsPage = lazy(() => import('@/features/reports/pages/ReportsPage'))
 const ProfilePage = lazy(() => import('@/features/employees/pages/ProfilePage'))
 const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'))
+const IncidentList = lazy(() => import('@/pages/incidents/IncidentList'))
+const IncidentDetails = lazy(() => import('@/pages/incidents/IncidentDetails'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
 
 // ─── Protected Route Guard ───────────────────────────────────────────────────
@@ -78,6 +80,8 @@ export default function App() {
                         </ProtectedRoute>
                     } />
                     <Route path="/calendar" element={<PageSuspense><CalendarPage /></PageSuspense>} />
+                    <Route path="/incidents" element={<PageSuspense><IncidentList /></PageSuspense>} />
+                    <Route path="/incidents/:id" element={<PageSuspense><IncidentDetails /></PageSuspense>} />
 
                     {/* Manager + Admin */}
                     <Route path="/timesheets/manage" element={

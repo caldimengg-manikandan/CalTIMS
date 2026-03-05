@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bell, CheckCheck, X, Calendar, Clock, AlertCircle, Trash2 } from 'lucide-react'
+import { Bell, CheckCheck, X, Calendar, Clock, AlertCircle, Trash2, Ticket, MessageSquare, CheckCircle } from 'lucide-react'
 import { notificationAPI } from '@/services/endpoints'
 import { formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -13,15 +14,52 @@ const typeIcons = {
     timesheet_submitted: { icon: Clock, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-black' },
     timesheet_approved: { icon: Clock, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
     timesheet_rejected: { icon: Clock, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-black' },
+    incident_created: { icon: Ticket, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-black' },
+    incident_updated: { icon: Ticket, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-black' },
+    incident_response: { icon: MessageSquare, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-black' },
+    incident_resolved: { icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
 }
 
-function NotificationItem({ notif, onRead }) {
+function NotificationItem({ notif, onRead, onClose }) {
+    const navigate = useNavigate();
     const meta = typeIcons[notif.type] || { icon: AlertCircle, color: 'text-slate-400', bg: 'bg-slate-50' }
     const Icon = meta.icon
 
+    const handleClick = (e) => {
+        // Mark as read first
+        if (!notif.isRead) {
+            onRead(notif._id);
+        }
+
+        // Close dropdown
+        onClose();
+
+        // Navigate based on refModel
+        if (notif.refModel === 'Incident' && notif.refId) {
+            navigate(`/incidents/${notif.refId}`);
+        } else if (notif.refModel === 'Leave') {
+            navigate('/leaves');
+        } else if (notif.refModel === 'Timesheet') {
+            navigate('/history');
+        }
+    };
+
+    // Helper to format message with highlighted/linkable INC IDs
+    const formatMessage = (msg) => {
+        if (!msg) return msg;
+        const parts = msg.split(/(INC-\d+)/g);
+        return parts.map((part, i) =>
+            part.match(/INC-\d+/) ? (
+                <span key={i} className="text-primary-600 font-bold underline cursor-pointer">
+                    {part}
+                </span>
+            ) : part
+        );
+    };
+
     return (
         <div
-            onClick={() => !notif.isRead && onRead(notif._id)}
+            onClick={handleClick}
             className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-white dark:hover:text-black transition-colors border-b border-slate-50 dark:border-white/50 last:border-0 ${!notif.isRead ? 'bg-primary-50/40 dark:bg-black' : ''}`}
         >
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${meta.bg}`}>
@@ -36,7 +74,9 @@ function NotificationItem({ notif, onRead }) {
                         <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-1" />
                     )}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-white mt-0.5 line-clamp-2 leading-relaxed">{notif.message}</p>
+                <p className="text-xs text-slate-500 dark:text-white mt-0.5 line-clamp-2 leading-relaxed">
+                    {formatMessage(notif.message)}
+                </p>
                 <p className="text-xs text-slate-400 mt-1">
                     {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
                 </p>
@@ -51,11 +91,11 @@ export default function NotificationBell() {
     const dropdownRef = useRef(null)
     const queryClient = useQueryClient()
 
-    // Poll unread count every 30s
+    // Poll unread count every 5s for on-time updates
     const { data: countData } = useQuery({
         queryKey: ['notif-unread-count'],
         queryFn: () => notificationAPI.getUnreadCount().then(r => r.data.data),
-        refetchInterval: 30000,
+        refetchInterval: 5000,
     })
 
     const unreadCount = countData?.count || 0
@@ -64,6 +104,7 @@ export default function NotificationBell() {
         queryKey: ['notifications'],
         queryFn: () => notificationAPI.getAll({ limit: 20 }).then(r => r.data.data),
         enabled: open,
+        refetchInterval: 5000, // Keep list fresh while open
     })
 
     const notifications = notifData?.notifications || []
@@ -160,8 +201,8 @@ export default function NotificationBell() {
                                     }}
                                     disabled={clearAllMutation.isPending}
                                     className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-all duration-200 ${confirmClear
-                                            ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-sm px-3'
-                                            : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20'
+                                        ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-sm px-3'
+                                        : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20'
                                         }`}
                                 >
                                     <Trash2 size={13} />
@@ -191,6 +232,7 @@ export default function NotificationBell() {
                                     key={n._id}
                                     notif={n}
                                     onRead={(id) => markReadMutation.mutate(id)}
+                                    onClose={() => setOpen(false)}
                                 />
                             ))
                         )}

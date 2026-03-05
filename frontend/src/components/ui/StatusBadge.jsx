@@ -20,6 +20,11 @@ const statusMap = {
     sick: 'badge-warning',
     casual: 'badge-success',
     unpaid: 'badge-gray',
+    open: 'badge-info',
+    pending: 'badge-warning',
+    resolved: 'badge-success',
+    closed: 'badge-gray',
+    withdrawn: 'badge-danger',
 }
 
 export default function StatusBadge({ status, className }) {

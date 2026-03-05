@@ -279,7 +279,7 @@ async function seed() {
   // ── Leaves ─────────────────────────────────────────────────────────────────
   console.log('\n🌴 Creating leave records...');
 
-  await Leave.insertMany([
+  const leavesData = [
     {
       userId: emp1._id,
       leaveType: 'annual',
@@ -309,7 +309,12 @@ async function seed() {
       reason: 'Personal work',
       status: 'pending',
     },
-  ]);
+  ];
+
+  for (const lData of leavesData) {
+    const leave = new Leave(lData);
+    await leave.save();
+  }
 
   console.log('✅ Created 3 leave records');
 

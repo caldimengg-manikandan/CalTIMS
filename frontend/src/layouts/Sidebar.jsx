@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import {
     LayoutDashboard, Clock, List, CheckSquare, Users, FolderOpen,
     Megaphone, Calendar, BarChart3, ChevronLeft, ChevronRight,
-    Timer, ClipboardList, Settings2, ListTodo
+    Timer, ClipboardList, Settings2, ListTodo, AlertCircle
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
@@ -27,6 +27,7 @@ const navSections = [
             { to: '/leaves', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager'] },
             { to: '/calendar', icon: Calendar, label: 'Calendar', roles: ['admin', 'manager', 'employee'] },
             { to: '/announcements', icon: Megaphone, label: 'Announcements', roles: ['admin'] },
+            { to: '/incidents', icon: AlertCircle, label: 'Help & Support', roles: ['admin', 'manager', 'employee'] },
         ]
     },
     {
