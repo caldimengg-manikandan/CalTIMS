@@ -473,7 +473,7 @@ export default function AdminTimesheetPage() {
                                                         </div>
                                                         <div>
                                                             <p className="font-medium text-slate-800 dark:text-white">{ts.userId?.name || '—'}</p>
-                                                            <p className="text-[10px] text-slate-400 font-mono">{ts.userId?.employeeId || '—'}</p>
+                                                            {/* <p className="text-[10px] text-slate-400 font-mono">{ts.userId?.employeeId || '—'}</p> */}
                                                         </div>
                                                     </div>
                                                 </td>

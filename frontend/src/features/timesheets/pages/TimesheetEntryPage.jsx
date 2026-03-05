@@ -12,7 +12,7 @@ import {
     ClipboardCheck,
     AlertTriangle
 } from 'lucide-react'
-import { timesheetAPI, projectAPI, settingsAPI, taskAPI, leaveAPI } from '@/services/endpoints'
+import { timesheetAPI, projectAPI, settingsAPI, taskAPI, leaveAPI, calendarAPI } from '@/services/endpoints'
 import { useSettingsStore } from '@/store/settingsStore'
 import Spinner from '@/components/ui/Spinner'
 import {
@@ -34,9 +34,7 @@ const DEFAULT_TASK_TYPES = [
     'Design',
     'Meeting',
     'Documentation',
-    'Testing',
-    'Leave',
-    'Holiday'
+    'Testing'
 ]
 
 const DEFAULT_LEAVE_TYPES = ['Annual', 'Sick', 'Casual', 'Unpaid', 'Maternity', 'Paternity']
@@ -125,12 +123,38 @@ export default function TimesheetEntryPage() {
         queryKey: ['leaves', 'week', format(weekStart, 'yyyy-MM-dd')],
         queryFn: async () => {
             const from = format(weekStart, 'yyyy-MM-dd')
-            const to = format(addDays(weekStart, 6), 'yyyy-MM-dd') // Only fetch for this exact 7-day week
+            const to = format(addDays(weekStart, 6), 'yyyy-MM-dd')
             const r = await leaveAPI.getAll({ from, to, limit: 100 })
             return r.data?.data || r.data?.leaves || []
         },
         staleTime: 0,
     })
+
+    // Fetch global holidays for the week
+    const { data: globalHolidays } = useQuery({
+        queryKey: ['calendar-holidays', format(weekStart, 'yyyy-MM-dd')],
+        queryFn: async () => {
+            const from = format(weekStart, 'yyyy-MM-dd')
+            const to = format(addDays(weekStart, 6), 'yyyy-MM-dd')
+            const r = await calendarAPI.getAll({ from, to, eventType: 'Holiday' })
+            return (r.data?.data || []).filter(e => e.isPublic)
+        },
+        staleTime: 5 * 60 * 1000,
+    })
+
+    const holidays = useMemo(() => {
+        const holidaySet = new Set()
+        globalHolidays?.forEach(event => {
+            const start = new Date(event.startDate)
+            const end = new Date(event.endDate)
+            let curr = new Date(start)
+            while (curr <= end) {
+                holidaySet.add(format(curr, 'yyyy-MM-dd'))
+                curr = addDays(curr, 1)
+            }
+        })
+        return holidaySet
+    }, [globalHolidays])
 
     // Fetch existing timesheet for the week.
     // If editing by ID, fetch directly to avoid date-range mismatch.
@@ -634,29 +658,38 @@ export default function TimesheetEntryPage() {
                                 <th className="px-4 py-4 text-left font-bold border-r border-slate-200 dark:border-white min-w-[200px]">Project Name</th>
                                 <th className="px-4 py-4 text-left font-bold border-r border-slate-200 dark:border-white min-w-[240px]">Task / Leave Type</th>
 
-                                {weekDays.map((day, i) => (
-                                    <th key={i} className="px-2 py-3 border-r border-slate-200 dark:border-white text-center min-w-[110px]">
-                                        <div className="flex flex-col items-center gap-1">
-                                            <div className="flex flex-col">
-                                                <span>{format(day, 'EEE')}</span>
-                                                <span className="text-slate-400 capitalize font-normal">{format(day, 'MMM d')}</span>
-                                            </div>
-                                            {calculateDayTotal(i) < workingHoursPerDay && calculateDayTotal(i) > 0 && (
-                                                <div className="absolute -top-1 -right-1 group/warn">
-                                                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                                                    <div className="hidden group-hover/warn:block absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white text-[10px] py-1 px-2 rounded-lg whitespace-nowrap shadow-xl">
-                                                        Low hours: {formatHours(calculateDayTotal(i))}
+                                {weekDays.map((day, i) => {
+                                    const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
+                                    return (
+                                        <th key={i} className={clsx(
+                                            "px-2 py-3 border-r border-slate-200 dark:border-white text-center min-w-[110px] transition-colors relative",
+                                            isHoliday ? "bg-blue-100/50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300" : ""
+                                        )}>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <div className="flex flex-col">
+                                                    <span>{format(day, 'EEE')}</span>
+                                                    <span className={clsx(
+                                                        "capitalize font-normal",
+                                                        isHoliday ? "text-blue-500/80 dark:text-blue-400" : "text-slate-400"
+                                                    )}>{format(day, 'MMM d')}</span>
+                                                </div>
+                                                {calculateDayTotal(i) < workingHoursPerDay && calculateDayTotal(i) > 0 && (
+                                                    <div className="absolute -top-1 -right-1 group/warn">
+                                                        <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                                                        <div className="hidden group-hover/warn:block absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white text-[10px] py-1 px-2 rounded-lg whitespace-nowrap shadow-xl">
+                                                            Low hours: {formatHours(calculateDayTotal(i))}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            )}
-                                            {calculateDayTotal(i) > 24 && (
-                                                <div className="absolute -top-1 -right-1">
-                                                    <div className="w-2 h-2 rounded-full bg-red-500" />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </th>
-                                ))}
+                                                )}
+                                                {calculateDayTotal(i) > 24 && (
+                                                    <div className="absolute -top-1 -right-1">
+                                                        <div className="w-2 h-2 rounded-full bg-red-500" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </th>
+                                    )
+                                })}
 
                                 <th className="px-4 py-4 text-center font-bold border-r border-slate-200 dark:border-white w-24">Total</th>
                                 <th className="px-4 py-4 text-center font-bold w-20">Action</th>
@@ -741,13 +774,16 @@ export default function TimesheetEntryPage() {
                                             const isLeaveCell = isPendingCell || isApprovedCell;
                                             const isLop = cellLeaveType?.toLowerCase().includes('lop');
 
+                                            const isHoliday = holidays.has(format(weekDays[i], 'yyyy-MM-dd'));
+
                                             return (
-                                                <td key={i} className={`px-2 py-3 border-r border-slate-100 dark:border-white`}>
+                                                <td key={i} className={`px-2 py-3 border-r border-slate-100 dark:border-white transition-colors ${isHoliday ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
                                                     <div className={`flex flex-col items-center justify-center p-1.5 focus-within:ring-1 focus-within:ring-indigo-500 transition-all ${isLop && isPendingCell ? 'bg-rose-100/50 border-rose-200 dark:border-rose-900 border rounded-lg' :
                                                         isLop && isApprovedCell ? 'bg-rose-100/30 border-rose-300 dark:border-rose-800 border rounded-lg' :
                                                             isPendingCell ? 'bg-amber-100/30 border-amber-200 dark:border-amber-800 border rounded-lg' :
                                                                 isApprovedCell ? 'bg-emerald-100/30 border-emerald-200 dark:border-emerald-800 border rounded-lg' :
-                                                                    'bg-slate-50 dark:bg-black border-slate-200 dark:border-white border rounded-lg'
+                                                                    isHoliday ? 'bg-blue-100/40 dark:bg-blue-800/20 border-blue-200 dark:border-blue-700 border rounded-lg' :
+                                                                        'bg-slate-50 dark:bg-black border-slate-200 dark:border-white border rounded-lg'
                                                         } ${lockedDays[i] && !row.isLeaveRow ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800' : ''}`}>
                                                         <div className="flex items-center justify-center w-full">
                                                             {isLop && isLeaveCell ? (
@@ -797,6 +833,11 @@ export default function TimesheetEntryPage() {
                                                             )}
                                                         </div>
                                                     </div>
+                                                    {isHoliday && !isLeaveCell && (
+                                                        <div className="mt-1 flex items-center gap-1">
+                                                            <span className="text-[9px] text-blue-500 font-bold uppercase tracking-tighter">Holiday</span>
+                                                        </div>
+                                                    )}
                                                     {isLeaveCell && cellLeaveType && (
                                                         <div className={`text-[10px] text-center mt-1 font-semibold ${isLop && isPendingCell ? 'text-rose-600/80 dark:text-rose-400/80' :
                                                             isLop && isApprovedCell ? 'text-rose-600/80 dark:text-rose-400/80' :

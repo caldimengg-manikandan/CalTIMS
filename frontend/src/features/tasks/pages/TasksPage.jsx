@@ -463,13 +463,13 @@ export default function TasksPage() {
                                                 </div>
                                                 <div className="min-w-0">
                                                     <p className="font-medium text-slate-800 dark:text-white truncate">{task.name}</p>
-                                                    <p className="text-xs text-slate-400 truncate max-w-xs">{task.description || 'No description'}</p>
+                                                    {/* <p className="text-xs text-slate-400 truncate max-w-xs">{task.description || 'No description'}</p> */}
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
                                             <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{task.projectId?.name || '—'}</p>
-                                            <p className="text-[10px] text-slate-400 font-mono tracking-wider">{task.projectId?.code || '—'}</p>
+                                            {/* <p className="text-[10px] text-slate-400 font-mono tracking-wider">{task.projectId?.code || '—'}</p> */}
                                         </td>
                                         <td><StatusBadge status={task.priority} /></td>
                                         <td><StatusBadge status={task.status} /></td>

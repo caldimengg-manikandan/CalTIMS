@@ -615,7 +615,7 @@ export default function ProjectsPage() {
                                                 </div>
                                                 <div>
                                                     <p className="font-medium text-slate-800 dark:text-white">{proj.name}</p>
-                                                    <p className="text-[10px] text-slate-400 font-mono font-bold">{proj.code}</p>
+                                                    {/* <p className="text-[10px] text-slate-400 font-mono font-bold">{proj.code}</p> */}
                                                 </div>
                                             </div>
                                         </td>

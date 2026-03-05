@@ -412,7 +412,7 @@ export default function EmployeesPage() {
                                                 </div>
                                                 <div>
                                                     <p className="font-medium text-slate-800 dark:text-white">{emp.name}</p>
-                                                    <p className="text-xs text-slate-400 font-mono">{emp.employeeId}</p>
+                                                    {/* <p className="text-xs text-slate-400 font-mono">{emp.employeeId}</p> */}
                                                 </div>
                                             </div>
                                         </td>

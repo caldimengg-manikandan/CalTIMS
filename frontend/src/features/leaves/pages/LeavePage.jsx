@@ -736,7 +736,7 @@ function AdminLeaveView() {
                                                         <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center text-white font-bold text-xs shrink-0">{leave.userId?.name?.charAt(0)?.toUpperCase() || '?'}</div>
                                                         <div>
                                                             <p className="font-medium text-slate-800 dark:text-white leading-tight">{leave.userId?.name || '—'}</p>
-                                                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">{leave.userId?.employeeId || '—'}</p>
+                                                            {/* <p className="text-[10px] text-slate-400 font-mono mt-0.5">{leave.userId?.employeeId || '—'}</p> */}
                                                         </div>
                                                     </div>
                                                 </td>
