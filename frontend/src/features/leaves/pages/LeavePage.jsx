@@ -133,7 +133,8 @@ function ApplyLeaveModal({ onClose, balance }) {
     })
 
     const currentBalance = balance?.[form.leaveType] || 0
-    const hasInsufficientBalance = days > currentBalance
+    const isLop = form.leaveType === 'lop'
+    const hasInsufficientBalance = !isLop && days > currentBalance
 
     const handleSubmit = (e) => {
         e.preventDefault()
@@ -152,9 +153,14 @@ function ApplyLeaveModal({ onClose, balance }) {
                     </div>
                     <div>
                         <h2 className="text-base font-bold text-slate-800 dark:text-white">Apply for Leave</h2>
-                        {balance && (
+                        {balance && !isLop && (
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                                 {form.leaveType} Balance: <span className={hasInsufficientBalance ? 'text-red-500' : 'text-emerald-500'}>{currentBalance} Days</span>
+                            </p>
+                        )}
+                        {isLop && (
+                            <p className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
+                                Loss of Pay — No balance deducted
                             </p>
                         )}
                     </div>
@@ -167,8 +173,9 @@ function ApplyLeaveModal({ onClose, balance }) {
                     <select className="input" value={form.leaveType}
                         onChange={e => setForm(f => ({ ...f, leaveType: e.target.value }))}>
                         {LEAVE_TYPES.map(t => (
-                            <option key={t} value={t} className="capitalize">{t}</option>
+                            <option key={t} value={t} className="capitalize">{t.toUpperCase()}</option>
                         ))}
+                        <option value="lop">LOP (Loss of Pay)</option>
                     </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -184,9 +191,15 @@ function ApplyLeaveModal({ onClose, balance }) {
                     </div>
                 </div>
                 {days > 0 && (
-                    <div className={`rounded-xl px-4 py-2.5 text-sm font-medium border ${hasInsufficientBalance ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-100' : 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 border-primary-100'}`}>
-                        📅 {days} day{days !== 1 ? 's' : ''} of {form.leaveType} leave
+                    <div className={`rounded-xl px-4 py-2.5 text-sm font-medium border ${isLop
+                        ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-100'
+                        : hasInsufficientBalance
+                            ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-100'
+                            : 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 border-primary-100'
+                        }`}>
+                        📅 {days} day{days !== 1 ? 's' : ''} of {isLop ? 'Loss of Pay (LOP)' : `${form.leaveType} leave`}
                         {hasInsufficientBalance && <span className="block text-[10px] uppercase font-black mt-1">Insufficient Balance</span>}
+                        {isLop && <span className="block text-[10px] uppercase font-black mt-1">These days will not be paid</span>}
                     </div>
                 )}
                 <div className="space-y-1.5">
@@ -387,14 +400,29 @@ function AdminLeaveView() {
     })
     const LEAVE_TYPES = tsSettings?.eligibleLeaveTypes || ['annual', 'sick', 'casual']
 
-    const [filters, setFilters] = React.useState({ status: '', leaveType: '', userId: '' })
+    const { data: filterOptions } = useQuery({
+        queryKey: ['leaves-filter-options'],
+        queryFn: () => leaveAPI.getFilterOptions().then(r => r.data.data),
+    })
+
+    const [filters, setFilters] = React.useState({
+        status: '',
+        leaveType: '',
+        userId: '',
+        leaveId: '',
+    })
     const [rejectTarget, setRejectTarget] = React.useState(null)
     const [viewTarget, setViewTarget] = React.useState(null)
     const [editTarget, setEditTarget] = React.useState(null)
 
+    const [eligibilityFilters, setEligibilityFilters] = React.useState({ department: '' })
+    const [showEligibilityFilters, setShowEligibilityFilters] = React.useState(false)
+
+    const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''
+
     const { data, isLoading } = useQuery({
-        queryKey: ['leaves-admin', filters, search],
-        queryFn: () => leaveAPI.getAll({ ...filters, isAdminView: true, search }).then(r => r.data),
+        queryKey: ['leaves-admin', filters, effectiveSearch],
+        queryFn: () => leaveAPI.getAll({ ...filters, isAdminView: true, search: effectiveSearch }).then(r => r.data),
     })
 
     const { data: employees = [] } = useQuery({
@@ -403,7 +431,26 @@ function AdminLeaveView() {
     })
 
     const leaves = data?.data || []
-    const activeFilterCount = [filters.status, filters.leaveType, filters.userId].filter(Boolean).length
+    const activeFilterCount = Object.values(filters).filter(v => v !== '').length
+
+    const eligibilityDepartments = React.useMemo(() =>
+        [...new Set(employees.map(e => e.department).filter(Boolean))].sort(),
+        [employees]);
+
+    const filteredEmployees = React.useMemo(() => {
+        return employees.filter(e => {
+            const matchesSearch = effectiveSearch === '' ||
+                e.name?.toLowerCase().includes(effectiveSearch.toLowerCase()) ||
+                e.employeeId?.toLowerCase().includes(effectiveSearch.toLowerCase()) ||
+                e.department?.toLowerCase().includes(effectiveSearch.toLowerCase());
+
+            const matchesDept = !eligibilityFilters.department || e.department === eligibilityFilters.department;
+
+            return matchesSearch && matchesDept;
+        });
+    }, [employees, effectiveSearch, eligibilityFilters]);
+
+    const activeEligibilityFilterCount = Object.values(eligibilityFilters).filter(v => v !== '').length
 
     // Stats
     const stats = React.useMemo(() => ({
@@ -471,6 +518,23 @@ function AdminLeaveView() {
         toast.success('Exported successfully')
     }
 
+    const handleExportEligibilityCSV = () => {
+        if (!employees.length) { toast.error('No data to export'); return }
+        const headers = ['Employee ID', 'Name', 'Department', ...LEAVE_TYPES.map(t => `${t.toUpperCase()} Balance`)]
+        const rows = employees.map(e => [
+            e.employeeId || '',
+            e.name || '',
+            e.department || '',
+            ...LEAVE_TYPES.map(t => e.leaveBalance?.[t] || 0)
+        ])
+        const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+        const blob = new Blob([csv], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a'); a.href = url; a.download = 'leave_eligibility.csv'; a.click()
+        URL.revokeObjectURL(url)
+        toast.success('Exported successfully')
+    }
+
     return (
         <div className="space-y-6 animate-fade-in">
             <PageHeader title="Leave Management">
@@ -523,7 +587,7 @@ function AdminLeaveView() {
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                 <input
                                     type="text"
-                                    placeholder="Search employee name or ID..."
+                                    placeholder="Search overall (min. 2 characters)..."
                                     className="input pl-9 h-9 text-sm w-full"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
@@ -556,51 +620,66 @@ function AdminLeaveView() {
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Filter By</span>
                                                     {activeFilterCount > 0 && (
-                                                        <button onClick={() => { setFilters({ status: '', leaveType: '', userId: '' }); setShowFilters(false) }}
+                                                        <button onClick={() => { setFilters({ status: '', leaveType: '', userId: '', leaveId: '' }); setShowFilters(false) }}
                                                             className="text-xs text-primary-600 hover:text-primary-700 font-medium">
                                                             Reset All
                                                         </button>
                                                     )}
                                                 </div>
 
-                                                <div className="space-y-4">
-                                                    <div className="space-y-2">
-                                                        <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Employee ID</label>
-                                                        <select
-                                                            className="input text-sm h-11"
-                                                            value={filters.userId}
-                                                            onChange={e => setFilters(f => ({ ...f, userId: e.target.value }))}
-                                                        >
-                                                            <option value="">All Employees</option>
-                                                            {employees.map(emp => (
-                                                                <option key={emp._id} value={emp._id}>{emp.employeeId} — {emp.name}</option>
-                                                            ))}
-                                                        </select>
+                                                <div className="space-y-4 pr-1">
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div className="space-y-2">
+                                                            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Leave ID</label>
+                                                            <select
+                                                                className="input text-sm h-10"
+                                                                value={filters.leaveId}
+                                                                onChange={e => setFilters(f => ({ ...f, leaveId: e.target.value }))}
+                                                            >
+                                                                <option value="">All IDs</option>
+                                                                {filterOptions?.leaveIds?.map(id => (
+                                                                    <option key={id} value={id}>{id}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Employee</label>
+                                                            <select
+                                                                className="input text-sm h-10"
+                                                                value={filters.userId}
+                                                                onChange={e => setFilters(f => ({ ...f, userId: e.target.value }))}
+                                                            >
+                                                                <option value="">All Employees</option>
+                                                                {employees.map(emp => (
+                                                                    <option key={emp._id} value={emp._id}>{emp.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
                                                     </div>
+
                                                     <div className="grid grid-cols-2 gap-3">
                                                         <div className="space-y-2">
                                                             <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status</label>
                                                             <select
-                                                                className="input text-sm h-11"
+                                                                className="input text-sm h-10"
                                                                 value={filters.status}
                                                                 onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
                                                             >
                                                                 <option value="">All Status</option>
-                                                                <option value="pending">Pending</option>
-                                                                <option value="approved">Approved</option>
-                                                                <option value="rejected">Rejected</option>
-                                                                <option value="cancelled">Cancelled</option>
+                                                                {filterOptions?.statuses?.map(s => (
+                                                                    <option key={s} value={s} className="capitalize">{s}</option>
+                                                                ))}
                                                             </select>
                                                         </div>
                                                         <div className="space-y-2">
                                                             <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Type</label>
                                                             <select
-                                                                className="input text-sm h-11"
+                                                                className="input text-sm h-10"
                                                                 value={filters.leaveType}
                                                                 onChange={e => setFilters(f => ({ ...f, leaveType: e.target.value }))}
                                                             >
                                                                 <option value="">All Types</option>
-                                                                {LEAVE_TYPES.map(t => (
+                                                                {filterOptions?.leaveTypes?.map(t => (
                                                                     <option key={t} value={t} className="capitalize">{t}</option>
                                                                 ))}
                                                             </select>
@@ -608,7 +687,7 @@ function AdminLeaveView() {
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-3 pt-2">
-                                                    <button onClick={() => { setFilters({ status: '', leaveType: '', userId: '' }); setShowFilters(false) }} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
+                                                    <button onClick={() => { setFilters({ status: '', leaveType: '', userId: '', leaveId: '' }); setShowFilters(false) }} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
                                                     <button onClick={() => setShowFilters(false)} className="flex-[2] h-11 bg-primary-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]">Apply</button>
                                                 </div>
                                             </div>
@@ -699,16 +778,79 @@ function AdminLeaveView() {
                 <>
                     {/* Eligibility Toolbar */}
                     <div className="card p-3">
-                        <div className="flex gap-3 items-center">
+                        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+                            {/* Search */}
                             <div className="relative flex-1">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                 <input
                                     type="text"
-                                    placeholder="Search by name or employee ID..."
+                                    placeholder="Search overall (min. 2 characters)..."
                                     className="input pl-9 h-9 text-sm w-full"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                 />
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                {/* Filter Button */}
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowEligibilityFilters(p => !p)}
+                                        className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showEligibilityFilters || activeEligibilityFilterCount > 0
+                                            ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
+                                            : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                    >
+                                        <SlidersHorizontal size={15} />
+                                        Filters
+                                        {activeEligibilityFilterCount > 0 && (
+                                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary-500 text-white text-[10px] font-bold">
+                                                {activeEligibilityFilterCount}
+                                            </span>
+                                        )}
+                                        <ChevronDown size={14} className={`transition-transform ${showEligibilityFilters ? 'rotate-180' : ''}`} />
+                                    </button>
+
+                                    {/* Filter Dropdown */}
+                                    {showEligibilityFilters && (
+                                        <>
+                                            <div className="fixed inset-0 z-20" onClick={() => setShowEligibilityFilters(false)} />
+                                            <div className="absolute right-0 top-11 z-30 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-5 space-y-5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Filter By</span>
+                                                    {activeEligibilityFilterCount > 0 && (
+                                                        <button onClick={() => { setEligibilityFilters({ department: '' }); setShowEligibilityFilters(false) }}
+                                                            className="text-xs text-primary-600 hover:text-primary-700 font-medium">
+                                                            Reset All
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                <div className="space-y-4">
+                                                    <div className="space-y-2">
+                                                        <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Department</label>
+                                                        <select
+                                                            className="input text-sm h-10"
+                                                            value={eligibilityFilters.department}
+                                                            onChange={e => setEligibilityFilters({ department: e.target.value })}
+                                                        >
+                                                            <option value="">All Departments</option>
+                                                            {eligibilityDepartments.map(dept => (
+                                                                <option key={dept} value={dept}>{dept}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-3 pt-2">
+                                                    <button onClick={() => { setEligibilityFilters({ department: '' }); setShowEligibilityFilters(false) }} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
+                                                    <button onClick={() => setShowEligibilityFilters(false)} className="flex-[2] h-11 bg-primary-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]">Apply</button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                <button onClick={handleExportEligibilityCSV} className="flex items-center gap-2 px-3 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                    <Download size={15} /> Export
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -726,14 +868,14 @@ function AdminLeaveView() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {employees.filter(e => e.name?.toLowerCase().includes(search.toLowerCase()) || e.employeeId?.toLowerCase().includes(search.toLowerCase())).map((emp) => (
+                                    {filteredEmployees.map((emp) => (
                                         <tr key={emp._id}>
                                             <td>
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs shrink-0">{emp.name?.charAt(0)?.toUpperCase()}</div>
                                                     <div>
                                                         <p className="font-medium text-slate-800 dark:text-white leading-tight">{emp.name}</p>
-                                                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{emp.employeeId}</p>
+                                                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{emp.employeeId} • {emp.department}</p>
                                                     </div>
                                                 </div>
                                             </td>
@@ -754,6 +896,14 @@ function AdminLeaveView() {
                                             </td>
                                         </tr>
                                     ))}
+                                    {filteredEmployees.length === 0 && (
+                                        <tr>
+                                            <td colSpan={LEAVE_TYPES.length + 2} className="py-20 text-center">
+                                                <Search size={40} className="mx-auto text-slate-200 mb-3" />
+                                                <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No employees found</p>
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -838,7 +988,7 @@ function EmployeeLeaveView() {
 
             {/* Leave Balance Cards */}
             {balance && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4">
                     {Object.entries(balance)
                         .filter(([type]) => LEAVE_TYPES.includes(type))
                         .map(([type, days], i) => (
@@ -848,6 +998,19 @@ function EmployeeLeaveView() {
                                 <p className="text-xs text-slate-400">days left</p>
                             </div>
                         ))}
+                    {/* LOP Card — shows days taken (no balance exists for LOP) */}
+                    {(() => {
+                        const lopDays = (leaves || [])
+                            .filter(l => l.leaveType === 'lop' && ['approved', 'pending'].includes(l.status))
+                            .reduce((sum, l) => sum + (l.totalDays || 0), 0)
+                        return (
+                            <div className="card text-center hover:shadow-md transition-shadow border border-red-100 dark:border-red-900/30">
+                                <p className="text-3xl font-bold text-red-500">{lopDays}</p>
+                                <p className="text-sm text-slate-500 mt-1 font-medium">LOP</p>
+                                <p className="text-xs text-slate-400">days taken</p>
+                            </div>
+                        )
+                    })()}
                 </div>
             )}
 

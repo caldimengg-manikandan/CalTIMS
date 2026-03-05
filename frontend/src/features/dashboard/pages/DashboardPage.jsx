@@ -416,29 +416,31 @@ export default function DashboardPage() {
                         )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <StatCard
-                            title="Total Employees"
-                            value={summaryData?.totalEmployees ?? 0}
-                            icon={Users}
-                            color="info"
-                            description="Active staff"
-                        />
-                        <StatCard
-                            title="Total Managers"
-                            value={summaryData?.totalManagers ?? 0}
-                            icon={UserCheck}
-                            color="primary"
-                            description="Active managers"
-                        />
-                        <StatCard
-                            title="Total Admins"
-                            value={summaryData?.totalAdmins ?? 0}
-                            icon={ShieldCheck}
-                            color="success"
-                            description="System admins"
-                        />
-                    </div>
+                    {isAdmin && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <StatCard
+                                title="Total Employees"
+                                value={summaryData?.totalEmployees ?? 0}
+                                icon={Users}
+                                color="info"
+                                description="Active staff"
+                            />
+                            <StatCard
+                                title="Total Managers"
+                                value={summaryData?.totalManagers ?? 0}
+                                icon={UserCheck}
+                                color="primary"
+                                description="Active managers"
+                            />
+                            <StatCard
+                                title="Total Admins"
+                                value={summaryData?.totalAdmins ?? 0}
+                                icon={ShieldCheck}
+                                color="success"
+                                description="System admins"
+                            />
+                        </div>
+                    )}
 
                     {/* 2. Admin Extra Stats or Employee Dashboard */}
                     {isAdmin ? (

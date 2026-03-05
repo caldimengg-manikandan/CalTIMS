@@ -148,9 +148,11 @@ export default function EmployeesPage() {
         queryFn: () => userAPI.getAll({ limit: 1000 }).then(r => r.data.data),
     })
 
+    const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''
+
     const { data, isLoading } = useQuery({
-        queryKey: ['users', { search, role, status, department, employeeId: selectedEmpId }],
-        queryFn: () => userAPI.getAll({ search, role, status, department, employeeId: selectedEmpId }).then(r => r.data),
+        queryKey: ['users', { search: effectiveSearch, role, status, department, employeeId: selectedEmpId }],
+        queryFn: () => userAPI.getAll({ search: effectiveSearch, role, status, department, employeeId: selectedEmpId }).then(r => r.data),
     })
 
     const activeFilterCount = [role, status, department, selectedEmpId].filter(Boolean).length
@@ -237,7 +239,7 @@ export default function EmployeesPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
                             type="text"
-                            placeholder="Search name, email, phone, department..."
+                            placeholder="Search overall (min. 2 characters)..."
                             className="input pl-9 h-9 text-sm w-full"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}

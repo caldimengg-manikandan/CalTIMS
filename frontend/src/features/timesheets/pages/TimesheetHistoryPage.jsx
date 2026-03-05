@@ -18,6 +18,7 @@ import {
     XCircle,
     Calendar,
     AlertTriangle,
+    Search,
 } from 'lucide-react'
 import TimesheetDetailsModal from '../components/TimesheetDetailsModal'
 import CreateIncidentModal from '@/components/incidents/CreateIncidentModal'
@@ -49,15 +50,19 @@ export default function TimesheetHistoryPage() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false)
     const [incidentTimesheetId, setIncidentTimesheetId] = useState(null)
+    const [search, setSearch] = useState('')
 
 
+
+    const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''
 
     const { data, isLoading } = useQuery({
-        queryKey: ['timesheets', 'history', page, filters],
+        queryKey: ['timesheets', 'history', page, filters, effectiveSearch],
         queryFn: () => timesheetAPI.getHistory({
             page,
             limit: 10,
-            ...filters
+            ...filters,
+            search: effectiveSearch
         }).then(r => r.data),
     })
 
@@ -82,6 +87,7 @@ export default function TimesheetHistoryPage() {
             status: 'All Status',
             userId: user?.id
         })
+        setSearch('')
         setPage(1)
     }
 
@@ -212,7 +218,20 @@ export default function TimesheetHistoryPage() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Search</label>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <input
+                                type="text"
+                                placeholder="Search (min. 2 char)..."
+                                className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl pl-9 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+                                value={search}
+                                onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                            />
+                        </div>
+                    </div>
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Year</label>
                         <select
@@ -297,7 +316,7 @@ export default function TimesheetHistoryPage() {
                                                     <Calendar size={18} />
                                                 </div>
                                                 <div className="font-semibold text-slate-700 dark:text-white">
-                                                    {format(new Date(row.weekStartDate), 'MMM d')} - {format(new Date(row.weekEndDate), 'MMM d, yyyy')}
+                                                    {format(new Date(row.weekStartDate), 'MMM d')} - {format(new Date(new Date(row.weekStartDate).getTime() + 6 * 24 * 60 * 60 * 1000), 'MMM d, yyyy')}
                                                 </div>
                                             </div>
                                         </td>

@@ -24,6 +24,11 @@ const timesheetEntrySchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    leaveType: {
+      type: String,
+      enum: ['annual', 'sick', 'casual', 'lop', null],
+      default: null,
+    },
     isHoliday: {
       type: Boolean,
       default: false,
@@ -115,6 +120,24 @@ timesheetSchema.index({ userId: 1, weekStartDate: 1 }, { unique: true });
 timesheetSchema.index({ status: 1, weekStartDate: -1 });
 timesheetSchema.index({ weekStartDate: -1 });
 
+// ─── Helper: resolve effective hours for a timesheet entry ───────────────────
+// Rules:
+//   Paid leave (annual/sick/casual, balance > 0) → 8h full day, 4h half-day
+//   LOP (no balance)                             → 0h
+//   Normal work entry                            → hoursWorked as stored
+function resolveEntryHours(entry) {
+  if (!entry.isLeave) return entry.hoursWorked || 0;
+  const lt = (entry.leaveType || '').toLowerCase();
+  if (lt === 'lop') return 0;
+  if (['annual', 'sick', 'casual'].includes(lt)) {
+    // Respect half-day (4h) vs full day (8h)
+    const stored = entry.hoursWorked || 0;
+    return stored > 0 ? stored : 8;
+  }
+  // Legacy leave entries without a leaveType — trust hoursWorked
+  return entry.hoursWorked || 0;
+}
+
 // ─── Pre-save: Calculate totals ──────────────────────────────────────────────
 timesheetSchema.pre('save', function (next) {
   let grandTotal = 0;
@@ -123,7 +146,7 @@ timesheetSchema.pre('save', function (next) {
   this.rows.forEach(row => {
     let rowTotal = 0;
     row.entries.forEach(e => {
-      const hours = e.hoursWorked || 0;
+      const hours = resolveEntryHours(e);
       
       // Group by date string to validate daily total
       try {

@@ -20,46 +20,13 @@ const typeIcons = {
     incident_resolved: { icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
 }
 
-function NotificationItem({ notif, onRead, onClose }) {
-    const navigate = useNavigate();
+function NotificationItem({ notif, onRead }) {
     const meta = typeIcons[notif.type] || { icon: AlertCircle, color: 'text-slate-400', bg: 'bg-slate-50' }
     const Icon = meta.icon
 
-    const handleClick = (e) => {
-        // Mark as read first
-        if (!notif.isRead) {
-            onRead(notif._id);
-        }
-
-        // Close dropdown
-        onClose();
-
-        // Navigate based on refModel
-        if (notif.refModel === 'Incident' && notif.refId) {
-            navigate(`/incidents/${notif.refId}`);
-        } else if (notif.refModel === 'Leave') {
-            navigate('/leaves');
-        } else if (notif.refModel === 'Timesheet') {
-            navigate('/history');
-        }
-    };
-
-    // Helper to format message with highlighted/linkable INC IDs
-    const formatMessage = (msg) => {
-        if (!msg) return msg;
-        const parts = msg.split(/(INC-\d+)/g);
-        return parts.map((part, i) =>
-            part.match(/INC-\d+/) ? (
-                <span key={i} className="text-primary-600 font-bold underline cursor-pointer">
-                    {part}
-                </span>
-            ) : part
-        );
-    };
-
     return (
         <div
-            onClick={handleClick}
+            onClick={() => !notif.isRead && onRead(notif._id)}
             className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-white dark:hover:text-black transition-colors border-b border-slate-50 dark:border-white/50 last:border-0 ${!notif.isRead ? 'bg-primary-50/40 dark:bg-black' : ''}`}
         >
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${meta.bg}`}>
@@ -67,16 +34,14 @@ function NotificationItem({ notif, onRead, onClose }) {
             </div>
             <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                    <p className={`text-sm font-semibold leading-tight ${notif.isRead ? 'text-slate-600 dark:text-white' : 'text-slate-800 dark:text-white'}`}>
+                    <p className={`text-sm font-semibold leading-tight ${notif.isRead ? 'text-slate-600 dark:text-slate-200' : 'text-slate-800 dark:text-white'}`}>
                         {notif.title}
                     </p>
                     {!notif.isRead && (
                         <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-1" />
                     )}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-white mt-0.5 line-clamp-2 leading-relaxed">
-                    {formatMessage(notif.message)}
-                </p>
+                <p className="text-xs text-slate-500 dark:text-white mt-0.5 line-clamp-2 leading-relaxed">{notif.message}</p>
                 <p className="text-xs text-slate-400 mt-1">
                     {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
                 </p>

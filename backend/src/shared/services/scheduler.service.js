@@ -55,7 +55,7 @@ async function runScheduler() {
     if (!isDue(schedule, now)) continue;
 
     // Fetch company name
-    let companyName = 'TIMS';
+    let companyName = 'CALTIMS';
     try {
       const settings = await Settings.findOne().lean();
       companyName = settings?.general?.companyName || companyName;

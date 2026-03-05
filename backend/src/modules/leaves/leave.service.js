@@ -47,12 +47,18 @@ function getWorkingDaysBetween(startDate, endDate) {
 }
 
 // ─── Helper: group dates by ISO week ─────────────────────────────────────────
-function groupByWeek(dates) {
+async function getWeekStartDay() {
+  const Settings = mongoose.model('Settings');
+  const settings = await Settings.findOne().select('general.weekStartDay').lean();
+  return settings?.general?.weekStartDay || 'monday';
+}
+
+function groupByWeek(dates, weekStartDay = 'monday') {
   const map = new Map();
   for (const date of dates) {
-    const ws = getWeekStart(date);
+    const ws = getWeekStart(date, weekStartDay);
     const key = ws.toISOString();
-    if (!map.has(key)) map.set(key, { weekStart: ws, weekEnd: getWeekEnd(date), dates: [] });
+    if (!map.has(key)) map.set(key, { weekStart: ws, weekEnd: getWeekEnd(date, weekStartDay), dates: [] });
     map.get(key).dates.push(date);
   }
   return [...map.values()];
@@ -64,7 +70,7 @@ async function createLeaveTimesheets(leave, approverId) {
   const workingDays = getWorkingDaysBetween(leave.startDate, leave.endDate);
   if (!workingDays.length) return;
 
-  const weeks = groupByWeek(workingDays);
+  const weeks = groupByWeek(workingDays, await getWeekStartDay());
   const category = leave.leaveType.charAt(0).toUpperCase() + leave.leaveType.slice(1);
   let hoursPerDay = 8;
   if (leave.isHalfDay) hoursPerDay = 4;
@@ -76,6 +82,7 @@ async function createLeaveTimesheets(leave, approverId) {
       hoursWorked: hoursPerDay,
       taskDescription: `${category} Leave${leave.isHalfDay ? ' (Half Day)' : ''}`,
       isLeave: true,
+      leaveType: leave.leaveType, // Resolved type (may be 'lop' if balance was 0)
     }));
 
     // Find the single weekly document
@@ -174,6 +181,21 @@ const leaveService = {
     }
 
     const leave = await Leave.create({ ...data, userId });
+
+    // Notify Admins and Managers
+    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id');
+    const notificationPromises = approvers.map(approver => 
+      notificationService.create({
+        userId: approver._id,
+        type: 'leave_applied',
+        title: 'New Leave Application',
+        message: `${user.name} (${user.employeeId}) has applied for ${leave.leaveType} leave. Leave ID: ${leave.leaveId}`,
+        refId: leave._id,
+        refModel: 'Leave',
+      })
+    );
+    await Promise.all(notificationPromises);
+
     return leave;
   },
 
@@ -192,14 +214,50 @@ const leaveService = {
 
     if (query.status && query.status !== '') filter.status = query.status;
     if (query.leaveType && query.leaveType !== '') filter.leaveType = query.leaveType;
-    if (query.search) {
+    if (query.leaveId && query.leaveId !== '') filter.leaveId = new RegExp(query.leaveId, 'i');
+
+    // Support filtering by leave date range (overlapping leaves)
+    if (query.from || query.to) {
+      const fromDate = query.from ? new Date(query.from) : new Date('2000-01-01');
+      const toDate = query.to ? new Date(query.to) : new Date('9999-12-31');
+      filter.startDate = { $lte: toDate };
+      filter.endDate = { $gte: fromDate };
+    }
+
+    // Support filtering by application date range (Applied On)
+    if (query.appliedFrom || query.appliedTo) {
+      filter.createdAt = {};
+      if (query.appliedFrom) filter.createdAt.$gte = new Date(query.appliedFrom);
+      if (query.appliedTo) {
+        const to = new Date(query.appliedTo);
+        to.setUTCHours(23, 59, 59, 999);
+        filter.createdAt.$lte = to;
+      }
+    }
+
+    // Support filtering by duration (Total Days)
+    if (query.minDays || query.maxDays) {
+      filter.totalDays = {};
+      if (query.minDays) filter.totalDays.$gte = Number(query.minDays);
+      if (query.maxDays) filter.totalDays.$lte = Number(query.maxDays);
+    }
+
+    if (query.search && query.search.trim().length >= 2) {
+      const searchRegex = new RegExp(query.search.trim(), 'i');
       const userIds = await User.find({
         $or: [
-          { name: new RegExp(query.search, 'i') },
-          { employeeId: new RegExp(query.search, 'i') }
+          { name: searchRegex },
+          { employeeId: searchRegex }
         ]
       }).distinct('_id');
-      filter.userId = { $in: userIds };
+      
+      filter.$or = [
+        { leaveId: searchRegex },
+        { leaveType: searchRegex },
+        { status: searchRegex },
+        { reason: searchRegex },
+        { userId: { $in: userIds } }
+      ];
     }
 
     const [leaves, total] = await Promise.all([
@@ -261,7 +319,7 @@ const leaveService = {
       userId: leave.userId._id,
       type: 'leave_approved',
       title: '✅ Leave Approved',
-      message: `Your ${leave.leaveType} leave application has been approved.`,
+      message: `Your ${leave.leaveType} leave application (${leave.leaveId}) has been approved.`,
       refId: leave._id,
       refModel: 'Leave',
     });
@@ -270,13 +328,24 @@ const leaveService = {
   },
 
   async reject(id, approverId, reason) {
-    const leave = await Leave.findById(id);
+    const leave = await Leave.findById(id).populate('userId');
     if (!leave) throw new AppError('Leave record not found', 404);
     leave.status = LEAVE_STATUS.REJECTED;
     leave.rejectionReason = reason;
     leave.approvedBy = approverId;
     leave.approvedAt = new Date();
     await leave.save();
+
+    // Notify employee
+    await notificationService.create({
+      userId: leave.userId._id,
+      type: 'leave_rejected',
+      title: '❌ Leave Rejected',
+      message: `Your ${leave.leaveType} leave application (${leave.leaveId}) was rejected. Reason: ${reason}`,
+      refId: leave._id,
+      refModel: 'Leave',
+    });
+
     return leave;
   },
 
@@ -295,6 +364,22 @@ const leaveService = {
     leave.status = LEAVE_STATUS.CANCELLED;
     leave.cancellationReason = reason;
     await leave.save();
+
+    // Notify Admins and Managers
+    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id');
+    const user = await User.findById(leave.userId).select('name employeeId');
+    const notificationPromises = approvers.map(approver => 
+      notificationService.create({
+        userId: approver._id,
+        type: 'leave_cancelled',
+        title: 'Leave Cancelled',
+        message: `${user.name} (${user.employeeId}) has cancelled their ${leave.leaveType} leave (${leave.leaveId}).`,
+        refId: leave._id,
+        refModel: 'Leave',
+      })
+    );
+    await Promise.all(notificationPromises);
+
     return leave;
   },
 
@@ -331,6 +416,19 @@ const leaveService = {
     const user = await User.findById(userId).select('leaveBalance name employeeId');
     if (!user) throw new AppError('User not found', 404);
     return user.leaveBalance;
+  },
+
+  async getFilterOptions() {
+    const [leaveIds, statuses, leaveTypes] = await Promise.all([
+      Leave.distinct('leaveId'),
+      Leave.distinct('status'),
+      Leave.distinct('leaveType'),
+    ]);
+    return {
+      leaveIds: leaveIds.filter(Boolean).sort(),
+      statuses: statuses.filter(Boolean).sort(),
+      leaveTypes: leaveTypes.filter(Boolean).sort(),
+    };
   },
 };
 

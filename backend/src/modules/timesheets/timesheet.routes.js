@@ -11,10 +11,10 @@ router.use(authenticate);
 // Dashboard summary for timesheets
 router.get('/summary', timesheetController.getDashboardSummary);
 router.get('/history', timesheetController.getHistory);
-router.get('/admin-summary', authorize('admin'), timesheetController.getAdminSummary);
-router.get('/admin-list', authorize('admin'), timesheetController.getAdminTimesheets);
-router.get('/admin-filters', authorize('admin'), timesheetController.getAdminFilterOptions);
-router.get('/admin-kpi', authorize('admin'), timesheetController.getAdminKpiSummary);
+router.get('/admin-summary', authorize('admin', 'manager'), timesheetController.getAdminSummary);
+router.get('/admin-list', authorize('admin', 'manager'), timesheetController.getAdminTimesheets);
+router.get('/admin-filters', authorize('admin', 'manager'), timesheetController.getAdminFilterOptions);
+router.get('/admin-kpi', authorize('admin', 'manager'), timesheetController.getAdminKpiSummary);
 
 // CRUD
 router.post('/bulk', timesheetController.bulkUpsert);

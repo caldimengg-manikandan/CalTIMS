@@ -865,7 +865,7 @@ function GeneralTab() {
                             <label className="label">Company Name</label>
                             <input
                                 className="input w-full"
-                                placeholder="TIMS"
+                                placeholder="CALTIMS"
                                 value={form.companyName}
                                 onChange={e => upd('companyName', e.target.value)}
                             />
