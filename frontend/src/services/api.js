@@ -4,7 +4,6 @@ import toast from 'react-hot-toast'
 
 const api = axios.create({
   baseURL: '/api/v1',
-  withCredentials: true, // Send HttpOnly refresh token cookie
   headers: { 'Content-Type': 'application/json' },
   timeout: 10000,
 })
@@ -33,7 +32,7 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/login')) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
@@ -49,11 +48,13 @@ api.interceptors.response.use(
       isRefreshing = true
 
       try {
-        const { data } = await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true })
-        const newToken = data.data.accessToken
-        useAuthStore.getState().setAccessToken(newToken)
-        processQueue(null, newToken)
-        originalRequest.headers.Authorization = `Bearer ${newToken}`
+        const { refreshToken } = useAuthStore.getState()
+        const { data } = await axios.post('/api/v1/auth/refresh', { refreshToken })
+        const { accessToken, refreshToken: newRefreshToken } = data.data
+        useAuthStore.getState().setAccessToken(accessToken)
+        if (newRefreshToken) useAuthStore.getState().setRefreshToken(newRefreshToken)
+        processQueue(null, accessToken)
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`
         return api(originalRequest)
       } catch (err) {
         processQueue(err, null)

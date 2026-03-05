@@ -16,6 +16,15 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { format, startOfWeek, endOfWeek, subWeeks, getWeek } from 'date-fns'
 import PageHeader from '@/components/ui/PageHeader'
 
+// ─── Format Hours Display ──────────────────────────────────────────────────
+const formatHoursDisplay = (totalHours) => {
+    if (!totalHours) return '0h';
+    const h = Math.floor(totalHours);
+    const m = Math.round((totalHours - h) * 60);
+    if (m === 0) return `${h}h`;
+    return `${h}.${String(m).padStart(2, '0')}h`;
+};
+
 // ─── KPI Options for admin dropdown ────────────────────────────────────────
 const KPI_OPTIONS = [
     { value: 'project-hours', label: 'Project Hours', icon: FolderOpen, description: 'Hours logged per project' },
@@ -98,7 +107,7 @@ function ProjectHoursKpi({ data }) {
                             </div>
                         </div>
                         <div className="text-right">
-                            <p className="text-sm font-black text-slate-800 dark:text-white">{item.totalHours}h</p>
+                            <p className="text-sm font-black text-slate-800 dark:text-white">{formatHoursDisplay(item.totalHours)}</p>
                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">logged</p>
                         </div>
                     </div>
@@ -145,7 +154,7 @@ function StatusOverviewKpi({ data }) {
                                 <span className={`text-[9px] font-black uppercase tracking-widest ${style.text}`}>{item.label}</span>
                             </div>
                             <p className={`text-2xl font-black ${style.text}`}>{item.count}</p>
-                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-1 uppercase tracking-tighter">{item.totalHours}h total</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-1 uppercase tracking-tighter">{formatHoursDisplay(item.totalHours)} total</p>
                         </div>
                     )
                 })}
@@ -193,7 +202,7 @@ function EmployeeActivityKpi({ data }) {
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.department || 'Staff'}</p>
                             </div>
                             <div className="text-right">
-                                <p className="text-sm font-black text-primary-600 dark:text-primary-400">{item.totalHours}h</p>
+                                <p className="text-sm font-black text-primary-600 dark:text-primary-400">{formatHoursDisplay(item.totalHours)}</p>
                             </div>
                         </div>
                         <div className="h-1.5 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden mb-2">
@@ -237,7 +246,7 @@ export default function DashboardPage() {
 
     const [kpiView, setKpiView] = useState('project-hours')
     const [selectedProjectId, setSelectedProjectId] = useState('all')
-    const [weekStartDate, setWeekStartDate] = useState(format(startOfWeek(new Date(), { weekStartsOn }), 'yyyy-MM-dd'))
+    const [weekStartDate, setWeekStartDate] = useState('all')
     const [detailsModal, setDetailsModal] = useState(null) // {type: 'submitted' | 'not-submitted', employees: [] }
 
     // ── Data fetching ─────────────────────────────────────────────────────
@@ -462,7 +471,7 @@ export default function DashboardPage() {
                                             <div key={i} className="space-y-1">
                                                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 dark:text-slate-400">
                                                     <span>{p.projectName}</span>
-                                                    <span>{p.totalHours}h</span>
+                                                    <span>{formatHoursDisplay(p.totalHours)}</span>
                                                 </div>
                                                 <div className="h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                                                     <div className="h-full bg-gradient-to-r from-purple-400 to-primary-500 rounded-full" style={{ width: `${(p.totalHours / maxH) * 100}%` }} />
@@ -547,13 +556,13 @@ export default function DashboardPage() {
                                                             Week of {format(new Date(ts.weekStartDate), 'MMMM d, yyyy')}
                                                         </p>
                                                         <p className="text-xs text-slate-400 font-medium mt-0.5">
-                                                            {ts.rows?.length || 0} entries · {ts.totalHours} total hours
+                                                            {ts.rows?.length || 0} entries · {formatHoursDisplay(ts.totalHours)} total
                                                         </p>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-4">
                                                     <div className="text-right hidden sm:block">
-                                                        <p className="text-sm font-black text-slate-800 dark:text-white">{ts.totalHours}h</p>
+                                                        <p className="text-sm font-black text-slate-800 dark:text-white">{formatHoursDisplay(ts.totalHours)}</p>
                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Total</p>
                                                     </div>
                                                     <StatusBadge status={ts.status} />
@@ -697,7 +706,7 @@ export default function DashboardPage() {
                                                     {emp.projects || '—'}
                                                 </td>
                                                 <td className="py-3 px-4 text-right">
-                                                    <span className="font-black text-primary-600 dark:text-primary-400">{emp.totalHours}h</span>
+                                                    <span className="font-black text-primary-600 dark:text-primary-400">{formatHoursDisplay(emp.totalHours)}</span>
                                                 </td>
                                                 <td className="py-3 px-4 text-right">
                                                     <StatusBadge status={emp.status} />

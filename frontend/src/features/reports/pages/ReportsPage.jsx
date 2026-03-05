@@ -279,12 +279,12 @@ export default function ReportsPage() {
                     </div>
                     <div className="flex items-center gap-1.5">
                         <label className="text-xs text-slate-500 dark:text-slate-400">From</label>
-                        <input id="filter-from" type="date" className="input py-1.5 text-sm w-36"
+                        <input id="filter-from" type="date" max="9999-12-31" className="input py-1.5 text-sm w-36"
                             value={range.from} onChange={e => setRange(r => ({ ...r, from: e.target.value }))} />
                     </div>
                     <div className="flex items-center gap-1.5">
                         <label className="text-xs text-slate-500 dark:text-slate-400">To</label>
-                        <input id="filter-to" type="date" className="input py-1.5 text-sm w-36"
+                        <input id="filter-to" type="date" max="9999-12-31" className="input py-1.5 text-sm w-36"
                             value={range.to} onChange={e => setRange(r => ({ ...r, to: e.target.value }))} />
                     </div>
                     <select id="filter-employee" className="input py-1.5 text-sm w-44"

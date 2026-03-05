@@ -89,6 +89,11 @@ export default function App() {
                             <PageSuspense><AdminTimesheets /></PageSuspense>
                         </ProtectedRoute>
                     } />
+                    <Route path="/leaves/manage" element={
+                        <ProtectedRoute roles={['admin', 'manager']}>
+                            <PageSuspense><LeavePage /></PageSuspense>
+                        </ProtectedRoute>
+                    } />
                     <Route path="/projects" element={
                         <ProtectedRoute roles={['admin', 'manager']}>
                             <PageSuspense><ProjectsPage /></PageSuspense>

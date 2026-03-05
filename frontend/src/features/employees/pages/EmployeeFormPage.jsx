@@ -18,6 +18,7 @@ export default function EmployeeFormPage() {
         phone: '',
         joinDate: new Date().toISOString().split('T')[0]
     })
+    const [errors, setErrors] = React.useState({})
 
     const mutation = useMutation({
         mutationFn: (data) => userAPI.create(data),
@@ -32,14 +33,44 @@ export default function EmployeeFormPage() {
         }
     })
 
+    const validate = () => {
+        const newErrors = {}
+        if (!formData.name?.trim()) newErrors.name = true
+        if (!formData.email?.trim() || !/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = true
+        if (!formData.password || formData.password.length < 8) newErrors.password = true
+        if (!formData.department?.trim() || formData.department.length > 50) newErrors.department = true
+        if (!formData.designation?.trim() || formData.designation.length > 50) newErrors.designation = true
+        if (!formData.phone?.trim() || formData.phone.replace(/\D/g, '').length !== 10) newErrors.phone = true
+        if (!formData.joinDate) newErrors.joinDate = true
+
+        setErrors(newErrors)
+        return Object.keys(newErrors).length === 0
+    }
+
     const handleSubmit = (e) => {
         e.preventDefault()
+        if (!validate()) {
+            toast.error('Please fill all fields correctly')
+            return
+        }
+        if (formData.joinDate && !/^\d{4}-/.test(formData.joinDate)) return toast.error('Joining year must be exactly 4 digits')
         mutation.mutate(formData)
     }
 
     const handleChange = (e) => {
         const { name, value } = e.target
         setFormData(prev => ({ ...prev, [name]: value }))
+        if (errors[name]) {
+            setErrors(prev => {
+                const updated = { ...prev }
+                delete updated[name]
+                return updated
+            })
+        }
+    }
+
+    const getInputClass = (name) => {
+        return `input ${errors[name] ? 'bg-red-50 border-red-300 ring-red-200' : ''}`
     }
 
     return (
@@ -71,25 +102,25 @@ export default function EmployeeFormPage() {
 
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Full Name *</label>
-                        <input name="name" required className="input" placeholder="John Doe"
+                        <input name="name" className={getInputClass('name')} placeholder="John Doe"
                             value={formData.name} onChange={handleChange} />
                     </div>
 
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Email Address *</label>
-                        <input name="email" type="email" required className="input" placeholder="john@example.com"
+                        <input name="email" type="email" className={getInputClass('email')} placeholder="john@example.com"
                             value={formData.email} onChange={handleChange} />
                     </div>
 
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Password *</label>
-                        <input name="password" type="password" required className="input" placeholder="Min 8 characters"
+                        <input name="password" type="password" className={getInputClass('password')} placeholder="Min 8 characters"
                             value={formData.password} onChange={handleChange} />
                     </div>
 
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Role *</label>
-                        <select name="role" className="input" value={formData.role} onChange={handleChange}>
+                        <select name="role" className={getInputClass('role')} value={formData.role} onChange={handleChange}>
                             <option value="employee">Employee</option>
                             <option value="manager">Manager</option>
                             <option value="admin">Admin</option>
@@ -102,26 +133,26 @@ export default function EmployeeFormPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700 dark:text-white">Department</label>
-                        <input name="department" className="input" placeholder="Engineering, Design, etc."
-                            value={formData.department} onChange={handleChange} />
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">Department *</label>
+                        <input name="department" className={getInputClass('department')} placeholder="Engineering, Design, etc."
+                            value={formData.department} onChange={handleChange} maxLength={50} />
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700 dark:text-white">Designation</label>
-                        <input name="designation" className="input" placeholder="Software Engineer"
-                            value={formData.designation} onChange={handleChange} />
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">Designation *</label>
+                        <input name="designation" className={getInputClass('designation')} placeholder="Software Engineer"
+                            value={formData.designation} onChange={handleChange} maxLength={50} />
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700 dark:text-white">Phone Number</label>
-                        <input name="phone" className="input" placeholder="+1 234 567 890"
-                            value={formData.phone} onChange={handleChange} />
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">Phone Number *</label>
+                        <input name="phone" className={getInputClass('phone')} placeholder="1234567890"
+                            value={formData.phone} onChange={handleChange} maxLength={10} />
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700 dark:text-white">Joining Date</label>
-                        <input name="joinDate" type="date" className="input"
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">Joining Date *</label>
+                        <input name="joinDate" type="date" max="9999-12-31" className={getInputClass('joinDate')}
                             value={formData.joinDate} onChange={handleChange} />
                     </div>
                 </div>

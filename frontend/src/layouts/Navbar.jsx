@@ -3,6 +3,7 @@ import { Moon, Sun, Menu, LogOut, Mail, Shield, X, Settings2, ArrowLeft, Chevron
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { authAPI } from '@/services/endpoints'
 import NotificationBell from '@/components/ui/NotificationBell'
 
 const ROUTE_LABELS = {
@@ -42,9 +43,16 @@ export default function Navbar() {
 
     const initial = user?.name?.charAt(0)?.toUpperCase() || '?'
 
-    const handleLogout = () => {
-        logout()
-        navigate('/login')
+    const handleLogout = async () => {
+        try {
+            await authAPI.logout()
+            logout() // Local state last, so token is available for the API call
+        } catch (err) {
+            console.error('Logout error:', err)
+            logout() // Still logout locally if API fails
+        } finally {
+            navigate('/login')
+        }
     }
 
     // Close panel when clicking outside

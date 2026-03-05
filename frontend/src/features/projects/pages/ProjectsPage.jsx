@@ -22,8 +22,8 @@ const projectSchema = z.object({
     code: z.string().min(2, 'Project code is required'),
     description: z.string().optional().nullable(),
     clientName: z.string().optional().nullable(),
-    startDate: z.string().min(1, 'Start date is required'),
-    endDate: z.string().optional().nullable().or(z.literal('')),
+    startDate: z.string().min(1, 'Start date is required').regex(/^\d{4}-/, 'Year must be exactly 4 digits'),
+    endDate: z.string().optional().nullable().or(z.literal('')).refine(val => !val || /^\d{4}-/.test(val), 'Year must be exactly 4 digits'),
     status: z.enum(['active', 'completed', 'on-hold']).default('active'),
     managerId: z.string().min(1, 'Project manager is required'),
     allocatedEmployees: z.array(z.object({
@@ -180,12 +180,12 @@ function ProjectFormModal({ project, onClose }) {
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Start Date *</label>
-                            <input {...register('startDate')} type="date" className={`input ${errors.startDate ? 'border-rose-400' : ''}`} />
+                            <input {...register('startDate')} type="date" max="9999-12-31" className={`input ${errors.startDate ? 'border-rose-400' : ''}`} />
                             {errors.startDate && <p className="text-[10px] text-rose-500">{errors.startDate.message}</p>}
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">End Date</label>
-                            <input {...register('endDate')} type="date" className="input" />
+                            <input {...register('endDate')} type="date" max="9999-12-31" className="input" />
                         </div>
                         <div className="col-span-2 space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Project Manager *</label>

@@ -57,7 +57,11 @@ function ModalHeader({ icon, title, subtitle, onClose }) {
 }
 
 /* ─── Employee Form (shared by Add & Edit) ───────────────────── */
-function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false }) {
+function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, errors = {} }) {
+    const getInputClass = (name) => {
+        return `input ${errors[name] ? 'bg-red-50 border-red-300 ring-red-200' : ''}`
+    }
+
     return (
         <form id={formId} onSubmit={onSubmit} className="space-y-6 px-6 py-5 overflow-y-auto flex-1">
             <div>
@@ -67,21 +71,21 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false }) 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name *</label>
-                        <input name="name" required className="input" placeholder="John Doe" value={formData.name} onChange={onChange} />
+                        <input name="name" className={getInputClass('name')} placeholder="John Doe" value={formData.name} onChange={onChange} />
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address *</label>
-                        <input name="email" type="email" required className="input" placeholder="john@example.com" value={formData.email} onChange={onChange} />
+                        <input name="email" type="email" className={getInputClass('email')} placeholder="john@example.com" value={formData.email} onChange={onChange} />
                     </div>
                     {!isEdit && (
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Password *</label>
-                            <input name="password" type="password" required className="input" placeholder="Min 8 characters" value={formData.password} onChange={onChange} />
+                            <input name="password" type="password" className={getInputClass('password')} placeholder="Min 8 characters" value={formData.password} onChange={onChange} />
                         </div>
                     )}
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Role *</label>
-                        <select name="role" className="input" value={formData.role} onChange={onChange}>
+                        <select name="role" className={getInputClass('role')} value={formData.role} onChange={onChange}>
                             <option value="employee">Employee</option>
                             <option value="manager">Manager</option>
                             <option value="admin">Admin</option>
@@ -96,20 +100,20 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false }) 
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department</label>
-                        <input name="department" className="input" placeholder="Engineering, Design, etc." value={formData.department} onChange={onChange} />
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department *</label>
+                        <input name="department" className={getInputClass('department')} placeholder="Engineering, Design, etc." value={formData.department} onChange={onChange} maxLength={50} />
                     </div>
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Designation</label>
-                        <input name="designation" className="input" placeholder="Software Engineer" value={formData.designation} onChange={onChange} />
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Designation *</label>
+                        <input name="designation" className={getInputClass('designation')} placeholder="Software Engineer" value={formData.designation} onChange={onChange} maxLength={50} />
                     </div>
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Phone Number</label>
-                        <input name="phone" className="input" placeholder="+1 234 567 890" value={formData.phone} onChange={onChange} />
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Phone Number *</label>
+                        <input name="phone" className={getInputClass('phone')} placeholder="1234567890" value={formData.phone} onChange={onChange} maxLength={10} />
                     </div>
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Joining Date</label>
-                        <input name="joinDate" type="date" className="input" value={formData.joinDate} onChange={onChange} />
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Joining Date *</label>
+                        <input name="joinDate" type="date" max="9999-12-31" className={getInputClass('joinDate')} value={formData.joinDate} onChange={onChange} />
                     </div>
                 </div>
             </div>
@@ -134,6 +138,8 @@ export default function EmployeesPage() {
 
     const [addForm, setAddForm] = useState(INITIAL_FORM)
     const [editForm, setEditForm] = useState(INITIAL_FORM)
+    const [addErrors, setAddErrors] = useState({})
+    const [editErrors, setEditErrors] = useState({})
 
     const queryClient = useQueryClient()
     const invalidate = () => queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -186,17 +192,57 @@ export default function EmployeesPage() {
     })
 
     /* ── Form handlers ── */
-    const handleAddChange = (e) => setAddForm(p => ({ ...p, [e.target.name]: e.target.value }))
-    const handleAddSubmit = (e) => { e.preventDefault(); createMut.mutate(addForm) }
+    const validateFields = (data, isEdit = false) => {
+        const errors = {}
+        if (!data.name?.trim()) errors.name = true
+        if (!data.email?.trim() || !/\S+@\S+\.\S+/.test(data.email)) errors.email = true
+        if (!isEdit && (!data.password || data.password.length < 8)) errors.password = true
+        if (!data.department?.trim() || data.department.length > 50) errors.department = true
+        if (!data.designation?.trim() || data.designation.length > 50) errors.designation = true
+        if (!data.phone?.trim() || data.phone.replace(/\D/g, '').length !== 10) errors.phone = true
+        if (!data.joinDate) errors.joinDate = true
+        return errors
+    }
 
-    const handleEditChange = (e) => setEditForm(p => ({ ...p, [e.target.name]: e.target.value }))
+    const handleAddChange = (e) => {
+        const { name, value } = e.target
+        setAddForm(p => ({ ...p, [name]: value }))
+        if (addErrors[name]) setAddErrors(prev => {
+            const up = { ...prev }; delete up[name]; return up
+        })
+    }
+
+    const handleAddSubmit = (e) => {
+        e.preventDefault()
+        const errors = validateFields(addForm)
+        if (Object.keys(errors).length > 0) {
+            setAddErrors(errors)
+            return toast.error('Please fill all fields correctly')
+        }
+        createMut.mutate(addForm)
+    }
+
+    const handleEditChange = (e) => {
+        const { name, value } = e.target
+        setEditForm(p => ({ ...p, [name]: value }))
+        if (editErrors[name]) setEditErrors(prev => {
+            const up = { ...prev }; delete up[name]; return up
+        })
+    }
+
     const handleEditSubmit = (e) => {
         e.preventDefault()
+        const errors = validateFields(editForm, true)
+        if (Object.keys(errors).length > 0) {
+            setEditErrors(errors)
+            return toast.error('Please fill all fields correctly')
+        }
         editMut.mutate({ id: editEmp._id, data: editForm })
     }
 
     const openEdit = (emp) => {
         setEditEmp(emp)
+        setEditErrors({})
         setEditForm({
             name: emp.name || '',
             email: emp.email || '',
@@ -478,7 +524,7 @@ export default function EmployeesPage() {
             {/* Modals */}
             <Modal open={addOpen} onClose={() => !createMut.isPending && setAddOpen(false)}>
                 <ModalHeader icon={<UserPlus size={20} />} title="Add New Employee" subtitle="Create a new user account" onClose={() => setAddOpen(false)} />
-                <EmployeeForm formId="add-form" formData={addForm} onChange={handleAddChange} onSubmit={handleAddSubmit} />
+                <EmployeeForm formId="add-form" formData={addForm} onChange={handleAddChange} onSubmit={handleAddSubmit} errors={addErrors} />
                 <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                     <button onClick={() => setAddOpen(false)} className="btn-secondary">Cancel</button>
                     <button type="submit" form="add-form" disabled={createMut.isPending} className="btn-primary min-w-[140px]">
@@ -489,7 +535,7 @@ export default function EmployeesPage() {
 
             <Modal open={!!editEmp} onClose={() => !editMut.isPending && setEditEmp(null)}>
                 <ModalHeader icon={<Pencil size={20} />} title="Edit Employee" subtitle={editEmp?.name} onClose={() => setEditEmp(null)} />
-                <EmployeeForm formId="edit-form" formData={editForm} onChange={handleEditChange} onSubmit={handleEditSubmit} isEdit />
+                <EmployeeForm formId="edit-form" formData={editForm} onChange={handleEditChange} onSubmit={handleEditSubmit} errors={editErrors} isEdit />
                 <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                     <button onClick={() => setEditEmp(null)} className="btn-secondary">Cancel</button>
                     <button type="submit" form="edit-form" disabled={editMut.isPending} className="btn-primary min-w-[140px]">

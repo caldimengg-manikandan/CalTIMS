@@ -24,17 +24,6 @@ const generateTokens = (userId, role) => {
  */
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
-/**
- * Send refresh token as HttpOnly cookie
- */
-const setRefreshTokenCookie = (res, token) => {
-  res.cookie('refreshToken', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
-};
 
 const authService = {
   /**
@@ -146,4 +135,4 @@ const authService = {
   },
 };
 
-module.exports = { authService, generateTokens, setRefreshTokenCookie };
+module.exports = { authService, generateTokens };
