@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
+import useSystemStore from '@/store/systemStore'
 import AppLayout from '@/layouts/AppLayout'
 import AuthLayout from '@/layouts/AuthLayout'
 import Spinner from '@/components/ui/Spinner'
@@ -17,11 +18,11 @@ const EmployeeForm = lazy(() => import('@/features/employees/pages/EmployeeFormP
 const TimesheetEntry = lazy(() => import('@/features/timesheets/pages/TimesheetEntryPage'))
 const TimesheetHistory = lazy(() => import('@/features/timesheets/pages/TimesheetHistoryPage'))
 const AdminTimesheets = lazy(() => import('@/features/timesheets/pages/AdminTimesheetPage'))
+const AdminTimesheetsCompliance = lazy(() => import('@/features/timesheets/pages/AdminTimesheetCompliancePage'))
 const ProjectsPage = lazy(() => import('@/features/projects/pages/ProjectsPage'))
 const TasksPage = lazy(() => import('@/features/tasks/pages/TasksPage'))
 const LeavePage = lazy(() => import('@/features/leaves/pages/LeavePage'))
 const AnnouncementsPage = lazy(() => import('@/features/announcements/pages/AnnouncementsPage'))
-const CalendarPage = lazy(() => import('@/features/calendar/pages/CalendarPage'))
 const ReportsPage = lazy(() => import('@/features/reports/pages/ReportsPage'))
 const ProfilePage = lazy(() => import('@/features/employees/pages/ProfilePage'))
 const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'))
@@ -50,6 +51,13 @@ const PageSuspense = ({ children }) => (
 
 export default function App() {
     const { isAuthenticated } = useAuthStore()
+    const { fetchVersion } = useSystemStore()
+
+    React.useEffect(() => {
+        if (isAuthenticated) {
+            fetchVersion()
+        }
+    }, [isAuthenticated, fetchVersion])
 
     return (
         <PageSuspense>
@@ -79,7 +87,6 @@ export default function App() {
                             <PageSuspense><AnnouncementsPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
-                    <Route path="/calendar" element={<PageSuspense><CalendarPage /></PageSuspense>} />
                     <Route path="/incidents" element={<PageSuspense><IncidentList /></PageSuspense>} />
                     <Route path="/incidents/:id" element={<PageSuspense><IncidentDetails /></PageSuspense>} />
 
@@ -87,6 +94,11 @@ export default function App() {
                     <Route path="/timesheets/manage" element={
                         <ProtectedRoute roles={['admin', 'manager']}>
                             <PageSuspense><AdminTimesheets /></PageSuspense>
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/timesheets/compliance" element={
+                        <ProtectedRoute roles={['admin', 'manager']}>
+                            <PageSuspense><AdminTimesheetsCompliance /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/projects" element={

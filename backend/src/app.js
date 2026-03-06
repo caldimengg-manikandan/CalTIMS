@@ -25,6 +25,7 @@ const settingsRoutes = require('./modules/settings/settings.routes');
 const reportScheduleRoutes = require('./modules/reportSchedules/reportSchedule.routes');
 const taskRoutes = require('./modules/tasks/task.routes');
 const incidentRoutes = require('./modules/incidents/incident.routes');
+const systemRoutes = require('./modules/system/system.routes');
 const schedulerService = require('./shared/services/scheduler.service');
 
 const app = express();
@@ -99,10 +100,13 @@ app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/report-schedules', reportScheduleRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/incidents', incidentRoutes);
+app.use('/api/v1/system', systemRoutes);
 
 // ─── Start Scheduler ────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
   schedulerService.start();
+  const complianceService = require('./shared/services/compliance.service');
+  complianceService.startCronJobs();
 }
 
 // ─── Error Handling ──────────────────────────────────────────────────────────

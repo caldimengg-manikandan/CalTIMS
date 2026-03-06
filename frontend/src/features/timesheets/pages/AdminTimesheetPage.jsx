@@ -443,6 +443,7 @@ export default function AdminTimesheetPage() {
                             <thead>
                                 <tr>
                                     <th>Employee</th>
+                                    <th>Emp ID</th>
                                     <th>Week</th>
                                     <th>Projects</th>
                                     <th className="text-center">Hours</th>
@@ -453,7 +454,7 @@ export default function AdminTimesheetPage() {
                             <tbody>
                                 {isError ? (
                                     <tr>
-                                        <td colSpan={6} className="py-16 text-center">
+                                        <td colSpan={7} className="py-16 text-center">
                                             <AlertCircle size={32} className="mx-auto text-red-300 mb-2" />
                                             <p className="text-red-400 text-sm font-semibold">Failed to load timesheets</p>
                                             <button onClick={() => queryClient.invalidateQueries({ queryKey: ['timesheets', 'admin-list'] })}
@@ -473,9 +474,11 @@ export default function AdminTimesheetPage() {
                                                         </div>
                                                         <div>
                                                             <p className="font-medium text-slate-800 dark:text-white">{ts.userId?.name || '—'}</p>
-                                                            {/* <p className="text-[10px] text-slate-400 font-mono">{ts.userId?.employeeId || '—'}</p> */}
                                                         </div>
                                                     </div>
+                                                </td>
+                                                <td>
+                                                    <p className="text-xs text-slate-500 font-mono font-medium">{ts.userId?.employeeId || '—'}</p>
                                                 </td>
                                                 <td>
                                                     <p className="text-sm font-medium text-slate-600 dark:text-white">{formatWeek(ts.weekStartDate)}</p>
@@ -534,7 +537,7 @@ export default function AdminTimesheetPage() {
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan={6} className="py-20 text-center">
+                                        <td colSpan={7} className="py-20 text-center">
                                             <Search size={40} className="mx-auto text-slate-200 mb-3" />
                                             <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No timesheets found</p>
                                             {activeFilterCount > 0 && (

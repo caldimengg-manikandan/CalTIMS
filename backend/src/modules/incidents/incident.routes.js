@@ -7,10 +7,13 @@ const { authorize } = require('../../middleware/rbac.middleware');
 const { validate, validateParams } = require('../../middleware/validate.middleware');
 const { createIncidentSchema, updateIncidentAdminSchema, addResponseSchema, incidentIdParamSchema } = require('./incident.validation');
 
+const { requireProTier } = require('../../middleware/tier.middleware');
+
 const router = express.Router();
 
-// All incident routes require authentication
+// All incident routes require authentication and Pro tier
 router.use(authenticate);
+router.use(requireProTier);
 
 // ─── Shared Routes (Employee & Admin) ────────────────────────────────────────
 // GET /api/v1/incidents - Lists tickets (Employees see own, Admins see all)

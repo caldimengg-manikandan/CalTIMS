@@ -10,23 +10,39 @@ const { authorize } = require('../../middleware/rbac.middleware');
 
 router.use(authenticate);
 
-// Get events in a date range
+// Get events (supports month=YYYY-MM or range)
 router.get('/', asyncHandler(async (req, res) => {
   const { _id } = req.user;
-  let baseFilter = {};
+  const { month, from, to, eventType } = req.query;
 
-  // Everyone (Admin, Manager, Employee) sees their own personal events OR any public (global) events
-  baseFilter = { $or: [{ createdBy: _id }, { isPublic: true }] };
+  let filter = {};
 
-  let dateFilter = {};
-  if (req.query.from || req.query.to) {
-    dateFilter.startDate = {};
-    if (req.query.from) dateFilter.startDate.$gte = new Date(req.query.from);
-    if (req.query.to) dateFilter.startDate.$lte = new Date(req.query.to);
+  // Base filter: global events OR events created by user
+  // Also include events user has access to via targetRoles (optional based on existing logic)
+  filter.$or = [
+    { isGlobal: true },
+    { createdBy: _id }
+  ];
+
+  if (month) {
+    const [year, m] = month.split('-').map(Number);
+    const startOfMonth = new Date(Date.UTC(year, m - 1, 1));
+    const endOfMonth = new Date(Date.UTC(year, m, 0, 23, 59, 59));
+
+    filter.$and = filter.$and || [];
+    filter.$and.push({
+      startDate: { $lte: endOfMonth },
+      endDate: { $gte: startOfMonth }
+    });
+  } else if (from || to) {
+    filter.$and = filter.$and || [];
+    if (from) filter.$and.push({ startDate: { $gte: new Date(from) } });
+    if (to) filter.$and.push({ startDate: { $lte: new Date(to) } });
   }
-  if (req.query.eventType) dateFilter.eventType = req.query.eventType;
 
-  const filter = { ...baseFilter, ...dateFilter };
+  if (eventType) {
+    filter.eventType = eventType;
+  }
 
   const events = await CalendarEvent.find(filter)
     .populate('createdBy', 'name email')
@@ -37,11 +53,11 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
-  // Non-admins can only create personal events — enforce isPublic: false server-side
+  // Non-admins can only create personal events — enforce isGlobal: false server-side
   const payload = {
     ...req.body,
     createdBy: req.user._id,
-    isPublic: req.user.role === 'admin' ? (req.body.isPublic ?? false) : false,
+    isGlobal: req.user.role === 'admin' ? (req.body.isGlobal ?? false) : false,
   };
   const event = await CalendarEvent.create(payload);
   ApiResponse.created(res, { message: 'Event created', data: event });
@@ -57,14 +73,14 @@ router.put('/:id', asyncHandler(async (req, res) => {
   }
 
   const updateData = { ...req.body };
-  // Non-admins cannot change isPublic status
+  // Non-admins cannot change isGlobal status
   if (req.user.role !== 'admin') {
-    delete updateData.isPublic;
+    delete updateData.isGlobal;
   }
 
   Object.assign(event, updateData);
   await event.save();
-  
+
   ApiResponse.success(res, { message: 'Event updated', data: event });
 }));
 

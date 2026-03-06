@@ -47,9 +47,9 @@ const calendarEventSchema = new mongoose.Schema(
       enum: [...Object.values(ROLES), 'all'],
       default: [],
     },
-    isPublic: {
+    isGlobal: {
       type: Boolean,
-      default: true,
+      default: false,
     },
   },
   {
@@ -60,7 +60,7 @@ const calendarEventSchema = new mongoose.Schema(
 
 calendarEventSchema.index({ startDate: 1, endDate: 1 });
 calendarEventSchema.index({ eventType: 1 });
-calendarEventSchema.index({ isPublic: 1 });
+calendarEventSchema.index({ isGlobal: 1 });
 
 const CalendarEvent = mongoose.model('CalendarEvent', calendarEventSchema);
 module.exports = CalendarEvent;

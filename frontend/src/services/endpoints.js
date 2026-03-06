@@ -38,6 +38,8 @@ export const timesheetAPI = {
   getAdminList: (params) => api.get('/timesheets/admin-list', { params }),
   getAdminFilters: () => api.get('/timesheets/admin-filters'),
   getAdminKpi: (kpi) => api.get('/timesheets/admin-kpi', { params: { kpi } }),
+  getCompliance: (params) => api.get('/timesheets/compliance', { params }),
+  adminFill: (data) => api.post('/timesheets/admin-fill', data),
   delete: (id) => api.delete(`/timesheets/${id}`),
 }
 
@@ -117,13 +119,13 @@ export const settingsAPI = {
 }
 
 export const reportSchedulesAPI = {
-  getAll:     ()      => api.get('/report-schedules'),
-  create:     (data)  => api.post('/report-schedules', data),
-  update:     (id, data) => api.put(`/report-schedules/${id}`, data),
-  remove:     (id)    => api.delete(`/report-schedules/${id}`),
-  sendNow:    (id)    => api.post(`/report-schedules/${id}/send-now`),
-  getHistory: (id)    => api.get(`/report-schedules/${id}/history`),
-  preview:    (data)  => api.post('/report-schedules/preview', data),
+  getAll: () => api.get('/report-schedules'),
+  create: (data) => api.post('/report-schedules', data),
+  update: (id, data) => api.put(`/report-schedules/${id}`, data),
+  remove: (id) => api.delete(`/report-schedules/${id}`),
+  sendNow: (id) => api.post(`/report-schedules/${id}/send-now`),
+  getHistory: (id) => api.get(`/report-schedules/${id}/history`),
+  preview: (data) => api.post('/report-schedules/preview', data),
 }
 
 export const taskAPI = {
@@ -134,3 +136,10 @@ export const taskAPI = {
   update: (id, data) => api.put(`/tasks/${id}`, data),
   delete: (id) => api.delete(`/tasks/${id}`),
 }
+
+export const systemAPI = {
+  getVersion: () => api.get('/system/version'),
+  updateVersion: (version) => api.patch('/system/version', { version }),
+}
+
+export default api

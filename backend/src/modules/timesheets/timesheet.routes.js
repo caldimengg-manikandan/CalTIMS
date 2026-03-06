@@ -5,6 +5,7 @@ const router = express.Router();
 const timesheetController = require('./timesheet.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/rbac.middleware');
+const { requireProTier } = require('../../middleware/tier.middleware');
 
 router.use(authenticate);
 
@@ -17,8 +18,10 @@ router.get('/admin-filters', authorize('admin', 'manager'), timesheetController.
 router.get('/admin-kpi', authorize('admin', 'manager'), timesheetController.getAdminKpiSummary);
 
 // CRUD
+router.get('/compliance', authorize('admin', 'manager'), requireProTier, timesheetController.getCompliance);
 router.post('/bulk', timesheetController.bulkUpsert);
 router.post('/bulk-submit', timesheetController.bulkSubmit);
+router.post('/admin-fill', authorize('admin', 'manager'), requireProTier, timesheetController.adminFill);
 router.post('/', timesheetController.create);
 router.get('/', timesheetController.getAll);
 router.get('/:id', timesheetController.getById);

@@ -4,8 +4,9 @@ const mongoose = require('mongoose');
 const Timesheet = require('./timesheet.model');
 const Project = require('../projects/project.model');
 const User = require('../users/user.model');
+const CalendarEvent = require('../calendar/calendar.model');
 const AppError = require('../../shared/utils/AppError');
-const { TIMESHEET_STATUS, ROLES } = require('../../constants');
+const { TIMESHEET_STATUS, ROLES, CALENDAR_EVENT_TYPES } = require('../../constants');
 const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
 const { getWeekStart, getWeekEnd } = require('../../shared/utils/dateHelpers');
 const notificationService = require('../notifications/notification.service');
@@ -88,14 +89,17 @@ const timesheetService = {
     const ts = await Timesheet.findById(id);
     if (!ts) throw new AppError('Timesheet not found', 404);
     if (ts.userId.toString() !== userId.toString()) throw new AppError('Unauthorized', 403);
-    if (![TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.REJECTED].includes(ts.status)) {
-       throw new AppError('Cannot edit submitted/approved timesheets', 400);
+    if (ts.status === TIMESHEET_STATUS.FROZEN) {
+      throw new AppError('Timesheet is frozen and cannot be edited. Please raise a Help & Support ticket.', 400);
     }
-    
+    if (![TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.REJECTED].includes(ts.status)) {
+      throw new AppError('Cannot edit submitted/approved timesheets', 400);
+    }
+
     // In the new model, we mostly use bulkUpsert, but if individual update is used:
     if (data.rows) ts.rows = data.rows;
     if (data.comments) ts.comments = data.comments;
-    
+
     await this.validateLimits(ts);
     await ts.save();
     return ts;
@@ -150,14 +154,39 @@ const timesheetService = {
       Timesheet.countDocuments(filter),
     ]);
 
-    return { timesheets, pagination: buildPaginationMeta(total, page, limit) };
+    // Fetch holidays if a specific week is targeted
+    let holidays = [];
+    if (query.weekStartDate) {
+      const wsd = await getWeekStartDay();
+      const ws = getWeekStart(new Date(query.weekStartDate), wsd);
+      const we = getWeekEnd(ws, wsd);
+
+      holidays = await CalendarEvent.find({
+        eventType: CALENDAR_EVENT_TYPES.HOLIDAY,
+        isGlobal: true,
+        $or: [
+          { startDate: { $lte: we, $gte: ws } },
+          { endDate: { $lte: we, $gte: ws } },
+          { startDate: { $lte: ws }, endDate: { $gte: we } }
+        ]
+      }).select('title startDate endDate').lean();
+    }
+
+    return {
+      timesheets,
+      pagination: buildPaginationMeta(total, page, limit),
+      holidays: holidays.map(h => ({
+        date: h.startDate,
+        title: h.title
+      }))
+    };
   },
 
   // ─── Bulk Operations (Merging into One Document per Week) ─────────────────
 
   async bulkUpsert(dataArray, userId) {
     if (!dataArray.length) return [];
-    
+
     // 1. Group input by week (redundant since usually one week is sent, but safe)
     const wsd = await getWeekStartDay();
     const weeksMap = new Map();
@@ -184,6 +213,9 @@ const timesheetService = {
         });
       }
 
+      if (timesheet.status === TIMESHEET_STATUS.FROZEN) {
+        throw new AppError(`Cannot update a frozen timesheet for week ${weekStart.toDateString()}. Please raise a Help & Support ticket.`, 400);
+      }
       if (![TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.REJECTED].includes(timesheet.status)) {
         throw new AppError(`Cannot update a ${timesheet.status} timesheet for week ${weekStart.toDateString()}`, 400);
       }
@@ -195,8 +227,8 @@ const timesheetService = {
         const pid = (r.projectId?._id || r.projectId || '').toString();
         // A row is "system" if it's LEAVE-SYS or if it's NOT in our current input set
         // But to be safe, we only preserve LEAVE-SYS rows or rows marked as leave
-        return pid === 'LEAVE-SYS' || r.category === 'Leave' || r.category === 'Holiday' || 
-               ['annual', 'sick', 'casual', 'lop'].includes(r.category?.toLowerCase());
+        return pid === 'LEAVE-SYS' || r.category === 'Leave' || r.category === 'Holiday' ||
+          ['annual', 'sick', 'casual', 'lop'].includes(r.category?.toLowerCase());
       });
 
       const newWorkRows = rowsData.map(row => ({
@@ -206,6 +238,60 @@ const timesheetService = {
       }));
 
       timesheet.rows = [...systemRows, ...newWorkRows];
+
+      await this.validateLimits(timesheet);
+      await timesheet.save();
+      results.push(timesheet);
+    }
+    return results;
+  },
+
+  async adminFill(dataArray, targetUserId, adminId) {
+    if (!dataArray.length) return [];
+
+    const wsd = await getWeekStartDay();
+    const weeksMap = new Map();
+    for (const data of dataArray) {
+      const ws = getWeekStart(data.weekStartDate, wsd).toISOString();
+      if (!weeksMap.has(ws)) weeksMap.set(ws, []);
+      weeksMap.get(ws).push(data);
+    }
+
+    const results = [];
+    for (const [wsIso, rowsData] of weeksMap.entries()) {
+      const weekStart = new Date(wsIso);
+      const weekEnd = getWeekEnd(weekStart, wsd);
+
+      let timesheet = await Timesheet.findOne({ userId: targetUserId, weekStartDate: weekStart });
+
+      if (!timesheet) {
+        timesheet = new Timesheet({
+          userId: targetUserId,
+          weekStartDate: weekStart,
+          weekEndDate: weekEnd,
+          rows: []
+        });
+      }
+
+      const inputPids = new Set(rowsData.map(r => r.projectId.toString()));
+      const systemRows = timesheet.rows.filter(r => {
+        const pid = (r.projectId?._id || r.projectId || '').toString();
+        return pid === 'LEAVE-SYS' || r.category === 'Leave' || r.category === 'Holiday' ||
+          ['annual', 'sick', 'casual', 'lop'].includes(r.category?.toLowerCase());
+      });
+
+      const newWorkRows = rowsData.map(row => ({
+        projectId: row.projectId,
+        category: row.category || 'Development',
+        entries: row.entries
+      }));
+
+      timesheet.rows = [...systemRows, ...newWorkRows];
+
+      timesheet.status = TIMESHEET_STATUS.ADMIN_FILLED;
+      timesheet.filledByAdmin = true;
+      timesheet.adminFilledBy = adminId;
+      timesheet.adminFilledAt = new Date();
 
       await this.validateLimits(timesheet);
       await timesheet.save();
@@ -257,7 +343,7 @@ const timesheetService = {
   async bulkSubmit(dataArray, userId) {
     // Reuses bulkUpsert to save, then sets status to SUBMITTED
     const savedTimesheets = await this.bulkUpsert(dataArray, userId);
-    
+
     const user = await User.findById(userId).select('name employeeId');
     const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id');
 
@@ -269,8 +355,8 @@ const timesheetService = {
       // Notify Admins and Managers for each week submitted
       const weekStr = ts.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       const year = ts.weekStartDate.getFullYear();
-      
-      const notificationPromises = approvers.map(approver => 
+
+      const notificationPromises = approvers.map(approver =>
         notificationService.create({
           userId: approver._id,
           type: 'timesheet_submitted',
@@ -282,22 +368,22 @@ const timesheetService = {
       );
       await Promise.all(notificationPromises);
     }
-    
+
     return savedTimesheets;
   },
 
   async submit(id, requestor) {
     const ts = await Timesheet.findById(id);
     if (!ts) throw new AppError('Timesheet not found', 404);
-    
+
     // Allow owner or Admin/Manager to submit
     const isOwner = ts.userId.toString() === (requestor._id || requestor).toString();
     const isAdminOrManager = requestor.role === ROLES.ADMIN || requestor.role === ROLES.MANAGER;
-    
+
     if (!isOwner && !isAdminOrManager) {
       throw new AppError('You do not have permission to submit this timesheet', 403);
     }
-    
+
     ts.status = TIMESHEET_STATUS.SUBMITTED;
     ts.submittedAt = new Date();
     await ts.save();
@@ -308,7 +394,7 @@ const timesheetService = {
     const weekStr = ts.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const year = ts.weekStartDate.getFullYear();
 
-    const notificationPromises = approvers.map(approver => 
+    const notificationPromises = approvers.map(approver =>
       notificationService.create({
         userId: approver._id,
         type: 'timesheet_submitted',
@@ -383,13 +469,43 @@ const timesheetService = {
     const timesheet = await Timesheet.findById(id);
     if (!timesheet) throw new AppError('Timesheet not found', 404);
     if (requestor.role !== ROLES.ADMIN && timesheet.userId.toString() !== requestor._id.toString()) {
-       throw new AppError('Unauthorized', 403);
+      throw new AppError('Unauthorized', 403);
     }
     await timesheet.deleteOne();
     return true;
   },
 
   // ─── Reporting ─────────────────────────────────────────────────────────────
+
+  async getCompliance(query) {
+    const { weekStartDate } = query;
+    if (!weekStartDate) throw new AppError('Week start date is required', 400);
+
+    const Settings = mongoose.model('Settings');
+    const settings = await Settings.findOne().select('general.weekStartDay').lean();
+    const wsd = settings?.general?.weekStartDay || 'monday';
+    const weekStart = getWeekStart(new Date(weekStartDate), wsd);
+
+    const employees = await User.find({ role: ROLES.EMPLOYEE, isActive: true })
+      .select('name employeeId email department')
+      .lean();
+
+    const timesheets = await Timesheet.find({ weekStartDate: weekStart }).lean();
+    const tsMap = new Map(timesheets.map(ts => [ts.userId.toString(), ts]));
+
+    const complianceData = employees.map(emp => {
+      const ts = tsMap.get(emp._id.toString());
+      return {
+        user: emp,
+        status: ts ? ts.status : 'missing',
+        timesheetId: ts ? ts._id : null,
+        totalHours: ts ? ts.totalHours : 0,
+        frozenAt: ts ? ts.frozenAt : null
+      };
+    });
+
+    return complianceData;
+  },
 
   async getHistory(query, requestor) {
     const { page, limit, skip } = parsePagination(query);
@@ -407,39 +523,39 @@ const timesheetService = {
         { rejectionReason: searchRegex },
         { status: searchRegex }
       ];
-      
+
       // Also search by project name/code if possible
       const projects = await Project.find({
         $or: [{ name: searchRegex }, { code: searchRegex }]
       }).distinct('_id');
-      
+
       if (projects.length > 0) {
         filter.$or.push({ 'rows.projectId': { $in: projects } });
       }
     }
 
     // Support year + optional month filtering
-    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     if (query.year && query.year !== 'All Years') {
-       const year = parseInt(query.year);
-       if (query.month && query.month !== 'All Months') {
-         const monthIndex = MONTHS.indexOf(query.month);
-         if (monthIndex !== -1) {
-           // Filter to specific month: weekStartDate can fall in that month
-           filter.weekStartDate = {
-             $gte: new Date(Date.UTC(year, monthIndex, 1)),
-             $lte: new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999))
-           };
-         }
-       } else {
-         filter.weekStartDate = {
-           $gte: new Date(Date.UTC(year, 0, 1)),
-           $lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999))
-         };
-       }
+      const year = parseInt(query.year);
+      if (query.month && query.month !== 'All Months') {
+        const monthIndex = MONTHS.indexOf(query.month);
+        if (monthIndex !== -1) {
+          // Filter to specific month: weekStartDate can fall in that month
+          filter.weekStartDate = {
+            $gte: new Date(Date.UTC(year, monthIndex, 1)),
+            $lte: new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999))
+          };
+        }
+      } else {
+        filter.weekStartDate = {
+          $gte: new Date(Date.UTC(year, 0, 1)),
+          $lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999))
+        };
+      }
     } else if (query.month && query.month !== 'All Months') {
       // Month filter without year: use current year
-      const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
       const monthIndex = MONTHS.indexOf(query.month);
       if (monthIndex !== -1) {
         const now = new Date();
@@ -475,18 +591,18 @@ const timesheetService = {
       lastUpdated: ts.updatedAt,
       userId: ts.userId,
       rows: ts.rows.map(r => ({
-          projectId: r.projectId?._id,
-          projectName: r.projectId?.name,
-          projectCode: r.projectId?.code,
-          category: r.category,
-          totalHours: r.totalHours,
-          entries: r.entries
+        projectId: r.projectId?._id,
+        projectName: r.projectId?.name,
+        projectCode: r.projectId?.code,
+        category: r.category,
+        totalHours: r.totalHours,
+        entries: r.entries
       }))
     }));
 
-    return { 
-      data: formatted, 
-      pagination: buildPaginationMeta(total, page, limit) 
+    return {
+      data: formatted,
+      pagination: buildPaginationMeta(total, page, limit)
     };
   },
 
@@ -497,13 +613,13 @@ const timesheetService = {
 
     // Employee & Manager: strictly their own data only
     const isPersonal = role === ROLES.EMPLOYEE || role === ROLES.MANAGER;
-    
+
     if (isPersonal) {
       const timesheetFilter = { userId };
       if (!isAllWeeks) timesheetFilter.weekStartDate = weekStart;
 
       const [weekly, pending, approved, rejected, totalEmployees, totalManagers, totalAdmins] = await Promise.all([
-        !isAllWeeks ? Timesheet.findOne(timesheetFilter).select('totalHours') : null,
+        !isAllWeeks ? Timesheet.findOne(timesheetFilter) : null,
         Timesheet.countDocuments({ userId, status: TIMESHEET_STATUS.SUBMITTED }),
         Timesheet.countDocuments({ userId, status: TIMESHEET_STATUS.APPROVED }),
         Timesheet.countDocuments({ userId, status: TIMESHEET_STATUS.REJECTED }),
@@ -512,8 +628,27 @@ const timesheetService = {
         User.countDocuments({ isActive: true, role: ROLES.ADMIN }),
       ]);
 
+      // Calculate daily breakdown for the chart
+      let dailyBreakdown = [
+        { day: 'Mon', hours: 0 }, { day: 'Tue', hours: 0 }, { day: 'Wed', hours: 0 },
+        { day: 'Thu', hours: 0 }, { day: 'Fri', hours: 0 }, { day: 'Sat', hours: 0 }, { day: 'Sun', hours: 0 }
+      ];
+      if (weekly?.rows) {
+        weekly.rows.forEach(row => {
+          row.entries.forEach(entry => {
+            const dateStr = new Date(entry.date).toISOString().split('T')[0];
+            const dateObj = new Date(entry.date);
+            const dayIdx = dateObj.getDay() || 7; // 1-7 (Mon-Sun)
+            if (dayIdx >= 1 && dayIdx <= 7) {
+              dailyBreakdown[dayIdx - 1].hours += (entry.hoursWorked || 0);
+            }
+          });
+        });
+      }
+
       return {
         hoursThisWeek: weekly?.totalHours || 0,
+        dailyHours: dailyBreakdown,
         pendingTimesheets: pending,
         approvedTimesheets: approved,
         rejectedTimesheets: rejected,
@@ -534,12 +669,12 @@ const timesheetService = {
       const projectDoc = await Project.findById(projectId)
         .populate('allocatedEmployees.userId', 'name employeeId department isActive role')
         .lean();
-      
+
       if (projectDoc) {
         activeUsers = projectDoc.allocatedEmployees
           .map(a => a.userId)
-          .filter(u => u && u.isActive !== false && u.role === ROLES.EMPLOYEE); 
-        
+          .filter(u => u && u.isActive !== false && u.role === ROLES.EMPLOYEE);
+
         // Note: Project allocation usually only tracks employees, but if we need counts:
         activeManagers = await User.countDocuments({ isActive: true, role: ROLES.MANAGER });
         activeAdmins = await User.countDocuments({ isActive: true, role: ROLES.ADMIN });
@@ -549,7 +684,7 @@ const timesheetService = {
       activeManagers = await User.countDocuments({ isActive: true, role: ROLES.MANAGER });
       activeAdmins = await User.countDocuments({ isActive: true, role: ROLES.ADMIN });
     }
-    
+
     const timesheetFilter = {};
     if (!isAllWeeks) timesheetFilter.weekStartDate = weekStart;
     if (projectId) {
@@ -563,7 +698,7 @@ const timesheetService = {
 
     const submitted = allTimesheets.filter(ts => ts.status !== TIMESHEET_STATUS.DRAFT);
     const submittedUserIds = submitted.map(ts => ts.userId?._id?.toString()).filter(Boolean);
-    
+
     // Not submitted: active employees who don't have a non-draft timesheet for this week/project
     const notSubmitted = activeUsers.filter(u => !submittedUserIds.includes(u._id.toString()));
 
@@ -630,11 +765,11 @@ const timesheetService = {
           $addFields: {
             'rows.isLeaveRow': {
               $or: [
-                  { $in: ['$rows.category', ['Leave', 'Annual', 'Sick', 'Casual', 'Unpaid', 'Maternity', 'Paternity', 'Permission']] }
-                ]
-              }
+                { $in: ['$rows.category', ['Leave', 'Annual', 'Sick', 'Casual', 'Unpaid', 'Maternity', 'Paternity', 'Permission']] }
+              ]
             }
-          },
+          }
+        },
         {
           $group: {
             _id: { $cond: ['$rows.isLeaveRow', 'LEAVE_GROUP', '$rows.projectId'] },
@@ -662,14 +797,14 @@ const timesheetService = {
         { $unwind: { path: '$project', preserveNullAndEmptyArrays: true } },
         {
           $project: {
-            label: { 
+            label: {
               $cond: [
                 { $ifNull: ['$project.name', false] },
                 '$project.name',
                 { $cond: ['$isLeaveRow', 'Leave', 'Unknown'] }
               ]
             },
-            code: { 
+            code: {
               $cond: [
                 { $ifNull: ['$project.code', false] },
                 '$project.code',
@@ -799,7 +934,7 @@ const timesheetService = {
       filter.status = { $ne: TIMESHEET_STATUS.DRAFT };
     }
     if (query.projectId) {
-       filter['rows.projectId'] = query.projectId;
+      filter['rows.projectId'] = query.projectId;
     }
 
     if (query.search && query.search.trim().length >= 2) {
@@ -816,15 +951,15 @@ const timesheetService = {
         { 'rows.projectId': { $in: projectIds } }
       ];
     }
-    
+
     // Search by division or location
     if (query.division || query.location) {
-       const userIds = await User.find({
-          ...(query.division && { division: query.division }),
-          ...(query.location && { location: query.location }),
-          isActive: true
-       }).distinct('_id');
-       filter.userId = { $in: userIds };
+      const userIds = await User.find({
+        ...(query.division && { division: query.division }),
+        ...(query.location && { location: query.location }),
+        isActive: true
+      }).distinct('_id');
+      filter.userId = { $in: userIds };
     }
 
     if (query.year) {
@@ -846,9 +981,9 @@ const timesheetService = {
       Timesheet.countDocuments(filter),
     ]);
 
-    return { 
-      data: timesheets, 
-      pagination: buildPaginationMeta(total, page, limit) 
+    return {
+      data: timesheets,
+      pagination: buildPaginationMeta(total, page, limit)
     };
   },
 

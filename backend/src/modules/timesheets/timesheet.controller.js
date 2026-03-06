@@ -11,8 +11,8 @@ const timesheetController = {
   }),
 
   getAll: asyncHandler(async (req, res) => {
-    const { timesheets, pagination } = await timesheetService.getAll(req.query, req.user);
-    ApiResponse.success(res, { data: timesheets, pagination });
+    const { timesheets, pagination, holidays } = await timesheetService.getAll(req.query, req.user);
+    ApiResponse.success(res, { data: timesheets, pagination, holidays });
   }),
 
   getById: asyncHandler(async (req, res) => {
@@ -60,9 +60,20 @@ const timesheetController = {
     ApiResponse.success(res, { message: 'Timesheets submitted', data: timesheets });
   }),
 
+  adminFill: asyncHandler(async (req, res) => {
+    const { targetUserId, rows } = req.body;
+    const timesheets = await timesheetService.adminFill(rows, targetUserId, req.user._id);
+    ApiResponse.success(res, { message: 'Timesheets filled by admin successfully', data: timesheets });
+  }),
+
   getHistory: asyncHandler(async (req, res) => {
     const { data, pagination } = await timesheetService.getHistory(req.query, req.user);
     ApiResponse.success(res, { data, pagination });
+  }),
+
+  getCompliance: asyncHandler(async (req, res) => {
+    const data = await timesheetService.getCompliance(req.query);
+    ApiResponse.success(res, { data });
   }),
 
   getAdminSummary: asyncHandler(async (req, res) => {

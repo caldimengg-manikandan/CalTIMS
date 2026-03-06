@@ -8,7 +8,10 @@ import {
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import useSystemStore from '@/store/systemStore'
 import { clsx } from 'clsx'
+import { toast } from 'react-hot-toast'
+import { Lock } from 'lucide-react'
 
 const navSections = [
     {
@@ -18,6 +21,7 @@ const navSections = [
             { to: '/timesheets', icon: Clock, label: 'Timesheet Entry', roles: ['admin', 'manager', 'employee'] },
             { to: '/timesheets/history', icon: List, label: 'History', roles: ['admin', 'manager', 'employee'] },
             { to: '/timesheets/manage', icon: CheckSquare, label: 'Manage Timesheets', roles: ['admin', 'manager'] },
+            { to: '/timesheets/compliance', icon: AlertCircle, label: 'Compliance & Locks', roles: ['admin', 'manager'], proFeature: true },
         ]
     },
     {
@@ -25,9 +29,8 @@ const navSections = [
         items: [
             { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', roles: ['employee'] },
             { to: '/leaves', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager'] },
-            { to: '/calendar', icon: Calendar, label: 'Calendar', roles: ['admin', 'manager', 'employee'] },
             { to: '/announcements', icon: Megaphone, label: 'Announcements', roles: ['admin'] },
-            { to: '/incidents', icon: AlertCircle, label: 'Help & Support', roles: ['admin', 'manager', 'employee'] },
+            { to: '/incidents', icon: AlertCircle, label: 'Help & Support', roles: ['admin', 'manager', 'employee'], proFeature: true },
         ]
     },
     {
@@ -36,7 +39,7 @@ const navSections = [
             { to: '/projects', icon: FolderOpen, label: 'Projects', roles: ['admin', 'manager'] },
             { to: '/tasks', icon: ListTodo, label: 'Tasks', roles: ['admin'] },
             { to: '/employees', icon: Users, label: 'Employees', roles: ['admin'] },
-            { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'manager'] },
+            { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'manager'], proFeature: true },
             { to: '/settings', icon: Settings2, label: 'Settings', roles: ['admin'] },
         ]
     },
@@ -46,6 +49,7 @@ export default function Sidebar() {
     const { user } = useAuthStore()
     const { sidebarOpen, toggleSidebar } = useUIStore()
     const { general } = useSettingsStore()
+    const { appVersion } = useSystemStore()
 
     const companyName = general?.companyName || 'CALTIMS'
 
@@ -111,9 +115,16 @@ export default function Sidebar() {
                                             sidebarOpen ? 'px-3' : 'px-0 justify-center group-hover/sidebar:justify-start group-hover/sidebar:px-3',
                                             isActive
                                                 ? 'bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-semibold shadow-sm'
-                                                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-800 dark:hover:text-white'
+                                                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-800 dark:hover:text-white',
+                                            item.proFeature && appVersion === 'basic' && 'opacity-60 grayscale cursor-not-allowed'
                                         )}
                                         title={!sidebarOpen ? item.label : undefined}
+                                        onClick={(e) => {
+                                            if (item.proFeature && appVersion === 'basic') {
+                                                e.preventDefault()
+                                                toast.error('This feature is available in the Pro version.', { icon: '🔒' })
+                                            }
+                                        }}
                                     >
                                         {({ isActive }) => (
                                             <>
@@ -130,7 +141,18 @@ export default function Sidebar() {
                                                     )}
                                                 />
                                                 {sidebarOpen && (
-                                                    <span className="truncate">{item.label}</span>
+                                                    <span className="truncate flex-1 text-left">{item.label}</span>
+                                                )}
+                                                {sidebarOpen && item.proFeature && (
+                                                    <span
+                                                        className={clsx(
+                                                            "flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md self-center border",
+                                                            appVersion === 'basic'
+                                                                ? "bg-[#f3e8ff] text-[#9333ea] border-[#e9d5ff]"
+                                                                : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
+                                                        )}>
+                                                        {appVersion === 'basic' && <Lock size={10} />} PRO
+                                                    </span>
                                                 )}
                                                 {!sidebarOpen && (
                                                     <span className="truncate hidden group-hover/sidebar:inline">{item.label}</span>

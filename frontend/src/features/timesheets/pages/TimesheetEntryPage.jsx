@@ -136,8 +136,8 @@ export default function TimesheetEntryPage() {
         queryFn: async () => {
             const from = format(weekStart, 'yyyy-MM-dd')
             const to = format(addDays(weekStart, 6), 'yyyy-MM-dd')
-            const r = await calendarAPI.getAll({ from, to, eventType: 'Holiday' })
-            return (r.data?.data || []).filter(e => e.isPublic)
+            const r = await calendarAPI.getAll({ from, to, eventType: 'holiday' })
+            return (r.data?.data || []).filter(e => e.isGlobal)
         },
         staleTime: 5 * 60 * 1000,
     })
@@ -217,9 +217,11 @@ export default function TimesheetEntryPage() {
             lastJumpedId.current = editId
         }
 
-        // Map rows and merge data across all relevant week documents (e.g. Mon-start and Sun-start overlaps)
+        // Map rows and merge data across all relevant week documents
         const rowMap = new Map() // Key: projectId + category
-        const LEAVE_ROW_KEY = 'ALL-LEAVES-MERGED'
+
+        const leaveMetaArray = Array(7).fill(null)
+        const leaveHoursArray = Array(7).fill('00:00')
 
         if (existingTimesheets && existingTimesheets.length > 0) {
             existingTimesheets.forEach(ts => {
@@ -233,55 +235,57 @@ export default function TimesheetEntryPage() {
                     const projectCode = r.projectId?.code || projects?.find(p => p._id === projectIdStr)?.code || ''
                     const isSystemLeave = projectCode === 'LEAVE-SYS' || (typeof pid === 'string' && pid === 'LEAVE-SYS') || (pid && projectIdStr.includes('LEAVE-SYS'))
 
-                    let key = isSystemLeave ? LEAVE_ROW_KEY : `${projectIdStr}-${category.toLowerCase()}`
-
-                    if (!rowMap.has(key)) {
-                        rowMap.set(key, {
-                            id: isSystemLeave ? 'merged-system-leave' : (r._id || `temp-${Math.random()}`),
-                            _id: r._id,
-                            projectId: isSystemLeave ? 'LEAVE-SYS' : pid,
-                            projectCode: isSystemLeave ? 'LEAVE-SYS' : projectCode,
-                            taskType: isSystemLeave ? '' : category,
-                            dayHours: Array(7).fill('00:00'),
-                            dayMeta: Array(7).fill(null),
-                            status: ts.status,
-                            isLeaveRow: isSystemLeave,
-                            leaveTypes: new Set()
-                        })
-                    }
-
-                    const targetRow = rowMap.get(key)
                     if (isSystemLeave) {
-                        targetRow.leaveTypes.add(category)
-                        targetRow.taskType = Array.from(targetRow.leaveTypes).map(t => t.replace(/ Leave/i, '')).join(' & ') + ' Leave'
-                    }
+                        weekDays.forEach((day, i) => {
+                            const dayStr = format(day, 'yyyy-MM-dd')
+                            const entry = r.entries?.find(e => {
+                                if (!e.date) return false
+                                try { return format(new Date(e.date), 'yyyy-MM-dd') === dayStr } catch (err) { return false }
+                            })
 
-                    // Map each entry to the displayed weekday column
-                    weekDays.forEach((day, i) => {
-                        const dayStr = format(day, 'yyyy-MM-dd')
-                        const entry = r.entries?.find(e => {
-                            if (!e.date) return false
-                            // Standardize both dates to YYYY-MM-DD for comparison
-                            try {
-                                const eDateStr = format(new Date(e.date), 'yyyy-MM-dd')
-                                return eDateStr === dayStr
-                            } catch (err) { return false }
-                        })
-
-                        if (entry) {
-                            const hours = entry.hoursWorked || 0
-                            const h = Math.floor(hours)
-                            const m = Math.round((hours - h) * 60)
-
-                            if (isSystemLeave) {
+                            if (entry) {
+                                const hours = entry.hoursWorked || 0
+                                const h = Math.floor(hours)
+                                const m = Math.round((hours - h) * 60)
                                 const isFullDay = (hours >= 8) || category.toLowerCase().includes('lop') || entry.leaveType?.toLowerCase() === 'lop';
-                                targetRow.dayMeta[i] = { type: category, isApproved: true, isFullDay }
-                                targetRow.dayHours[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-                            } else {
+
+                                leaveMetaArray[i] = { type: category, isApproved: true, isFullDay }
+                                leaveHoursArray[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                            }
+                        })
+                    } else {
+                        let key = `${projectIdStr}-${category.toLowerCase()}`
+
+                        if (!rowMap.has(key)) {
+                            rowMap.set(key, {
+                                id: (r._id || `temp-${Math.random()}`),
+                                _id: r._id,
+                                projectId: pid,
+                                projectCode: projectCode,
+                                taskType: category,
+                                dayHours: Array(7).fill('00:00'),
+                                dayMeta: Array(7).fill(null),
+                                status: ts.status,
+                                isLeaveRow: false
+                            })
+                        }
+
+                        const targetRow = rowMap.get(key)
+                        weekDays.forEach((day, i) => {
+                            const dayStr = format(day, 'yyyy-MM-dd')
+                            const entry = r.entries?.find(e => {
+                                if (!e.date) return false
+                                try { return format(new Date(e.date), 'yyyy-MM-dd') === dayStr } catch (err) { return false }
+                            })
+
+                            if (entry) {
+                                const hours = entry.hoursWorked || 0
+                                const h = Math.floor(hours)
+                                const m = Math.round((hours - h) * 60)
                                 targetRow.dayHours[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
                             }
-                        }
-                    })
+                        })
+                    }
                 })
             })
         }
@@ -309,52 +313,51 @@ export default function TimesheetEntryPage() {
                 const leaveHours = leave.leaveType.toLowerCase() === 'lop' ? 0 : (leave.isHalfDay ? 4 : 8)
                 const category = leave.leaveType.charAt(0).toUpperCase() + leave.leaveType.slice(1)
 
-                const key = LEAVE_ROW_KEY;
-
-                if (!rowMap.has(key)) {
-                    rowMap.set(key, {
-                        id: 'merged-system-leave',
-                        projectId: 'LEAVE-SYS',
-                        taskType: '',
-                        dayHours: Array(7).fill('00:00'),
-                        dayMeta: Array(7).fill(null),
-                        isLeaveRow: true,
-                        leaveTypes: new Set()
-                    })
-                }
-
-                const targetRow = rowMap.get(key)
-                targetRow.leaveTypes.add(`${category} (Pending)`)
-                targetRow.taskType = Array.from(targetRow.leaveTypes).map(t => t.replace(/ Leave/i, '').replace(/ \(Pending\)/i, '')).join(' & ') + ' Leave'
-
-                let hasHoursInWeek = false
-
                 weekDays.forEach((day, i) => {
                     const dayStr = format(day, 'yyyy-MM-dd')
                     const isLeaveDay = leaveDays.some(ld => format(new Date(ld), 'yyyy-MM-dd') === dayStr)
 
                     if (isLeaveDay) {
-                        targetRow.dayMeta[i] = { type: category, isPending: true, isFullDay: !leave.isHalfDay }
+                        const isFullDay = !leave.isHalfDay;
                         const hours = leaveHours
                         const h = Math.floor(hours)
                         const m = Math.round((hours - h) * 60)
-                        targetRow.dayHours[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-                        hasHoursInWeek = true
+
+                        leaveMetaArray[i] = { type: `${category} (Pending)`, isPending: true, isFullDay }
+                        leaveHoursArray[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
                     }
                 })
-
-                if (hasHoursInWeek) {
-                    rowMap.set(key, targetRow)
-                }
             })
         }
 
-        const finalRows = Array.from(rowMap.values())
-        setRows(finalRows.length > 0 ? finalRows : [{ id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00') }])
+        let finalRows = Array.from(rowMap.values())
+        if (finalRows.length === 0) {
+            finalRows = [{ id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00'), dayMeta: Array(7).fill(null) }]
+        }
+
+        // Apply leave data visually
+        finalRows.forEach((row, rowIndex) => {
+            row.dayMeta = [...leaveMetaArray];
+
+            if (rowIndex === 0) {
+                leaveHoursArray.forEach((h, i) => {
+                    if (h !== '00:00') {
+                        row.dayHours[i] = h;
+                    }
+                })
+            } else {
+                leaveMetaArray.forEach((m, i) => {
+                    if (m && m.isFullDay) {
+                        row.dayHours[i] = '00:00';
+                    }
+                })
+            }
+        });
+
+        setRows(finalRows)
     }, [existingTimesheets, weekLeaves, weekStart, weekDays, editId])
 
 
-    // Mutation for bulk saving
     const bulkSaveMutation = useMutation({
         mutationFn: async (rowsToSave) => {
             const payloads = rowsToSave.filter(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS').map(row => ({
@@ -362,8 +365,15 @@ export default function TimesheetEntryPage() {
                 category: row.taskType,
                 weekStartDate: format(weekStart, 'yyyy-MM-dd'),
                 entries: weekDays.map((day, i) => {
-                    const [h, m] = row.dayHours[i].split(':').map(Number)
-                    const hoursWorked = h + (m / 60)
+                    const isLeaveCell = row.dayMeta && (row.dayMeta[i]?.isPending || row.dayMeta[i]?.isApproved);
+                    const isFullDay = isLeaveCell && row.dayMeta[i]?.isFullDay;
+
+                    let hoursWorked = 0;
+                    if (!isFullDay) {
+                        const [h, m] = row.dayHours[i].split(':').map(Number)
+                        hoursWorked = h + (m / 60)
+                    }
+
                     return {
                         date: format(day, 'yyyy-MM-dd'),
                         hoursWorked
@@ -398,8 +408,15 @@ export default function TimesheetEntryPage() {
                 category: row.taskType,
                 weekStartDate: format(weekStart, 'yyyy-MM-dd'),
                 entries: weekDays.map((day, i) => {
-                    const [h, m] = row.dayHours[i].split(':').map(Number)
-                    const hoursWorked = h + (m / 60)
+                    const isLeaveCell = row.dayMeta && (row.dayMeta[i]?.isPending || row.dayMeta[i]?.isApproved);
+                    const isFullDay = isLeaveCell && row.dayMeta[i]?.isFullDay;
+
+                    let hoursWorked = 0;
+                    if (!isFullDay) {
+                        const [h, m] = row.dayHours[i].split(':').map(Number)
+                        hoursWorked = h + (m / 60)
+                    }
+
                     return {
                         date: format(day, 'yyyy-MM-dd'),
                         hoursWorked
@@ -550,13 +567,21 @@ export default function TimesheetEntryPage() {
     const isWeekSubmitted = useMemo(() => {
         const weekStr = format(weekStart, 'yyyy-MM-dd')
         const currentWeekTs = existingTimesheets?.find(t => format(new Date(t.weekStartDate), 'yyyy-MM-dd') === weekStr)
-        return currentWeekTs ? ['submitted', 'approved'].includes(currentWeekTs.status) : false
+        return currentWeekTs ? ['submitted', 'approved', 'frozen', 'admin_filled'].includes(currentWeekTs.status) : false
     }, [existingTimesheets, weekStart])
+
+    const isWeekFrozen = useMemo(() => {
+        const weekStr = format(weekStart, 'yyyy-MM-dd')
+        const currentWeekTs = existingTimesheets?.find(t => format(new Date(t.weekStartDate), 'yyyy-MM-dd') === weekStr)
+        return currentWeekTs ? currentWeekTs.status === 'frozen' : false
+    }, [existingTimesheets, weekStart])
+
+    // Optional banner for "pending near deadline" can be implemented later. For now focus on Frozen.
 
     const lockedDays = useMemo(() => {
         const locked = Array(7).fill(false)
         rows.forEach(row => {
-            if (row.isLeaveRow) {
+            if (row.dayMeta) {
                 row.dayMeta.forEach((meta, i) => {
                     if (meta && meta.isFullDay) {
                         locked[i] = true
@@ -573,7 +598,7 @@ export default function TimesheetEntryPage() {
         const weekStr = format(weekStart, 'yyyy-MM-dd')
         const currentWeekTs = existingTimesheets?.find(t => format(new Date(t.weekStartDate), 'yyyy-MM-dd') === weekStr)
         if (!currentWeekTs) return false;
-        return ['submitted', 'approved'].includes(currentWeekTs.status);
+        return ['submitted', 'approved', 'frozen', 'admin_filled'].includes(currentWeekTs.status);
     }
 
     if (isLoading || isLoadingLeaves) return <div className="flex justify-center pt-20"><Spinner size="lg" /></div>
@@ -581,6 +606,26 @@ export default function TimesheetEntryPage() {
     return (
         <div className="space-y-6 animate-fade-in max-w-[1600px] mx-auto pb-10">
             <PageHeader title="Timesheet Entry" />
+
+            {isWeekFrozen && (
+                <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-lg shadow-sm flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="text-rose-500 mt-0.5" size={20} />
+                        <div>
+                            <h3 className="text-rose-800 font-bold text-sm">Timesheet Frozen</h3>
+                            <p className="text-rose-700 text-sm mt-1">
+                                Your timesheet for the previous week has been frozen because it was not submitted before the deadline. Please raise a Help & Support ticket so the admin can assist you.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => navigate('/incidents')}
+                        className="whitespace-nowrap bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                    >
+                        Raise Ticket
+                    </button>
+                </div>
+            )}
 
             {/* Top Navigation Bar */}
             <div className="flex flex-wrap items-center justify-between gap-4 py-2">
@@ -660,19 +705,28 @@ export default function TimesheetEntryPage() {
 
                                 {weekDays.map((day, i) => {
                                     const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
+                                    const hEvent = isHoliday ? globalHolidays?.find(e => {
+                                        const d = format(day, 'yyyy-MM-dd')
+                                        return format(new Date(e.startDate), 'yyyy-MM-dd') <= d && format(new Date(e.endDate), 'yyyy-MM-dd') >= d
+                                    }) : null
                                     return (
                                         <th key={i} className={clsx(
                                             "px-2 py-3 border-r border-slate-200 dark:border-white text-center min-w-[110px] transition-colors relative",
-                                            isHoliday ? "bg-blue-100/50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300" : ""
+                                            isHoliday ? "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300" : ""
                                         )}>
                                             <div className="flex flex-col items-center gap-1">
                                                 <div className="flex flex-col">
                                                     <span>{format(day, 'EEE')}</span>
                                                     <span className={clsx(
                                                         "capitalize font-normal",
-                                                        isHoliday ? "text-blue-500/80 dark:text-blue-400" : "text-slate-400"
+                                                        isHoliday ? "text-orange-500/80 dark:text-orange-400" : "text-slate-400"
                                                     )}>{format(day, 'MMM d')}</span>
                                                 </div>
+                                                {isHoliday && hEvent && (
+                                                    <span className="text-[9px] text-orange-500 font-bold uppercase tracking-tighter truncate max-w-[90px]" title={hEvent.title}>
+                                                        🎉 {hEvent.title}
+                                                    </span>
+                                                )}
                                                 {calculateDayTotal(i) < workingHoursPerDay && calculateDayTotal(i) > 0 && (
                                                     <div className="absolute -top-1 -right-1 group/warn">
                                                         <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
@@ -807,7 +861,7 @@ export default function TimesheetEntryPage() {
                                                                             const m = time.split(':')[1] || '00'
                                                                             handleUpdateHour(row.id, i, `${h}:${m}`)
                                                                         }}
-                                                                        disabled={isRowLocked(row) || isWeekSubmitted || lockedDays[i]}
+                                                                        disabled={isRowLocked(row) || isWeekSubmitted || lockedDays[i] || isHoliday}
                                                                     />
                                                                     <span className="text-slate-400 font-medium px-0.5">:</span>
                                                                     <input
@@ -821,7 +875,7 @@ export default function TimesheetEntryPage() {
                                                                             const h = time.split(':')[0] || '00'
                                                                             handleUpdateHour(row.id, i, `${h}:${m}`)
                                                                         }}
-                                                                        disabled={isRowLocked(row) || isWeekSubmitted || lockedDays[i]}
+                                                                        disabled={isRowLocked(row) || isWeekSubmitted || lockedDays[i] || isHoliday}
                                                                         onBlur={(e) => {
                                                                             let m = parseInt(e.target.value, 10) || 0
                                                                             if (m > 59) m = 59
@@ -833,11 +887,19 @@ export default function TimesheetEntryPage() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                    {isHoliday && !isLeaveCell && (
-                                                        <div className="mt-1 flex items-center gap-1">
-                                                            <span className="text-[9px] text-blue-500 font-bold uppercase tracking-tighter">Holiday</span>
-                                                        </div>
-                                                    )}
+                                                    {isHoliday && !isLeaveCell && (() => {
+                                                        const hEvent = globalHolidays?.find(e => {
+                                                            const d = format(weekDays[i], 'yyyy-MM-dd')
+                                                            return format(new Date(e.startDate), 'yyyy-MM-dd') <= d && format(new Date(e.endDate), 'yyyy-MM-dd') >= d
+                                                        })
+                                                        return (
+                                                            <div className="mt-1 flex items-center justify-center gap-1">
+                                                                <span className="text-[9px] text-orange-500 font-bold uppercase tracking-tighter truncate max-w-[90px]" title={hEvent?.title}>
+                                                                    🎉 {hEvent?.title || 'Holiday'}
+                                                                </span>
+                                                            </div>
+                                                        )
+                                                    })()}
                                                     {isLeaveCell && cellLeaveType && (
                                                         <div className={`text-[10px] text-center mt-1 font-semibold ${isLop && isPendingCell ? 'text-rose-600/80 dark:text-rose-400/80' :
                                                             isLop && isApprovedCell ? 'text-rose-600/80 dark:text-rose-400/80' :

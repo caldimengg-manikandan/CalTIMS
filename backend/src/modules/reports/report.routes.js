@@ -10,6 +10,7 @@ const User = require('../users/user.model');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/rbac.middleware');
 const { TIMESHEET_STATUS, LEAVE_STATUS } = require('../../constants');
+const { requireProTier } = require('../../middleware/tier.middleware');
 
 router.use(authenticate);
 router.use(authorize('admin', 'manager'));
@@ -60,7 +61,7 @@ router.get('/timesheet-summary', asyncHandler(async (req, res) => {
 }));
 
 // ─── Project utilization (aggregated hours per project) ────────────────────
-router.get('/project-utilization', asyncHandler(async (req, res) => {
+router.get('/project-utilization', requireProTier, asyncHandler(async (req, res) => {
   const match = { status: TIMESHEET_STATUS.APPROVED };
   if (req.query.from) match.weekStartDate = { $gte: new Date(req.query.from) };
   if (req.query.to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(req.query.to) };
@@ -186,7 +187,7 @@ router.get('/employee-attendance', asyncHandler(async (req, res) => {
 }));
 
 // ─── NEW: Weekly hours trend (for line chart) ─────────────────────────────
-router.get('/weekly-trend', asyncHandler(async (req, res) => {
+router.get('/weekly-trend', requireProTier, asyncHandler(async (req, res) => {
   const match = { status: TIMESHEET_STATUS.APPROVED };
   if (req.query.from) match.weekStartDate = { $gte: new Date(req.query.from) };
   if (req.query.to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(req.query.to) };
@@ -225,7 +226,7 @@ router.get('/weekly-trend', asyncHandler(async (req, res) => {
 }));
 
 // ─── NEW: Department hours summary (for stacked bar chart) ────────────────
-router.get('/department-summary', asyncHandler(async (req, res) => {
+router.get('/department-summary', requireProTier, asyncHandler(async (req, res) => {
   const match = { status: TIMESHEET_STATUS.APPROVED };
   if (req.query.from) match.weekStartDate = { $gte: new Date(req.query.from) };
   if (req.query.to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(req.query.to) };
@@ -290,7 +291,7 @@ router.get('/department-summary', asyncHandler(async (req, res) => {
 }));
 
 // ─── NEW: PDF Export ────────────────────────────────────────────────────────
-router.get('/pdf-export', asyncHandler(async (req, res) => {
+router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
   const PDFDocument = require('pdfkit');
   const mongoose = require('mongoose');
 

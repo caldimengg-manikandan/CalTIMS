@@ -107,6 +107,23 @@ const timesheetSchema = new mongoose.Schema(
       trim: true,
       maxlength: [1000, 'Comments cannot exceed 1000 characters'],
     },
+    frozenAt: {
+      type: Date,
+      default: null,
+    },
+    filledByAdmin: {
+      type: Boolean,
+      default: false,
+    },
+    adminFilledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    adminFilledAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -142,12 +159,12 @@ function resolveEntryHours(entry) {
 timesheetSchema.pre('save', function (next) {
   let grandTotal = 0;
   const totalsByDay = {}; // Key: YYYY-MM-DD tracking sum per day
-  
+
   this.rows.forEach(row => {
     let rowTotal = 0;
     row.entries.forEach(e => {
       const hours = resolveEntryHours(e);
-      
+
       // Group by date string to validate daily total
       try {
         const d = new Date(e.date);
@@ -156,20 +173,20 @@ timesheetSchema.pre('save', function (next) {
       } catch (err) {
         // Skip invalid dates; model validation will catch them
       }
-      
+
       rowTotal += hours;
     });
     row.totalHours = rowTotal;
     grandTotal += rowTotal;
   });
-  
+
   // Final validation: Total hours per day cannot exceed 24
   for (const date in totalsByDay) {
     if (totalsByDay[date] > 24.001) { // Floating point buffer
       return next(new Error(`Total hours entered for ${date} (${totalsByDay[date].toFixed(2)}) exceed the 24-hour daily limit.`));
     }
   }
-  
+
   this.totalHours = grandTotal;
   this.isIncomplete = grandTotal < 40;
   next();

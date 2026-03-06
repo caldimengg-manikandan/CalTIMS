@@ -11,6 +11,8 @@ const TIMESHEET_STATUS = Object.freeze({
   SUBMITTED: 'submitted',
   APPROVED: 'approved',
   REJECTED: 'rejected',
+  FROZEN: 'frozen',
+  ADMIN_FILLED: 'admin_filled',
 });
 
 const LEAVE_STATUS = Object.freeze({
@@ -41,9 +43,9 @@ const ANNOUNCEMENT_TYPES = Object.freeze({
 
 const CALENDAR_EVENT_TYPES = Object.freeze({
   HOLIDAY: 'holiday',
-  MEETING: 'meeting',
-  DEADLINE: 'deadline',
-  COMPANY_EVENT: 'company-event',
+  COMPANY_EVENT: 'company_event',
+  LEAVE: 'leave',
+  PERSONAL_EVENT: 'personal_event',
 });
 
 const HTTP_STATUS = Object.freeze({
