@@ -51,7 +51,7 @@ export default function Navbar() {
             console.error('Logout error:', err)
             logout() // Still logout locally if API fails
         } finally {
-            navigate('/login')
+            navigate('/login', { replace: true })
         }
     }
 
@@ -96,14 +96,16 @@ export default function Navbar() {
 
                     {/* Navigation Breadcrumbs */}
                     <nav className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-                        <button
-                            onClick={() => navigate(-1)}
-                            className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all flex items-center gap-1.5 font-bold text-xs shrink-0"
-                            title="Go back"
-                        >
-                            <ArrowLeft size={15} strokeWidth={2.5} />
-                            <span className="hidden sm:inline">Back</span>
-                        </button>
+                        {location.pathname !== '/dashboard' && (
+                            <button
+                                onClick={() => navigate(-1)}
+                                className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all flex items-center gap-1.5 font-bold text-xs shrink-0"
+                                title="Go back"
+                            >
+                                <ArrowLeft size={15} strokeWidth={2.5} />
+                                <span className="hidden sm:inline">Back</span>
+                            </button>
+                        )}
 
                         <Link
                             to="/dashboard"

@@ -1,11 +1,7 @@
-import React, { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import {
-    Clock, CheckCircle, XCircle, AlertCircle,
-    CalendarDays, Award, ChevronRight, Activity,
-    Bell, Megaphone, HelpCircle, FileText, Settings2, Lock
-} from 'lucide-react'
-import { timesheetAPI, leaveAPI, announcementAPI, notificationAPI } from '@/services/endpoints'
+import React, { useState, useEffect } from 'react'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { Clock, CheckCircle, XCircle, AlertCircle, CalendarDays, Award, ChevronRight, ChevronLeft, Activity as LucideActivity, Bell, Megaphone, HelpCircle, FileText, Settings2, Lock, Briefcase, Filter, ChevronDown } from 'lucide-react'
+import { timesheetAPI, leaveAPI, announcementAPI, notificationAPI, projectAPI } from '@/services/endpoints'
 import { useAuthStore } from '@/store/authStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useSystemStore } from '@/store/systemStore'
@@ -14,7 +10,7 @@ import { toast } from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import Spinner from '@/components/ui/Spinner'
 import Modal from '@/components/ui/Modal'
-import { format, startOfWeek, endOfWeek, isSameDay } from 'date-fns'
+import { format, startOfWeek, endOfWeek, isSameDay, addWeeks, subWeeks } from 'date-fns'
 import CalendarWidget from '@/features/dashboard/components/CalendarWidget'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -30,14 +26,20 @@ const fadeUp = {
 export default function DashboardPage() {
     const { user } = useAuthStore()
     const { appVersion } = useSystemStore()
+    const { general } = useSettingsStore()
     const isAdmin = ['admin', 'manager'].includes(user?.role)
     const navigate = useNavigate()
-
-    // Config
-    const weekStartDay = 1 // Monday
     const today = new Date()
-    const weekStart = startOfWeek(today, { weekStartsOn: weekStartDay })
-    const weekEnd = endOfWeek(today, { weekStartsOn: weekStartDay })
+
+    const weekStartsOn = general?.weekStartDay?.toLowerCase() === 'sunday' ? 0 : 1
+    const [currentWeekStart, setCurrentWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn }))
+
+    // Reset week to current if the system week start setting changes
+    useEffect(() => {
+        setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn }))
+    }, [weekStartsOn])
+
+    const currentWeekEnd = endOfWeek(currentWeekStart, { weekStartsOn })
 
     // State
     const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -54,6 +56,8 @@ export default function DashboardPage() {
         }
     })
 
+    const [selectedProjectId, setSelectedProjectId] = useState('all')
+
     const togglePref = (key) => {
         const next = { ...prefs, [key]: !prefs[key] }
         setPrefs(next)
@@ -61,9 +65,19 @@ export default function DashboardPage() {
     }
 
     // -- Data Fetching (Parallel) --
-    const { data: summaryData, isLoading: summaryLoading } = useQuery({
-        queryKey: ['dashboard-summary'],
-        queryFn: () => timesheetAPI.getDashboardSummary({}).then(r => r.data.data),
+    const { data: summaryData, isPending: summaryLoading } = useQuery({
+        queryKey: ['dashboard-summary', selectedProjectId, currentWeekStart],
+        queryFn: () => timesheetAPI.getDashboardSummary({
+            projectId: selectedProjectId,
+            weekStartDate: format(currentWeekStart, 'yyyy-MM-dd')
+        }).then(r => r.data.data),
+        placeholderData: keepPreviousData,
+    })
+
+    const { data: projects = [] } = useQuery({
+        queryKey: ['projects', 'all'],
+        queryFn: () => projectAPI.getAll({ limit: 1000 }).then(r => r.data.data || []),
+        enabled: isAdmin
     })
 
     const { data: leaveBalance } = useQuery({
@@ -74,7 +88,7 @@ export default function DashboardPage() {
 
     const { data: announcements } = useQuery({
         queryKey: ['announcements', 'active'],
-        queryFn: () => announcementAPI.getAll({ limit: 3 }).then(r => r.data.data),
+        queryFn: () => announcementAPI.getAll({ limit: 10 }).then(r => r.data.data),
     })
 
     const { data: notifications } = useQuery({
@@ -86,9 +100,20 @@ export default function DashboardPage() {
         <div className="flex justify-center items-center h-[70vh]"><Spinner size="lg" /></div>
     )
 
+    // -- Helpers --
+    const getGreeting = () => {
+        const hour = today.getHours()
+        if (hour < 12) return 'Good Morning'
+        if (hour < 17) return 'Good Afternoon'
+        if (hour < 21) return 'Good Evening'
+        return 'Good Night'
+    }
+
     // Calculate Hero Progress
     const loggedHoursThisWeek = summaryData?.hoursThisWeek || 0
-    const targetHours = 40
+    const workingHoursPerDay = general?.workingHoursPerDay || 8
+    const workingDaysCount = general?.isWeekendWorkable ? 7 : 5
+    const targetHours = workingHoursPerDay * workingDaysCount
     const progressPct = Math.min(100, Math.round((loggedHoursThisWeek / targetHours) * 100))
     const isComplete = progressPct === 100
 
@@ -116,10 +141,10 @@ export default function DashboardPage() {
                             {format(today, 'EEEE, MMMM d, yyyy')}
                         </p>
                         <h1 className="text-4xl md:text-5xl font-black tracking-tight">
-                            Good Morning, {user?.name?.split(' ')[0] || 'User'} <span className="inline-block animate-waving-hand origin-bottom-right">👋</span>
+                            {getGreeting()}, {user?.name?.split(' ')[0] || 'User'} <span className="inline-block animate-waving-hand origin-bottom-right">👋</span>
                         </h1>
                         <p className="text-slate-300 text-sm md:text-base font-medium pt-2 max-w-xl">
-                            Week: {format(weekStart, 'MMM d')} – {format(weekEnd, 'MMM d')} <span className="opacity-50 mx-2">|</span>
+                            Week: {format(currentWeekStart, 'MMM d')} – {format(currentWeekEnd, 'MMM d')} <span className="opacity-50 mx-2">|</span>
                             {isAdmin ? 'System Operational' : `${loggedHoursThisWeek} of ${targetHours} hours logged`}
                         </p>
 
@@ -168,7 +193,7 @@ export default function DashboardPage() {
                                 <div className="p-6 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 shadow-xl group hover:bg-white/15 transition-all">
                                     <div className="flex items-center justify-between mb-4">
                                         <div className="w-10 h-10 rounded-2xl bg-primary-500/20 text-primary-400 flex items-center justify-center">
-                                            <Activity size={20} />
+                                            <LucideActivity size={20} />
                                         </div>
                                         <div className="text-right">
                                             <p className="text-2xl font-black text-white">{summaryData?.notSubmittedCount || 0}</p>
@@ -207,84 +232,117 @@ export default function DashboardPage() {
                 </div>
             </motion.section>
 
-            {/* 2️⃣ ACTION CENTER */}
+            {/* 2️⃣ ACTION CENTER & FILTERS */}
             <motion.section
                 initial="hidden" animate="visible" variants={fadeUp} transition={{ duration: 0.4, delay: 0.1 }}
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
+                className="space-y-4"
             >
-                <div
-                    onClick={() => isAdmin ? navigate('/timesheets/manage?status=Approved') : navigate('/leaves')}
-                    className="card p-5 group hover:border-emerald-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer"
-                >
-                    <div className="flex items-start justify-between">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <CheckCircle size={20} />
+                {isAdmin && (
+                    <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter By Project</span>
+                            <div className="relative group">
+                                <Briefcase size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary-500" />
+                                <select
+                                    value={selectedProjectId}
+                                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                                    className="appearance-none pl-8 pr-10 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer hover:border-primary-400 transition-colors focus:ring-1 focus:ring-primary-500 outline-none"
+                                >
+                                    <option value="all">All Projects</option>
+                                    {projects.map(p => (
+                                        <option key={p._id} value={p._id}>{p.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-primary-500 transition-colors" />
+                            </div>
                         </div>
-                        <span className="text-2xl font-black text-slate-800">{isAdmin ? summaryData?.approvedTimesheets : (leaveBalance?.annual || 0)}</span>
-                    </div>
-                    <div className="mt-4">
-                        <h4 className="text-sm font-bold text-slate-700">{isAdmin ? 'Approved' : 'Annual Leave'}</h4>
-                        <p className="text-xs text-slate-400 font-medium mt-1">{isAdmin ? 'Finalized timesheets' : 'Available balance'}</p>
-                    </div>
-                </div>
 
-                <div
-                    onClick={() => isAdmin ? navigate('/timesheets/manage?status=Submitted') : navigate('/timesheets/history')}
-                    className="card p-5 group hover:border-amber-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer"
-                >
-                    <div className="flex items-start justify-between">
-                        <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <AlertCircle size={20} />
-                        </div>
-                        <span className="text-2xl font-black text-slate-800">{summaryData?.pendingTimesheets || 0}</span>
+                        {selectedProjectId !== 'all' && (
+                            <button
+                                onClick={() => setSelectedProjectId('all')}
+                                className="text-[10px] font-black uppercase tracking-widest text-primary-500 hover:text-primary-600 transition-colors"
+                            >
+                                Clear Filter
+                            </button>
+                        )}
                     </div>
-                    <div className="mt-4">
-                        <h4 className="text-sm font-bold text-slate-700">{isAdmin ? 'Pending Approval' : 'Pending Sheets'}</h4>
-                        <p className="text-xs text-slate-400 font-medium mt-1">Waiting for review</p>
-                    </div>
-                </div>
+                )}
 
-                <div
-                    onClick={(e) => {
-                        if (isAdmin && appVersion === 'basic') {
-                            e.preventDefault()
-                            return toast.error('This feature is available in the Pro version.', { icon: '🔒' })
-                        }
-                        isAdmin ? navigate('/timesheets/compliance') : navigate('/timesheets')
-                    }}
-                    className={clsx(
-                        "card p-5 group hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer",
-                        isAdmin && appVersion === 'basic' ? "opacity-60 grayscale cursor-not-allowed" : "hover:border-rose-500/30"
-                    )}
-                >
-                    <div className="flex items-start justify-between">
-                        <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <XCircle size={20} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div
+                        onClick={() => isAdmin ? navigate('/timesheets/manage?status=Approved') : navigate('/leaves')}
+                        className="card p-5 group hover:border-emerald-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer"
+                    >
+                        <div className="flex items-start justify-between">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <CheckCircle size={20} />
+                            </div>
+                            <span className="text-2xl font-black text-slate-800">{isAdmin ? summaryData?.approvedTimesheets : (leaveBalance?.annual || 0)}</span>
                         </div>
-                        <span className="text-2xl font-black text-slate-800 flex items-center gap-2">
-                            {isAdmin ? summaryData?.notSubmittedCount : summaryData?.rejectedTimesheets}
-                            {isAdmin && appVersion === 'basic' && <Lock size={14} style={{ color: '#9333ea' }} />}
-                        </span>
+                        <div className="mt-4">
+                            <h4 className="text-sm font-bold text-slate-700">{isAdmin ? 'Approved' : 'Annual Leave'}</h4>
+                            <p className="text-xs text-slate-400 font-medium mt-1">{isAdmin ? 'Finalized timesheets' : 'Available balance'}</p>
+                        </div>
                     </div>
-                    <div className="mt-4">
-                        <h4 className="text-sm font-bold text-slate-700">{isAdmin ? 'Not Submitted' : 'Rejected'}</h4>
-                        <p className="text-xs text-slate-400 font-medium mt-1">{isAdmin ? 'Missing from staff' : 'Needs your correction'}</p>
-                    </div>
-                </div>
 
-                <div
-                    onClick={() => isAdmin ? navigate('/employees') : navigate('/leaves')}
-                    className="card p-5 group hover:border-primary-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer"
-                >
-                    <div className="flex items-start justify-between">
-                        <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <CalendarDays size={20} />
+                    <div
+                        onClick={() => isAdmin ? navigate('/timesheets/manage?status=Submitted') : navigate('/timesheets/history')}
+                        className="card p-5 group hover:border-amber-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer"
+                    >
+                        <div className="flex items-start justify-between">
+                            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <AlertCircle size={20} />
+                            </div>
+                            <span className="text-2xl font-black text-slate-800">{summaryData?.pendingTimesheets || 0}</span>
                         </div>
-                        <span className="text-2xl font-black text-slate-800">{isAdmin ? summaryData?.totalEmployees : (leaveBalance?.casual || 0)}</span>
+                        <div className="mt-4">
+                            <h4 className="text-sm font-bold text-slate-700">{isAdmin ? 'Pending Approval' : 'Pending Sheets'}</h4>
+                            <p className="text-xs text-slate-400 font-medium mt-1">Waiting for review</p>
+                        </div>
                     </div>
-                    <div className="mt-4">
-                        <h4 className="text-sm font-bold text-slate-700">{isAdmin ? 'Active Staff' : 'Casual Leave'}</h4>
-                        <p className="text-xs text-slate-400 font-medium mt-1">{isAdmin ? 'System users' : 'Available balance'}</p>
+
+                    <div
+                        onClick={(e) => {
+                            if (isAdmin && appVersion === 'basic') {
+                                e.preventDefault()
+                                return toast.error('This feature is available in the Pro version.', { icon: '🔒' })
+                            }
+                            isAdmin ? navigate('/timesheets/compliance') : navigate('/timesheets')
+                        }}
+                        className={clsx(
+                            "card p-5 group hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer",
+                            isAdmin && appVersion === 'basic' ? "opacity-60 grayscale cursor-not-allowed" : "hover:border-rose-500/30"
+                        )}
+                    >
+                        <div className="flex items-start justify-between">
+                            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <XCircle size={20} />
+                            </div>
+                            <span className="text-2xl font-black text-slate-800 flex items-center gap-2">
+                                {isAdmin ? summaryData?.notSubmittedCount : summaryData?.rejectedTimesheets}
+                                {isAdmin && appVersion === 'basic' && <Lock size={14} style={{ color: '#9333ea' }} />}
+                            </span>
+                        </div>
+                        <div className="mt-4">
+                            <h4 className="text-sm font-bold text-slate-700">{isAdmin ? 'Not Submitted' : 'Rejected'}</h4>
+                            <p className="text-xs text-slate-400 font-medium mt-1">{isAdmin ? 'Missing from staff' : 'Needs your correction'}</p>
+                        </div>
+                    </div>
+
+                    <div
+                        onClick={() => isAdmin ? navigate('/employees') : navigate('/leaves')}
+                        className="card p-5 group hover:border-primary-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer"
+                    >
+                        <div className="flex items-start justify-between">
+                            <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <CalendarDays size={20} />
+                            </div>
+                            <span className="text-2xl font-black text-slate-800">{isAdmin ? summaryData?.totalEmployees : (leaveBalance?.casual || 0)}</span>
+                        </div>
+                        <div className="mt-4">
+                            <h4 className="text-sm font-bold text-slate-700">{isAdmin ? 'Active Staff' : 'Casual Leave'}</h4>
+                            <p className="text-xs text-slate-400 font-medium mt-1">{isAdmin ? 'System users' : 'Available balance'}</p>
+                        </div>
                     </div>
                 </div>
             </motion.section>
@@ -303,12 +361,32 @@ export default function DashboardPage() {
                             <div className="flex items-center justify-between xl:justify-start gap-4 mb-6">
                                 <div>
                                     <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-                                        <Activity size={18} className="text-primary-500" /> Hourly Productivity
+                                        <LucideActivity size={18} className="text-primary-500" /> Hourly Productivity
                                     </h3>
                                     <p className="text-xs font-bold text-slate-400 mt-1">Logged hours this week</p>
                                 </div>
-                                <div className="ml-auto text-right">
-                                    <p className="text-2xl font-black text-slate-800">{loggedHoursThisWeek}h</p>
+
+                                <div className="mx-auto flex items-center gap-4 py-1 px-4 bg-slate-100 rounded-xl shadow-inner border border-slate-200/50">
+                                    <button
+                                        onClick={() => setCurrentWeekStart(prev => subWeeks(prev, 1))}
+                                        className="p-1.5 hover:bg-white rounded-lg transition-colors text-slate-500 hover:text-primary-600"
+                                    >
+                                        <ChevronLeft size={16} />
+                                    </button>
+                                    <div className="flex items-center gap-2 text-xs font-black text-slate-700 whitespace-nowrap uppercase tracking-wider">
+                                        <CalendarDays size={14} className="text-primary-500" />
+                                        {format(currentWeekStart, 'MMM d')} - {format(currentWeekEnd, 'MMM d, yyyy')}
+                                    </div>
+                                    <button
+                                        onClick={() => setCurrentWeekStart(prev => addWeeks(prev, 1))}
+                                        className="p-1.5 hover:bg-white rounded-lg transition-colors text-slate-500 hover:text-primary-600"
+                                    >
+                                        <ChevronRight size={16} />
+                                    </button>
+                                </div>
+
+                                <div className="text-right">
+                                    <p className="text-2xl font-black text-slate-800">{(loggedHoursThisWeek || 0).toFixed(2)}h</p>
                                     <p className="text-[10px] font-black uppercase text-slate-400">Total Week</p>
                                 </div>
                             </div>
@@ -324,7 +402,7 @@ export default function DashboardPage() {
                                         />
                                         <Bar dataKey="hours" radius={[6, 6, 6, 6]} barSize={40}>
                                             {chartData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.hours >= 8 ? '#10b981' : entry.hours > 0 ? '#6366f1' : '#e2e8f0'} />
+                                                <Cell key={`cell-${index}`} fill={entry.hours >= workingHoursPerDay ? '#10b981' : entry.hours > 0 ? '#6366f1' : '#e2e8f0'} />
                                             ))}
                                         </Bar>
                                     </BarChart>
@@ -359,7 +437,7 @@ export default function DashboardPage() {
                                         >
                                             <div className="flex justify-between items-end mb-1">
                                                 <span className="text-sm font-bold text-slate-700 group-hover:text-primary-600 transition-colors">{p.projectName}</span>
-                                                <span className="text-sm font-black text-slate-800">{p.totalHours}h</span>
+                                                <span className="text-sm font-black text-slate-800">{(p.totalHours || 0).toFixed(2)}h</span>
                                             </div>
                                             <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                                                 <div className="h-full bg-gradient-to-r from-primary-400 to-primary-600 rounded-full" style={{ width: `${pct}%` }} />
@@ -440,18 +518,20 @@ export default function DashboardPage() {
                                     </button>
                                 )}
                             </div>
-                            <div className="p-2 space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
+                            <div className="p-2 space-y-1 max-h-[160px] overflow-y-auto custom-scrollbar">
                                 {announcements?.length ? (
-                                    announcements.map(ann => (
-                                        <div
-                                            key={ann._id}
-                                            className="p-3 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors line-clamp-2"
-                                            onClick={() => isAdmin ? navigate('/announcements') : null}
-                                        >
-                                            <p className="text-xs font-bold text-slate-800 mb-1">{ann.title}</p>
-                                            <p className="text-[10px] text-slate-500 font-medium leading-relaxed">{ann.content}</p>
-                                        </div>
-                                    ))
+                                    [...announcements]
+                                        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+                                        .map(ann => (
+                                            <div
+                                                key={ann._id}
+                                                className="p-3 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors"
+                                                onClick={() => isAdmin ? navigate('/announcements') : null}
+                                            >
+                                                <p className="text-xs font-bold text-slate-800 mb-1">{ann.title}</p>
+                                                <p className="text-[10px] text-slate-500 font-medium leading-relaxed line-clamp-2">{ann.content}</p>
+                                            </div>
+                                        ))
                                 ) : (
                                     <p className="p-4 text-xs text-center text-slate-400 font-bold">No recent announcements</p>
                                 )}
@@ -478,7 +558,7 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                                <Activity size={20} className="text-primary-500" /> Recent Activity
+                                <LucideActivity size={20} className="text-primary-500" /> Recent Activity
                             </h3>
                             <p className="text-xs font-bold text-slate-400 mt-1">Latest system-wide events and updates</p>
                         </div>
@@ -489,7 +569,7 @@ export default function DashboardPage() {
                             notifications.map((notif, index) => (
                                 <div key={notif._id} className="flex gap-4 p-4 rounded-2xl bg-slate-50/50 hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100 group">
                                     <div className="w-10 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center flex-shrink-0 text-slate-400 group-hover:text-primary-500 transition-colors">
-                                        <Activity size={16} />
+                                        <LucideActivity size={16} />
                                     </div>
                                     <div className="flex-1">
                                         <p className="text-sm font-bold text-slate-800 mb-0.5">{notif.title}</p>

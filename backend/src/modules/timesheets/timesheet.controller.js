@@ -72,8 +72,8 @@ const timesheetController = {
   }),
 
   getCompliance: asyncHandler(async (req, res) => {
-    const data = await timesheetService.getCompliance(req.query);
-    ApiResponse.success(res, { data });
+    const { data, pagination } = await timesheetService.getCompliance(req.query);
+    ApiResponse.success(res, { data, pagination });
   }),
 
   getAdminSummary: asyncHandler(async (req, res) => {

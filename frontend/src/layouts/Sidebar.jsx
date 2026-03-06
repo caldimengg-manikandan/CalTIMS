@@ -2,7 +2,7 @@ import React from 'react'
 import { NavLink } from 'react-router-dom'
 import {
     LayoutDashboard, Clock, List, CheckSquare, Users, FolderOpen,
-    Megaphone, Calendar, BarChart3, ChevronLeft, ChevronRight,
+    Megaphone, BarChart3, ChevronLeft, ChevronRight,
     Timer, ClipboardList, Settings2, ListTodo, AlertCircle
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
@@ -17,8 +17,8 @@ const navSections = [
     {
         label: 'Timesheets',
         items: [
-            { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'employee'] },
-            { to: '/timesheets', icon: Clock, label: 'Timesheet Entry', roles: ['admin', 'manager', 'employee'] },
+            { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'employee'], end: true },
+            { to: '/timesheets', icon: Clock, label: 'Timesheet Entry', roles: ['admin', 'manager', 'employee'], end: true },
             { to: '/timesheets/history', icon: List, label: 'History', roles: ['admin', 'manager', 'employee'] },
             { to: '/timesheets/manage', icon: CheckSquare, label: 'Manage Timesheets', roles: ['admin', 'manager'] },
             { to: '/timesheets/compliance', icon: AlertCircle, label: 'Compliance & Locks', roles: ['admin', 'manager'], proFeature: true },
@@ -27,9 +27,8 @@ const navSections = [
     {
         label: 'Workspace',
         items: [
-            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', roles: ['employee', 'manager', 'admin'] },
-            { to: '/leaves/manage', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager'] },
-            { to: '/calendar', icon: Calendar, label: 'Calendar', roles: ['admin', 'manager', 'employee'] },
+            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', roles: ['employee', 'manager', 'admin'], proFeature: true, end: true },
+            { to: '/leaves/manage', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager'], proFeature: true },
             { to: '/announcements', icon: Megaphone, label: 'Announcements', roles: ['admin'] },
             { to: '/incidents', icon: AlertCircle, label: 'Help & Support', roles: ['admin', 'manager', 'employee'], proFeature: true },
         ]
@@ -57,7 +56,7 @@ export default function Sidebar() {
     return (
         <aside className={clsx(
             'fixed inset-y-0 left-0 z-40 flex flex-col bg-white dark:bg-black border-r border-slate-100 dark:border-white/10 transition-all duration-300 shadow-[2px_0_24px_0_rgba(var(--color-primary-rgb),0.06)] group/sidebar',
-            sidebarOpen ? 'w-64' : 'w-[68px] hover:w-64 hover:shadow-2xl hover:shadow-primary-500/10'
+            sidebarOpen ? 'w-64 translate-x-0' : 'w-[280px] -translate-x-full md:w-[68px] md:translate-x-0 md:hover:w-64 hover:shadow-2xl hover:shadow-primary-500/10'
         )}>
             {/* ── Logo ─────────────────────────────────────── */}
             <div className={clsx(
@@ -111,6 +110,7 @@ export default function Sidebar() {
                                     <NavLink
                                         key={`${item.to}-${item.label}`}
                                         to={item.to}
+                                        end={item.end}
                                         className={({ isActive }) => clsx(
                                             'group relative flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer',
                                             sidebarOpen ? 'px-3' : 'px-0 justify-center group-hover/sidebar:justify-start group-hover/sidebar:px-3',

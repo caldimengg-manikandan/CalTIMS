@@ -10,6 +10,7 @@ import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import Spinner from '@/components/ui/Spinner'
 import PageHeader from '@/components/ui/PageHeader'
+import Pagination from '@/components/ui/Pagination'
 
 // ─── Type config ──────────────────────────────────────────────────────────────
 const TYPE_CONFIG = {
@@ -257,12 +258,16 @@ export default function AnnouncementsPage() {
     const [editTarget, setEditTarget] = React.useState(null)
     const [deleteTarget, setDeleteTarget] = React.useState(null)
 
+    // Pagination state
+    const [page, setPage] = React.useState(1)
+    const [limit, setLimit] = React.useState(10)
+
     const { data, isLoading } = useQuery({
-        queryKey: ['announcements-admin'],
-        queryFn: () => announcementAPI.getAllAdmin().then(r => r.data.data),
+        queryKey: ['announcements-admin', page, limit],
+        queryFn: () => announcementAPI.getAllAdmin({ page, limit }).then(r => r.data),
     })
 
-    const announcements = data || []
+    const announcements = data?.data || []
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -301,7 +306,7 @@ export default function AnnouncementsPage() {
                     </button>
                 </div>
             ) : (
-                <div className="space-y-3">
+                <div className="max-h-[calc(100vh-320px)] overflow-y-auto pr-2 space-y-3">
                     {announcements.map((ann) => {
                         const cfg = TYPE_CONFIG[ann.type] || TYPE_CONFIG.info
                         const TypeIcon = cfg.icon
@@ -388,6 +393,16 @@ export default function AnnouncementsPage() {
                             </div>
                         )
                     })}
+                    {!isLoading && announcements.length > 0 && (
+                        <Pagination
+                            currentPage={data.pagination.page}
+                            totalPages={data.pagination.totalPages}
+                            totalResults={data.pagination.total}
+                            limit={limit}
+                            onPageChange={setPage}
+                            onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                        />
+                    )}
                 </div>
             )}
         </div>

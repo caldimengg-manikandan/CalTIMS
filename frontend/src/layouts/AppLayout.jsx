@@ -38,19 +38,31 @@ export default function AppLayout() {
             {/* Sidebar */}
             <Sidebar />
 
+            {/* Mobile Sidebar Overlay */}
+            {sidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-slate-900/50 dark:bg-black/50 backdrop-blur-sm z-30 md:hidden"
+                    onClick={() => useUIStore.getState().toggleSidebar()}
+                />
+            )}
+
             {/* Main content */}
             <div className={clsx(
                 'flex flex-col flex-1 overflow-hidden transition-all duration-300',
-                sidebarOpen ? 'ml-64' : 'ml-[68px]'
+                sidebarOpen ? 'md:ml-64' : 'md:ml-[68px]'
             )}>
                 <Navbar />
-                <main className="flex-1 overflow-y-auto p-6 animate-fade-in">
+                <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 animate-fade-in pb-20 md:pb-6 relative w-full">
                     <Outlet />
                 </main>
                 {/* Fixed Footer */}
-                <footer className="py-4 px-6 bg-surface-50 dark:bg-black border-t border-slate-100 dark:border-slate-800 text-center text-sm text-slate-500 dark:text-slate-400 font-medium tracking-wide">
-                    Developed by{' '}
-                    <span className="text-indigo-600 font-bold">Caldim</span>
+                <footer className="py-3 px-6 bg-white dark:bg-black border-t border-slate-100 dark:border-white/10 text-center flex items-center justify-center gap-1.5 flex-shrink-0 z-40">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                        © {new Date().getFullYear()} Developed by
+                    </span>
+                    <span className="text-[11px] font-black text-primary uppercase tracking-widest">
+                        Caldim
+                    </span>
                 </footer>
             </div>
         </div>

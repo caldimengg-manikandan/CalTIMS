@@ -5,14 +5,8 @@ const taskService = require('./task.service');
 class TaskController {
   async getAll(req, res, next) {
     try {
-      const filters = {
-        search: req.query.search,
-        projectId: req.query.projectId,
-        status: req.query.status,
-        isActive: req.query.isActive,
-      };
-      const tasks = await taskService.getAll(filters);
-      res.status(200).json({ success: true, data: tasks });
+      const { data, pagination } = await taskService.getAll(req.query);
+      res.status(200).json({ success: true, data, pagination });
     } catch (error) {
       next(error);
     }

@@ -138,58 +138,64 @@ timesheetSchema.index({ status: 1, weekStartDate: -1 });
 timesheetSchema.index({ weekStartDate: -1 });
 
 // ─── Helper: resolve effective hours for a timesheet entry ───────────────────
-// Rules:
-//   Paid leave (annual/sick/casual, balance > 0) → 8h full day, 4h half-day
-//   LOP (no balance)                             → 0h
-//   Normal work entry                            → hoursWorked as stored
-function resolveEntryHours(entry) {
+function resolveEntryHours(entry, workingHoursPerDay = 8) {
   if (!entry.isLeave) return entry.hoursWorked || 0;
   const lt = (entry.leaveType || '').toLowerCase();
   if (lt === 'lop') return 0;
   if (['annual', 'sick', 'casual'].includes(lt)) {
-    // Respect half-day (4h) vs full day (8h)
+    // Respect half-day vs full day
     const stored = entry.hoursWorked || 0;
-    return stored > 0 ? stored : 8;
+    return stored > 0 ? stored : workingHoursPerDay;
   }
   // Legacy leave entries without a leaveType — trust hoursWorked
   return entry.hoursWorked || 0;
 }
 
 // ─── Pre-save: Calculate totals ──────────────────────────────────────────────
-timesheetSchema.pre('save', function (next) {
-  let grandTotal = 0;
-  const totalsByDay = {}; // Key: YYYY-MM-DD tracking sum per day
+timesheetSchema.pre('save', async function (next) {
+  try {
+    const Settings = mongoose.model('Settings');
+    const settings = await Settings.findOne().lean();
+    const workingHoursPerDay = settings?.general?.workingHoursPerDay || 8;
+    const workingDaysCount = settings?.general?.isWeekendWorkable ? 7 : 5;
+    const targetHours = workingHoursPerDay * workingDaysCount;
 
-  this.rows.forEach(row => {
-    let rowTotal = 0;
-    row.entries.forEach(e => {
-      const hours = resolveEntryHours(e);
+    let grandTotal = 0;
+    const totalsByDay = {}; // Key: YYYY-MM-DD tracking sum per day
 
-      // Group by date string to validate daily total
-      try {
-        const d = new Date(e.date);
-        const dateStr = d.toISOString().split('T')[0];
-        totalsByDay[dateStr] = (totalsByDay[dateStr] || 0) + hours;
-      } catch (err) {
-        // Skip invalid dates; model validation will catch them
-      }
+    this.rows.forEach(row => {
+      let rowTotal = 0;
+      row.entries.forEach(e => {
+        const hours = resolveEntryHours(e, workingHoursPerDay);
 
-      rowTotal += hours;
+        // Group by date string to validate daily total
+        try {
+          const d = new Date(e.date);
+          const dateStr = d.toISOString().split('T')[0];
+          totalsByDay[dateStr] = (totalsByDay[dateStr] || 0) + hours;
+        } catch (err) {
+          // Skip invalid dates
+        }
+
+        rowTotal += hours;
+      });
+      row.totalHours = rowTotal;
+      grandTotal += rowTotal;
     });
-    row.totalHours = rowTotal;
-    grandTotal += rowTotal;
-  });
 
-  // Final validation: Total hours per day cannot exceed 24
-  for (const date in totalsByDay) {
-    if (totalsByDay[date] > 24.001) { // Floating point buffer
-      return next(new Error(`Total hours entered for ${date} (${totalsByDay[date].toFixed(2)}) exceed the 24-hour daily limit.`));
+    // Final validation: Total hours per day cannot exceed 24
+    for (const date in totalsByDay) {
+      if (totalsByDay[date] > 24.001) {
+        throw new Error(`Total hours entered for ${date} (${totalsByDay[date].toFixed(2)}) exceed the 24-hour daily limit.`);
+      }
     }
-  }
 
-  this.totalHours = grandTotal;
-  this.isIncomplete = grandTotal < 40;
-  next();
+    this.totalHours = grandTotal;
+    this.isIncomplete = grandTotal < targetHours;
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
 const Timesheet = mongoose.model('Timesheet', timesheetSchema);

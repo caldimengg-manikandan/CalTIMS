@@ -4,6 +4,7 @@ import { timesheetAPI, projectAPI, settingsAPI } from '@/services/endpoints'
 import { format, startOfWeek, subDays, addDays } from 'date-fns'
 import toast from 'react-hot-toast'
 import PageHeader from '@/components/ui/PageHeader'
+import Pagination from '@/components/ui/Pagination'
 import Spinner from '@/components/ui/Spinner'
 import { Calendar, ChevronLeft, ChevronRight, Edit3, X, Save, AlertTriangle, Search } from 'lucide-react'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -23,11 +24,18 @@ export default function AdminTimesheetCompliancePage() {
     const [rows, setRows] = useState([{ projectId: '', taskType: 'Development', dayHours: Array(7).fill('00:00') }])
     const [searchQuery, setSearchQuery] = useState('')
 
+    // Pagination state
+    const [page, setPage] = useState(1)
+    const [limit, setLimit] = useState(10)
+
     // Queries
-    const { data: complianceData, isLoading } = useQuery({
-        queryKey: ['timesheets', 'compliance', format(weekStart, 'yyyy-MM-dd')],
-        queryFn: () => timesheetAPI.getCompliance({ weekStartDate: format(weekStart, 'yyyy-MM-dd') }).then(r => r.data.data),
+    const { data: complianceRes, isLoading } = useQuery({
+        queryKey: ['timesheets', 'compliance', format(weekStart, 'yyyy-MM-dd'), searchQuery, page, limit],
+        queryFn: () => timesheetAPI.getCompliance({ weekStartDate: format(weekStart, 'yyyy-MM-dd'), search: searchQuery, page, limit }).then(r => r.data),
     })
+
+    const complianceData = complianceRes?.data || []
+    const pagination = complianceRes?.pagination
 
     const { data: projects } = useQuery({
         queryKey: ['projects', 'active'],
@@ -51,16 +59,10 @@ export default function AdminTimesheetCompliancePage() {
         onError: (err) => toast.error(err.response?.data?.message || err.message || 'Failed to fill timesheet')
     })
 
-    const filteredComplianceData = useMemo(() => {
-        if (!complianceData) return []
-        if (!searchQuery.trim()) return complianceData
-
-        const query = searchQuery.toLowerCase().trim()
-        return complianceData.filter(item =>
-            item.user.name.toLowerCase().includes(query) ||
-            (item.user.employeeId && item.user.employeeId.toLowerCase().includes(query))
-        )
-    }, [complianceData, searchQuery])
+    // Reset page when search or week changes
+    React.useEffect(() => {
+        setPage(1)
+    }, [searchQuery, weekStart])
 
     const handleOpenModal = (userItem) => {
         setSelectedUser(userItem.user)
@@ -122,50 +124,62 @@ export default function AdminTimesheetCompliancePage() {
                 {isLoading ? (
                     <div className="p-10 flex justify-center"><Spinner /></div>
                 ) : (
-                    <table className="w-full text-left border-collapse">
-                        <thead className="bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-white text-xs uppercase text-slate-500 font-semibold tracking-wider">
-                            <tr>
-                                <th className="px-6 py-4">Employee</th>
-                                <th className="px-6 py-4">Department</th>
-                                <th className="px-6 py-4">Status</th>
-                                <th className="px-6 py-4">Total Hours</th>
-                                <th className="px-6 py-4">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-white text-sm">
-                            {filteredComplianceData?.map((item) => (
-                                <tr key={item.user._id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
-                                    <td className="px-6 py-4 font-medium">{item.user.name} <span className="text-slate-400 text-xs ml-2">#{item.user.employeeId}</span></td>
-                                    <td className="px-6 py-4 text-slate-600">{item.user.department || '-'}</td>
-                                    <td className="px-6 py-4">
-                                        {item.status === 'missing' && <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs font-bold uppercase">Missing</span>}
-                                        {item.status === 'frozen' && <span className="bg-rose-100 text-rose-700 px-2 py-1 rounded-md text-xs font-bold uppercase flex items-center gap-1 w-max"><AlertTriangle size={12} />Frozen</span>}
-                                        {item.status === 'admin_filled' && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md text-xs font-bold uppercase">Admin Filled</span>}
-                                        {['draft', 'submitted', 'approved', 'rejected'].includes(item.status) && (
-                                            <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md text-xs font-bold uppercase">{item.status}</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 font-semibold">{item.totalHours}h</td>
-                                    <td className="px-6 py-4">
-                                        {['missing', 'frozen'].includes(item.status) && (
-                                            <button
-                                                onClick={() => handleOpenModal(item)}
-                                                className="flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-semibold text-xs bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
-                                            >
-                                                <Edit3 size={14} /> Fill Timesheet
-                                            </button>
-                                        )}
-                                        {item.status === 'admin_filled' && (
-                                            <span className="text-slate-400 text-xs italic">Resolved by Admin</span>
-                                        )}
-                                    </td>
+                    <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-white text-xs uppercase text-slate-500 font-semibold tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-4">Employee</th>
+                                    <th className="px-6 py-4">Department</th>
+                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4">Total Hours</th>
+                                    <th className="px-6 py-4">Action</th>
                                 </tr>
-                            ))}
-                            {filteredComplianceData?.length === 0 && (
-                                <tr><td colSpan={5} className="p-8 text-center text-slate-400">No employees found.</td></tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-white text-sm">
+                                {complianceData?.map((item) => (
+                                    <tr key={item.user._id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
+                                        <td className="px-6 py-4 font-medium">{item.user.name} <span className="text-slate-400 text-xs ml-2">#{item.user.employeeId}</span></td>
+                                        <td className="px-6 py-4 text-slate-600">{item.user.department || '-'}</td>
+                                        <td className="px-6 py-4">
+                                            {item.status === 'missing' && <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs font-bold uppercase">Missing</span>}
+                                            {item.status === 'frozen' && <span className="bg-rose-100 text-rose-700 px-2 py-1 rounded-md text-xs font-bold uppercase flex items-center gap-1 w-max"><AlertTriangle size={12} />Frozen</span>}
+                                            {item.status === 'admin_filled' && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md text-xs font-bold uppercase">Admin Filled</span>}
+                                            {['draft', 'submitted', 'approved', 'rejected'].includes(item.status) && (
+                                                <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md text-xs font-bold uppercase">{item.status}</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 font-semibold">{(item.totalHours || 0).toFixed(2)}h</td>
+                                        <td className="px-6 py-4">
+                                            {['missing', 'frozen'].includes(item.status) && (
+                                                <button
+                                                    onClick={() => handleOpenModal(item)}
+                                                    className="flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-semibold text-xs bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+                                                >
+                                                    <Edit3 size={14} /> Fill Timesheet
+                                                </button>
+                                            )}
+                                            {item.status === 'admin_filled' && (
+                                                <span className="text-slate-400 text-xs italic">Resolved by Admin</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {complianceData?.length === 0 && (
+                                    <tr><td colSpan={5} className="p-8 text-center text-slate-400">No employees found.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+                {!isLoading && complianceData.length > 0 && pagination && (
+                    <Pagination
+                        currentPage={pagination.page}
+                        totalPages={pagination.totalPages}
+                        totalResults={pagination.total}
+                        limit={limit}
+                        onPageChange={setPage}
+                        onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                    />
                 )}
             </div>
 

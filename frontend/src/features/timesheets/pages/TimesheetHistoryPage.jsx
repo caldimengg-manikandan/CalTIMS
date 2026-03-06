@@ -23,6 +23,7 @@ import {
 import TimesheetDetailsModal from '../components/TimesheetDetailsModal'
 import CreateIncidentModal from '@/components/incidents/CreateIncidentModal'
 import PageHeader from '@/components/ui/PageHeader'
+import Pagination from '@/components/ui/Pagination'
 
 const YEARS = ['All Years', '2026', '2025', '2024']
 const MONTHS = [
@@ -39,12 +40,14 @@ export default function TimesheetHistoryPage() {
     const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager'
 
     const [page, setPage] = useState(1)
+    const [limit, setLimit] = useState(10)
     const [filters, setFilters] = useState({
         year: 'All Years',
         month: 'All Months',
         status: 'All Status',
         userId: user?.id
     })
+    const [tempFilters, setTempFilters] = useState(filters)
     const [selectedWeek, setSelectedWeek] = useState(null)
     const [selectedUserId, setSelectedUserId] = useState(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -60,7 +63,7 @@ export default function TimesheetHistoryPage() {
         queryKey: ['timesheets', 'history', page, filters, effectiveSearch],
         queryFn: () => timesheetAPI.getHistory({
             page,
-            limit: 10,
+            limit,
             ...filters,
             search: effectiveSearch
         }).then(r => r.data),
@@ -76,17 +79,18 @@ export default function TimesheetHistoryPage() {
     })
 
     const handleFilterChange = (key, value) => {
-        setFilters(prev => ({ ...prev, [key]: value }))
-        setPage(1)
+        setTempFilters(prev => ({ ...prev, [key]: value }))
     }
 
     const clearFilters = () => {
-        setFilters({
+        const reset = {
             year: 'All Years',
             month: 'All Months',
             status: 'All Status',
             userId: user?.id
-        })
+        }
+        setTempFilters(reset)
+        setFilters(reset)
         setSearch('')
         setPage(1)
     }
@@ -98,9 +102,7 @@ export default function TimesheetHistoryPage() {
     };
 
     const formatHours = (hours) => {
-        const h = Math.floor(hours)
-        const m = Math.round((hours - h) * 60)
-        return `${h}:${String(m).padStart(2, '0')}`
+        return (Number(hours) || 0).toFixed(2)
     }
 
     const resolveStatus = (statuses) => {
@@ -202,7 +204,7 @@ export default function TimesheetHistoryPage() {
                         <Filter size={20} className="text-slate-400" />
                         <h2>Filter Timesheets</h2>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                         <button
                             onClick={clearFilters}
                             className="text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
@@ -210,8 +212,17 @@ export default function TimesheetHistoryPage() {
                             Clear Filters
                         </button>
                         <button
+                            onClick={() => {
+                                setFilters(tempFilters)
+                                setPage(1)
+                            }}
+                            className="flex items-center gap-2 px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all active:scale-95"
+                        >
+                            <Filter size={16} /> Apply Filters
+                        </button>
+                        <button
                             onClick={handleExportCSV}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all active:scale-95"
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold transition-all active:scale-95"
                         >
                             <Download size={16} /> Export CSV
                         </button>
@@ -235,7 +246,7 @@ export default function TimesheetHistoryPage() {
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Year</label>
                         <select
-                            value={filters.year}
+                            value={tempFilters.year}
                             onChange={(e) => handleFilterChange('year', e.target.value)}
                             className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
                         >
@@ -245,7 +256,7 @@ export default function TimesheetHistoryPage() {
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Month</label>
                         <select
-                            value={filters.month}
+                            value={tempFilters.month}
                             onChange={(e) => handleFilterChange('month', e.target.value)}
                             className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
                         >
@@ -255,7 +266,7 @@ export default function TimesheetHistoryPage() {
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Status</label>
                         <select
-                            value={filters.status}
+                            value={tempFilters.status}
                             onChange={(e) => handleFilterChange('status', e.target.value)}
                             className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm capitalize"
                         >
@@ -281,8 +292,8 @@ export default function TimesheetHistoryPage() {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto text-sm">
-                    <table className="w-full">
+                <div className="table-wrapper max-h-container rounded-none border-0 shadow-none text-sm">
+                    <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-50/50 dark:bg-black/50">
                             <tr>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Week</th>
@@ -403,55 +414,15 @@ export default function TimesheetHistoryPage() {
                     </table>
                 </div>
 
-                {/* Pagination */}
-                {data?.pagination && data.pagination.totalPages > 1 && (
-                    <div className="p-6 border-t border-slate-100 dark:border-white flex flex-col md:flex-row items-center justify-between gap-4">
-                        <div className="text-sm text-slate-500">
-                            Showing page <span className="font-semibold text-slate-700 dark:text-white">{data.pagination.page}</span> of <span className="font-semibold text-slate-700 dark:text-white">{data.pagination.totalPages}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={!data.pagination.hasPrevPage}
-                                className="p-2 border border-slate-200 dark:border-white rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <ChevronLeft size={20} />
-                            </button>
-                            <div className="flex items-center gap-1">
-                                {Array.from({ length: Math.min(5, data.pagination.totalPages) }, (_, i) => {
-                                    let pageNum;
-                                    if (data.pagination.totalPages <= 5) {
-                                        pageNum = i + 1;
-                                    } else {
-                                        pageNum = Math.max(1, Math.min(data.pagination.page - 2 + i, data.pagination.totalPages - 4 + i));
-                                    }
-
-                                    if (pageNum > 0 && pageNum <= data.pagination.totalPages) {
-                                        return (
-                                            <button
-                                                key={pageNum}
-                                                onClick={() => setPage(pageNum)}
-                                                className={`w-10 h-10 rounded-lg text-sm font-semibold transition-all ${data.pagination.page === pageNum
-                                                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 rounded-xl'
-                                                    : 'text-slate-600 hover:bg-slate-50 dark:text-white'
-                                                    }`}
-                                            >
-                                                {pageNum}
-                                            </button>
-                                        )
-                                    }
-                                    return null
-                                })}
-                            </div>
-                            <button
-                                onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
-                                disabled={!data.pagination.hasNextPage}
-                                className="p-2 border border-slate-200 dark:border-white rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <ChevronRight size={20} />
-                            </button>
-                        </div>
-                    </div>
+                {!isLoading && data?.data?.length > 0 && (
+                    <Pagination
+                        currentPage={data.pagination.page}
+                        totalPages={data.pagination.totalPages}
+                        totalResults={data.pagination.total}
+                        limit={limit}
+                        onPageChange={setPage}
+                        onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                    />
                 )}
             </div>
 

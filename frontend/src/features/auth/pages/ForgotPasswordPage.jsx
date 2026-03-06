@@ -54,11 +54,11 @@ export default function ForgotPasswordPage() {
                 <div className="space-y-1.5">
                     <label className="label">Work Email</label>
                     <div className="relative">
-                         <input 
-                            {...register('email')} 
-                            type="email" 
-                            className={`input pl-11 ${errors.email ? 'input-error' : ''}`} 
-                            placeholder="name@company.com" 
+                        <input
+                            {...register('email')}
+                            type="email"
+                            className={`input pl-11 ${errors.email ? 'input-error' : ''}`}
+                            placeholder="name@company.com"
                         />
                         <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     </div>

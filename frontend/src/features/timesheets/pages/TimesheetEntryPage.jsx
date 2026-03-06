@@ -247,7 +247,7 @@ export default function TimesheetEntryPage() {
                                 const hours = entry.hoursWorked || 0
                                 const h = Math.floor(hours)
                                 const m = Math.round((hours - h) * 60)
-                                const isFullDay = (hours >= 8) || category.toLowerCase().includes('lop') || entry.leaveType?.toLowerCase() === 'lop';
+                                const isFullDay = (hours >= workingHoursPerDay) || category.toLowerCase().includes('lop') || entry.leaveType?.toLowerCase() === 'lop';
 
                                 leaveMetaArray[i] = { type: category, isApproved: true, isFullDay }
                                 leaveHoursArray[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
@@ -310,7 +310,7 @@ export default function TimesheetEntryPage() {
                 }
 
                 const leaveDays = getWorkingDaysBetween(leave.startDate, leave.endDate)
-                const leaveHours = leave.leaveType.toLowerCase() === 'lop' ? 0 : (leave.isHalfDay ? 4 : 8)
+                const leaveHours = leave.leaveType.toLowerCase() === 'lop' ? 0 : (leave.isHalfDay ? workingHoursPerDay / 2 : workingHoursPerDay)
                 const category = leave.leaveType.charAt(0).toUpperCase() + leave.leaveType.slice(1)
 
                 weekDays.forEach((day, i) => {
@@ -574,9 +574,7 @@ export default function TimesheetEntryPage() {
     }
 
     const formatHours = (total) => {
-        const h = Math.floor(total)
-        const m = Math.round((total - h) * 60)
-        return `${String(h).padStart(2, '0')} : ${String(m).padStart(2, '0')}`
+        return (Number(total) || 0).toFixed(2) + 'h'
     }
 
     const calculateDayTotal = (dayIndex) => {
@@ -702,16 +700,16 @@ export default function TimesheetEntryPage() {
             </div>
 
             <div className="bg-white dark:bg-black rounded-2xl shadow-xl overflow-hidden border border-slate-100 dark:border-white">
-                <div className="p-6 border-b border-slate-100 dark:border-white flex items-center justify-between bg-slate-50/50 dark:bg-black/50">
-                    <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Week Entry</h2>
-                    <div className="flex items-center gap-3">
+                <div className="p-4 md:p-6 border-b border-slate-100 dark:border-white flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-slate-50/50 dark:bg-black/50">
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight shrink-0">Week Entry</h2>
+                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
                         <button
                             onClick={handleAddRow}
                             disabled={isWeekSubmitted}
                             title={isWeekSubmitted ? 'Timesheet already submitted' : 'Add a new project row'}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                            className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none flex-1 lg:flex-none justify-center"
                         >
-                            <Plus size={16} /> ADD PROJECT
+                            <Plus size={16} /> <span className="hidden sm:inline">ADD PROJECT</span><span className="sm:hidden">PROJECT</span>
                         </button>
                         <button
                             onClick={handleAddPermission}
@@ -723,17 +721,17 @@ export default function TimesheetEntryPage() {
                                         ? 'Only one permission row allowed'
                                         : `Add a permission row (Limit: ${tsSettings?.permissionMaxHoursPerDay || 4}h/day${tsSettings?.permissionMaxDaysPerWeek > 0 ? `, ${tsSettings.permissionMaxDaysPerWeek} days/week` : ''})`
                             }
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                            className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none flex-1 lg:flex-none justify-center"
                         >
-                            <Plus size={16} /> ADD PERMISSION
+                            <Plus size={16} /> <span className="hidden sm:inline">ADD PERMISSION</span><span className="sm:hidden">PERM</span>
                         </button>
                         <button
                             onClick={() => bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))}
                             disabled={bulkSaveMutation.isPending || isWeekSubmitted}
-                            className="flex items-center gap-2 px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg text-sm font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-1 lg:flex-none justify-center"
                         >
                             {bulkSaveMutation.isPending ? <Spinner size="sm" /> : <Save size={16} />}
-                            SAVE DRAFT
+                            <span className="hidden sm:inline">SAVE DRAFT</span><span className="sm:hidden">SAVE</span>
                         </button>
                     </div>
                 </div>
@@ -1024,21 +1022,21 @@ export default function TimesheetEntryPage() {
                 </div>
             </div>
 
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 px-2">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-6 px-2 mt-4">
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
                         <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
                         <span>Daily Limit: <strong>{workingHoursPerDay} hrs</strong></span>
                     </div>
                     {tsSettings?.permissionMaxHoursPerDay > 0 && (
-                        <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium text-slate-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
                             <span>Permission: <strong>{tsSettings.permissionMaxHoursPerDay} hrs/day</strong></span>
                             {tsSettings.permissionMaxDaysPerWeek > 0 && (
-                                <span className="ml-1 opacity-70">({tsSettings.permissionMaxDaysPerWeek} days/week max)</span>
+                                <span className="opacity-70 whitespace-nowrap">({tsSettings.permissionMaxDaysPerWeek} d/week max)</span>
                             )}
                             {tsSettings.permissionMaxDaysPerMonth > 0 && (
-                                <span className="ml-1 opacity-70"> / ({tsSettings.permissionMaxDaysPerMonth} days/month max)</span>
+                                <span className="opacity-70 whitespace-nowrap">/ ({tsSettings.permissionMaxDaysPerMonth} d/month max)</span>
                             )}
                         </div>
                     )}
@@ -1048,7 +1046,7 @@ export default function TimesheetEntryPage() {
                     onClick={() => submitWeekMutation.mutate()}
                     disabled={submitWeekMutation.isPending || (totalWeekHours === 0 && holidays.size === 0 && !rows.some(r => r.isLeaveRow)) || isWeekSubmitted}
                     title={isWeekSubmitted ? 'This week has already been submitted' : ''}
-                    className="flex items-center gap-3 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:pointer-events-none"
+                    className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:pointer-events-none"
                 >
                     {submitWeekMutation.isPending ? (
                         <Spinner size="sm" className="text-white" />

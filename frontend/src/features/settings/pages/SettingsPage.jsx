@@ -904,7 +904,7 @@ function GeneralTab() {
                             <p className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                 Pro Enterprise Mode
                             </p>
-                            <p className="text-xs text-slate-400 mt-0.5">Enables Compliance, Reports, and Incident support</p>
+                            <p className="text-xs text-slate-400 mt-0.5">Enables Compliance, Reports, Incident support, Leave Tracker, and Leave Management</p>
                         </div>
                         <button
                             onClick={handleToggleTier}

@@ -50,7 +50,7 @@ export default function LoginPage() {
             const { accessToken, refreshToken, user } = res.data.data
             setAuth(user, accessToken, refreshToken)
             toast.success(`Welcome back, ${user.name.split(' ')[0]}!`)
-            navigate('/dashboard')
+            navigate('/dashboard', { replace: true })
         },
         onError: (err) => {
             const message = err.response?.data?.message || 'Invalid email or password'

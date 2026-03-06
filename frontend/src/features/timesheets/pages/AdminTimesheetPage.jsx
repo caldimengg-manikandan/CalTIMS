@@ -13,6 +13,7 @@ import {
 import toast from 'react-hot-toast'
 import PageHeader from '@/components/ui/PageHeader'
 import TimesheetDetailsModal from '../components/TimesheetDetailsModal'
+import Pagination from '@/components/ui/Pagination'
 
 /* ─── Shared Modal Shell ─────────────────────────────────────── */
 function Modal({ open, onClose, maxWidth = 'max-w-md', children }) {
@@ -86,9 +87,7 @@ function RejectModal({ ts, onReject, onClose }) {
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 const formatDuration = (totalHours) => {
-    const h = Math.floor(Number(totalHours) || 0)
-    const m = Math.round(((Number(totalHours) || 0) - h) * 60)
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    return (Number(totalHours) || 0).toFixed(2)
 }
 
 const formatWeek = (weekStartDate) => {
@@ -123,6 +122,7 @@ export default function AdminTimesheetPage() {
         page: 1,
         limit: 10
     })
+    const [tempFilters, setTempFilters] = React.useState(filters)
 
     /* ── Queries ── */
     const { data: stats } = useQuery({
@@ -257,7 +257,7 @@ export default function AdminTimesheetPage() {
                     { title: 'Approved', value: stats?.approved || 0, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
                     { title: 'Rejected', value: stats?.rejected || 0, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
                     { title: 'Users', value: stats?.totalEmployees || 0, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20' },
-                    { title: 'Hours', value: formatDuration(stats?.totalHours || 0), icon: Clock, color: 'text-pink-500', bg: 'bg-pink-50 dark:bg-pink-900/20' },
+                    { title: 'Hours', value: formatDuration(stats?.totalHours || 0) + 'h', icon: Clock, color: 'text-pink-500', bg: 'bg-pink-50 dark:bg-pink-900/20' },
                 ].map((st) => (
                     <div key={st.title} className="card p-4 flex items-center gap-3">
                         <div className={`p-2.5 rounded-xl ${st.bg} ${st.color} shrink-0`}><st.icon size={18} /></div>
@@ -283,11 +283,14 @@ export default function AdminTimesheetPage() {
                             onChange={(e) => { setSearch(e.target.value); setFilters(f => ({ ...f, page: 1 })) }}
                         />
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                         {/* Filter Button */}
                         <div className="relative">
                             <button
-                                onClick={() => setShowFilters(p => !p)}
+                                onClick={() => {
+                                    if (!showFilters) setTempFilters(filters)
+                                    setShowFilters(p => !p)
+                                }}
                                 className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showFilters || activeFilterCount > 0
                                     ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
                                     : 'border-slate-200 dark:border-[#333333] midnight:border-[#1a1a1a] text-slate-600 dark:text-[#e2e2e9] midnight:text-[#a0a0a5] hover:bg-slate-50 dark:hover:bg-[#111111] midnight:hover:bg-[#0a0a0a]'}`}
@@ -321,8 +324,12 @@ export default function AdminTimesheetPage() {
                                         <div className="flex items-center justify-between">
                                             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Filter By</span>
                                             {activeFilterCount > 0 && (
-                                                <button onClick={() => { resetFilters(); setShowFilters(false) }}
-                                                    className="text-xs text-primary-600 hover:text-primary-700 font-medium">
+                                                <button onClick={() => {
+                                                    const reset = { ...filters, employeeId: '', userId: '', status: '', projectId: '', year: '', week: '', page: 1 }
+                                                    setTempFilters(reset)
+                                                    setFilters(reset)
+                                                }}
+                                                    className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase tracking-wider">
                                                     Reset All
                                                 </button>
                                             )}
@@ -334,8 +341,8 @@ export default function AdminTimesheetPage() {
                                                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Employee ID</label>
                                                 <select
                                                     className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 cursor-pointer font-medium"
-                                                    value={filters.userId}
-                                                    onChange={e => setFilters(f => ({ ...f, userId: e.target.value, page: 1 }))}
+                                                    value={tempFilters.userId}
+                                                    onChange={e => setTempFilters(f => ({ ...f, userId: e.target.value }))}
                                                 >
                                                     <option value="">All Employees</option>
                                                     {employees?.map(emp => (
@@ -351,8 +358,8 @@ export default function AdminTimesheetPage() {
                                                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Project</label>
                                                 <select
                                                     className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 cursor-pointer font-medium"
-                                                    value={filters.projectId}
-                                                    onChange={e => setFilters(f => ({ ...f, projectId: e.target.value, page: 1 }))}
+                                                    value={tempFilters.projectId}
+                                                    onChange={e => setTempFilters(f => ({ ...f, projectId: e.target.value }))}
                                                 >
                                                     <option value="">All Projects</option>
                                                     {projects?.map(p => (
@@ -367,8 +374,8 @@ export default function AdminTimesheetPage() {
                                                     <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status</label>
                                                     <select
                                                         className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 cursor-pointer font-medium"
-                                                        value={filters.status}
-                                                        onChange={e => setFilters(f => ({ ...f, status: e.target.value, page: 1 }))}
+                                                        value={tempFilters.status}
+                                                        onChange={e => setTempFilters(f => ({ ...f, status: e.target.value }))}
                                                     >
                                                         <option value="">All Status</option>
                                                         <option value="submitted">Pending</option>
@@ -380,8 +387,8 @@ export default function AdminTimesheetPage() {
                                                     <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Year</label>
                                                     <select
                                                         className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 cursor-pointer font-medium"
-                                                        value={filters.year}
-                                                        onChange={e => setFilters(f => ({ ...f, year: e.target.value, page: 1 }))}
+                                                        value={tempFilters.year}
+                                                        onChange={e => setTempFilters(f => ({ ...f, year: e.target.value }))}
                                                     >
                                                         <option value="">All Years</option>
                                                         {filterOptions?.years?.map(y => (
@@ -396,12 +403,12 @@ export default function AdminTimesheetPage() {
                                                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Week</label>
                                                 <select
                                                     className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 cursor-pointer font-medium"
-                                                    value={filters.week}
-                                                    onChange={e => setFilters(f => ({ ...f, week: e.target.value, page: 1 }))}
+                                                    value={tempFilters.week}
+                                                    onChange={e => setTempFilters(f => ({ ...f, week: e.target.value }))}
                                                 >
                                                     <option value="">All Weeks</option>
                                                     {filterOptions?.weeks?.map(w => (
-                                                        <option key={w} value={w}>{w}</option>
+                                                        <option key={w} value={w}>{formatWeek(w)}</option>
                                                     ))}
                                                 </select>
                                             </div>
@@ -409,13 +416,16 @@ export default function AdminTimesheetPage() {
 
                                         <div className="flex gap-3 pt-2">
                                             <button
-                                                onClick={() => { resetFilters(); setShowFilters(false) }}
+                                                onClick={() => setTempFilters({ ...filters, employeeId: '', userId: '', status: '', projectId: '', year: '', week: '', page: 1 })}
                                                 className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 dark:bg-[#111111] midnight:bg-[#0a0a0a] dark:text-[#e2e2e9] text-slate-600 midnight:text-[#a0a0a5] rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
                                             >
                                                 Clear
                                             </button>
                                             <button
-                                                onClick={() => setShowFilters(false)}
+                                                onClick={() => {
+                                                    setFilters({ ...tempFilters, page: 1 })
+                                                    setShowFilters(false)
+                                                }}
                                                 className="flex-[2] h-11 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]"
                                             >
                                                 Apply Filters
@@ -438,8 +448,8 @@ export default function AdminTimesheetPage() {
                 {isLoading ? (
                     <div className="py-20 flex justify-center"><Spinner size="lg" /></div>
                 ) : (
-                    <div className="table-wrapper rounded-none border-0 shadow-none">
-                        <table className="w-full">
+                    <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
+                        <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr>
                                     <th>Employee</th>
@@ -495,7 +505,7 @@ export default function AdminTimesheetPage() {
                                                 </td>
                                                 <td className="text-center">
                                                     <span className="font-bold text-slate-800 dark:text-white font-mono text-sm">
-                                                        {formatDuration(ts.totalHours)}
+                                                        {formatDuration(ts.totalHours)}h
                                                     </span>
                                                 </td>
                                                 <td className="text-center">
@@ -553,49 +563,15 @@ export default function AdminTimesheetPage() {
                     </div>
                 )}
 
-                {/* Pagination */}
-                {listData?.pagination && listData.pagination.pages > 1 && (
-                    <div className="px-6 py-4 border-t border-slate-100 dark:border-[#333333] midnight:border-[#1a1a1a] flex items-center justify-between">
-                        <p className="text-xs text-slate-500">
-                            Showing <span className="font-bold text-slate-700 dark:text-white">
-                                {Math.min(listData.pagination.total, (filters.page - 1) * filters.limit + 1)}
-                            </span> – <span className="font-bold text-slate-700 dark:text-white">
-                                {Math.min(listData.pagination.total, filters.page * filters.limit)}
-                            </span> of <span className="font-bold text-slate-700 dark:text-white">
-                                {listData.pagination.total}
-                            </span>
-                        </p>
-                        <div className="flex items-center gap-1.5">
-                            <button
-                                onClick={() => handlePageChange(filters.page - 1)}
-                                disabled={filters.page === 1}
-                                className="p-1.5 rounded-lg border border-slate-200 dark:border-[#333333] midnight:border-[#1a1a1a] text-slate-500 hover:bg-slate-50 dark:hover:bg-[#111111] midnight:hover:bg-[#0a0a0a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <ChevronLeft size={15} />
-                            </button>
-                            {[...Array(Math.min(listData.pagination.pages, 7))].map((_, i) => {
-                                const page = i + 1
-                                return (
-                                    <button
-                                        key={page}
-                                        onClick={() => handlePageChange(page)}
-                                        className={`w-8 h-8 text-xs font-bold rounded-lg transition-colors ${filters.page === page
-                                            ? 'bg-primary-600 text-white shadow-sm'
-                                            : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-                                    >
-                                        {page}
-                                    </button>
-                                )
-                            })}
-                            <button
-                                onClick={() => handlePageChange(filters.page + 1)}
-                                disabled={filters.page === listData.pagination.pages}
-                                className="p-1.5 rounded-lg border border-slate-200 dark:border-[#333333] midnight:border-[#1a1a1a] text-slate-500 hover:bg-slate-50 dark:hover:bg-[#111111] midnight:hover:bg-[#0a0a0a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <ChevronRight size={15} />
-                            </button>
-                        </div>
-                    </div>
+                {!isLoading && listData?.data?.length > 0 && (
+                    <Pagination
+                        currentPage={listData.pagination.page}
+                        totalPages={listData.pagination.pages}
+                        totalResults={listData.pagination.total}
+                        limit={filters.limit}
+                        onPageChange={(p) => setFilters(f => ({ ...f, page: p }))}
+                        onLimitChange={(l) => setFilters(f => ({ ...f, limit: l, page: 1 }))}
+                    />
                 )}
             </div>
 

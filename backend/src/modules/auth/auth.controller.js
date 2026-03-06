@@ -3,6 +3,7 @@
 const asyncHandler = require('../../shared/utils/asyncHandler');
 const ApiResponse = require('../../shared/utils/apiResponse');
 const { authService } = require('./auth.service');
+const emailService = require('../../shared/services/email.service');
 
 const authController = {
   login: asyncHandler(async (req, res) => {
@@ -31,8 +32,8 @@ const authController = {
 
   forgotPassword: asyncHandler(async (req, res) => {
     const { resetToken, user } = await authService.forgotPassword(req.body.email);
-    // TODO: Send email with reset link
-    // await emailService.sendPasswordReset(user.email, resetToken);
+    // Send email with reset link
+    await emailService.sendPasswordReset(user.email, user.name, resetToken);
     ApiResponse.success(res, { message: 'Password reset link sent to your email' });
   }),
 

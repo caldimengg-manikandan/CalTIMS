@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import Pagination from '@/components/ui/Pagination'
 
 const INITIAL_FORM = {
     name: '', email: '', password: '', role: 'employee',
@@ -129,6 +130,11 @@ export default function EmployeesPage() {
     const [department, setDepartment] = useState('')
     const [selectedEmpId, setSelectedEmpId] = useState('')
     const [showFilters, setShowFilters] = useState(false)
+    const [tempFilters, setTempFilters] = useState({ role: '', status: '', department: '', employeeId: '' })
+
+    // Pagination state
+    const [page, setPage] = useState(1)
+    const [limit, setLimit] = useState(10)
 
     // Modal states
     const [addOpen, setAddOpen] = useState(false)
@@ -144,6 +150,7 @@ export default function EmployeesPage() {
     const queryClient = useQueryClient()
     const invalidate = () => queryClient.invalidateQueries({ queryKey: ['users'] })
 
+
     const { data: depts } = useQuery({
         queryKey: ['departments'],
         queryFn: () => userAPI.getDepartments().then(r => r.data.data),
@@ -156,9 +163,14 @@ export default function EmployeesPage() {
 
     const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''
 
+    // Reset page when filters change
+    React.useEffect(() => {
+        setPage(1)
+    }, [effectiveSearch, role, status, department, selectedEmpId])
+
     const { data, isLoading } = useQuery({
-        queryKey: ['users', { search: effectiveSearch, role, status, department, employeeId: selectedEmpId }],
-        queryFn: () => userAPI.getAll({ search: effectiveSearch, role, status, department, employeeId: selectedEmpId }).then(r => r.data),
+        queryKey: ['users', { search: effectiveSearch, role, status, department, employeeId: selectedEmpId, page, limit }],
+        queryFn: () => userAPI.getAll({ search: effectiveSearch, role, status, department, employeeId: selectedEmpId, page, limit }).then(r => r.data),
     })
 
     const activeFilterCount = [role, status, department, selectedEmpId].filter(Boolean).length
@@ -291,11 +303,14 @@ export default function EmployeesPage() {
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                         {/* Filters */}
                         <div className="relative">
                             <button
-                                onClick={() => setShowFilters(p => !p)}
+                                onClick={() => {
+                                    if (!showFilters) setTempFilters({ role, status, department, employeeId: selectedEmpId })
+                                    setShowFilters(p => !p)
+                                }}
                                 className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showFilters || activeFilterCount > 0
                                     ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
                                     : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -314,7 +329,10 @@ export default function EmployeesPage() {
                             {/* Quick Clear in Toolbar */}
                             {activeFilterCount > 0 && !showFilters && (
                                 <button
-                                    onClick={() => { setRole(''); setStatus(''); setDepartment(''); setSelectedEmpId('') }}
+                                    onClick={() => {
+                                        setRole(''); setStatus(''); setDepartment(''); setSelectedEmpId('')
+                                        setTempFilters({ role: '', status: '', department: '', selectedEmpId: '' })
+                                    }}
                                     className="px-2 h-9 text-xs font-semibold text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
                                     title="Clear all filters"
                                 >
@@ -330,8 +348,15 @@ export default function EmployeesPage() {
                                             <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.1em]">Filter By</span>
                                             {activeFilterCount > 0 && (
                                                 <button
-                                                    onClick={() => { setRole(''); setStatus(''); setDepartment(''); setSelectedEmpId(''); setShowFilters(false) }}
-                                                    className="text-xs text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                                                    onClick={() => {
+                                                        const reset = { role: '', status: '', department: '', selectedEmpId: '' }
+                                                        setTempFilters(reset)
+                                                        setRole('')
+                                                        setStatus('')
+                                                        setDepartment('')
+                                                        setSelectedEmpId('')
+                                                    }}
+                                                    className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase tracking-wider"
                                                 >
                                                     Reset All
                                                 </button>
@@ -343,8 +368,8 @@ export default function EmployeesPage() {
                                                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Employee ID</label>
                                                 <select
                                                     className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer font-medium"
-                                                    value={selectedEmpId}
-                                                    onChange={(e) => setSelectedEmpId(e.target.value)}
+                                                    value={tempFilters.employeeId}
+                                                    onChange={(e) => setTempFilters(p => ({ ...p, employeeId: e.target.value }))}
                                                 >
                                                     <option value="">Select Employee ID</option>
                                                     {allEmployees?.map(emp => (
@@ -359,8 +384,8 @@ export default function EmployeesPage() {
                                                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Department</label>
                                                 <select
                                                     className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer font-medium"
-                                                    value={department}
-                                                    onChange={(e) => setDepartment(e.target.value)}
+                                                    value={tempFilters.department}
+                                                    onChange={(e) => setTempFilters(p => ({ ...p, department: e.target.value }))}
                                                 >
                                                     <option value="">All Departments</option>
                                                     {depts?.map(d => (
@@ -374,8 +399,8 @@ export default function EmployeesPage() {
                                                     <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Role</label>
                                                     <select
                                                         className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer font-medium"
-                                                        value={role}
-                                                        onChange={(e) => setRole(e.target.value)}
+                                                        value={tempFilters.role}
+                                                        onChange={(e) => setTempFilters(p => ({ ...p, role: e.target.value }))}
                                                     >
                                                         <option value="">All Roles</option>
                                                         <option value="admin">Admin</option>
@@ -388,8 +413,8 @@ export default function EmployeesPage() {
                                                     <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status</label>
                                                     <select
                                                         className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer font-medium"
-                                                        value={status}
-                                                        onChange={(e) => setStatus(e.target.value)}
+                                                        value={tempFilters.status}
+                                                        onChange={(e) => setTempFilters(p => ({ ...p, status: e.target.value }))}
                                                     >
                                                         <option value="">All Status</option>
                                                         <option value="active">Active</option>
@@ -401,13 +426,19 @@ export default function EmployeesPage() {
 
                                         <div className="flex gap-3 pt-2">
                                             <button
-                                                onClick={() => { setRole(''); setStatus(''); setDepartment(''); setSelectedEmpId(''); setShowFilters(false) }}
+                                                onClick={() => setTempFilters({ role: '', status: '', department: '', employeeId: '' })}
                                                 className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
                                             >
                                                 Clear
                                             </button>
                                             <button
-                                                onClick={() => setShowFilters(false)}
+                                                onClick={() => {
+                                                    setRole(tempFilters.role)
+                                                    setStatus(tempFilters.status)
+                                                    setDepartment(tempFilters.department)
+                                                    setSelectedEmpId(tempFilters.employeeId)
+                                                    setShowFilters(false)
+                                                }}
                                                 className="flex-[2] h-11 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]"
                                             >
                                                 Apply Filters
@@ -436,7 +467,7 @@ export default function EmployeesPage() {
                 {isLoading ? (
                     <div className="py-20 flex justify-center"><Spinner size="lg" /></div>
                 ) : (
-                    <div className="table-wrapper rounded-none border-0 shadow-none">
+                    <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
                         <table className="w-full">
                             <thead>
                                 <tr>
@@ -516,6 +547,16 @@ export default function EmployeesPage() {
                                 <Search size={40} className="mx-auto text-slate-200 mb-3" />
                                 <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No employees found</p>
                             </div>
+                        )}
+                        {!isLoading && data?.data?.length > 0 && (
+                            <Pagination
+                                currentPage={data.pagination.page}
+                                totalPages={data.pagination.totalPages}
+                                totalResults={data.pagination.total}
+                                limit={limit}
+                                onPageChange={setPage}
+                                onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                            />
                         )}
                     </div>
                 )}

@@ -20,13 +20,53 @@ const typeIcons = {
     incident_resolved: { icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
 }
 
-function NotificationItem({ notif, onRead }) {
+function NotificationItem({ notif, onRead, onClose }) {
     const meta = typeIcons[notif.type] || { icon: AlertCircle, color: 'text-slate-400', bg: 'bg-slate-50' }
     const Icon = meta.icon
+    const navigate = useNavigate()
+
+    const handleClick = () => {
+        // Mark as read if not already
+        if (!notif.isRead) {
+            onRead(notif._id)
+        }
+
+        // Navigate based on type
+        switch (notif.type) {
+            case 'leave_applied':
+            case 'leave_approved':
+            case 'leave_rejected':
+            case 'leave_cancelled':
+                navigate('/leaves')
+                break
+            case 'timesheet_submitted':
+                navigate('/timesheets/manage')
+                break
+            case 'timesheet_approved':
+            case 'timesheet_rejected':
+                navigate('/timesheets/history')
+                break
+            case 'incident_created':
+            case 'incident_updated':
+            case 'incident_response':
+            case 'incident_resolved':
+                if (notif.refId) {
+                    navigate(`/incidents/${notif.refId}`)
+                } else {
+                    navigate('/incidents')
+                }
+                break
+            default:
+                break
+        }
+
+        // Close the dropdown
+        onClose()
+    }
 
     return (
         <div
-            onClick={() => !notif.isRead && onRead(notif._id)}
+            onClick={handleClick}
             className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-white dark:hover:text-black transition-colors border-b border-slate-50 dark:border-white/50 last:border-0 ${!notif.isRead ? 'bg-primary-50/40 dark:bg-black' : ''}`}
         >
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${meta.bg}`}>

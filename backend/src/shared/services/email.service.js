@@ -138,6 +138,38 @@ function buildEmailHTML({ timesheets, reportTitle, companyName, generatedAt }) {
 </html>`;
 }
 
+// ── Reset Password Email Builder ───────────────────────────────────────────
+function buildResetPasswordHTML({ resetLink, name, companyName }) {
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Reset Your Password</title></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:550px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+    <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px 40px;text-align:center">
+      <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800">${companyName}</h1>
+    </div>
+    <div style="padding:40px;text-align:center">
+      <h2 style="margin:0 0 16px;color:#1e293b;font-size:20px;font-weight:700">Password Reset Request</h2>
+      <p style="margin:0 0 24px;color:#64748b;font-size:15px;line-height:1.6">
+        Hello ${name},<br>
+        We received a request to reset your password. Click the button below to choose a new one. This link will expire in 10 minutes.
+      </p>
+      <a href="${resetLink}" style="display:inline-block;background:#6366f1;color:#fff;padding:14px 40px;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none;box-shadow:0 4px 12px rgba(99,102,241,0.3)">
+        Reset Password
+      </a>
+      <p style="margin:24px 0 0;color:#94a3b8;font-size:13px">
+        If you didn't request this, you can safely ignore this email.
+      </p>
+    </div>
+    <div style="padding:20px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center">
+      <p style="margin:0;font-size:11px;color:#94a3b8">${companyName} &mdash; Account Security</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 const emailService = {
   /**
@@ -159,6 +191,29 @@ const emailService = {
     });
 
     return { sent: recipientEmails.length, reportTitle: data.reportTitle };
+  },
+
+  /**
+   * Send password reset email
+   */
+  async sendPasswordReset(userEmail, userName, resetToken, companyName = 'CALTIMS') {
+    const transporter = createTransporter();
+    const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
+    
+    const html = buildResetPasswordHTML({
+      resetLink,
+      name: userName,
+      companyName
+    });
+
+    await transporter.sendMail({
+      from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+      to: userEmail,
+      subject: `[${companyName}] Password Reset Request`,
+      html,
+    });
+
+    return true;
   },
 
   /**

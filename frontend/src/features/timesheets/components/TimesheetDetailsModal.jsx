@@ -23,9 +23,7 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
     })
 
     const formatHours = (hours) => {
-        const h = Math.floor(hours)
-        const m = Math.round((hours - h) * 60)
-        return `${h}:${String(m).padStart(2, '0')}`
+        return (Number(hours) || 0).toFixed(2)
     }
 
     const safeFormat = (date, formatStr) => {
@@ -104,7 +102,7 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
                                                 : 'bg-white dark:bg-black border-slate-100 dark:border-white text-slate-400'
                                                 }`}>
                                                 <div className="text-xs font-bold leading-none mb-0.5">{safeFormat(entry.date, 'd')}</div>
-                                                <div className="text-[10px] opacity-90">{entry.hoursWorked}h</div>
+                                                <div className="text-[10px] opacity-90">{(entry.hoursWorked || 0).toFixed(2)}h</div>
                                             </div>
                                         </div>
                                     ))}
@@ -137,12 +135,12 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
 
                     {/* Rejection Reason if any */}
                     {timesheets.data[0].rejectionReason && (
-                        <div className="p-4 bg-rose-50 dark:bg-black border border-rose-100 dark:border-white/20 rounded-xl flex gap-3">
+                        <div className="p-4 bg-rose-50/50 dark:bg-rose-900/10 rounded-2xl border border-rose-100 dark:border-rose-900/20 shadow-sm flex gap-3">
                             <AlertCircle className="text-rose-500 shrink-0" size={20} />
                             <div>
-                                <h5 className="text-sm font-bold text-rose-800 dark:text-white">Rejection Feedback</h5>
-                                <p className="text-sm text-rose-600 dark:text-white mt-1">
-                                    {timesheets.data[0].rejectionReason}
+                                <h5 className="text-[10px] text-rose-600 dark:text-rose-400 uppercase tracking-widest font-bold">Rejection Feedback</h5>
+                                <p className="text-sm text-rose-700 dark:text-rose-200 leading-relaxed font-medium italic break-words whitespace-pre-wrap mt-1">
+                                    "{timesheets.data[0].rejectionReason}"
                                 </p>
                             </div>
                         </div>

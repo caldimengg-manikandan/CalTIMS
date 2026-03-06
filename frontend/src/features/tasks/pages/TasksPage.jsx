@@ -166,12 +166,18 @@ function TaskForm({ formId, formData, onChange, onSubmit, projects = [] }) {
 
 /* ─── Main Page ──────────────────────────────────────────────── */
 import PageHeader from '@/components/ui/PageHeader'
+import Pagination from '@/components/ui/Pagination'
 
 export default function TasksPage() {
     const [search, setSearch] = React.useState('')
     const [projectId, setProjectId] = React.useState('')
     const [status, setStatus] = React.useState('')
     const [showFilters, setShowFilters] = React.useState(false)
+    const [tempFilters, setTempFilters] = React.useState({ projectId: '', status: '' })
+
+    // Pagination state
+    const [page, setPage] = React.useState(1)
+    const [limit, setLimit] = React.useState(10)
 
     // Modal states
     const [addOpen, setAddOpen] = React.useState(false)
@@ -194,10 +200,17 @@ export default function TasksPage() {
         queryFn: () => projectAPI.getAll({ limit: 1000 }).then(r => r.data.data),
     })
 
+    const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''
+
     const { data, isLoading } = useQuery({
-        queryKey: ['tasks', { search, projectId, status }],
-        queryFn: () => taskAPI.getAll({ search, projectId, status }).then(r => r.data),
+        queryKey: ['tasks', { search: effectiveSearch, projectId, status, page, limit }],
+        queryFn: () => taskAPI.getAll({ search: effectiveSearch, projectId, status, page, limit }).then(r => r.data),
     })
+
+    // Reset page when filters change
+    React.useEffect(() => {
+        setPage(1)
+    }, [effectiveSearch, projectId, status])
 
     const activeFilterCount = [projectId, status].filter(Boolean).length
 
@@ -329,11 +342,14 @@ export default function TasksPage() {
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                         {/* Filters */}
                         <div className="relative">
                             <button
-                                onClick={() => setShowFilters(p => !p)}
+                                onClick={() => {
+                                    if (!showFilters) setTempFilters({ projectId, status })
+                                    setShowFilters(p => !p)
+                                }}
                                 className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showFilters || activeFilterCount > 0
                                     ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
                                     : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -349,6 +365,21 @@ export default function TasksPage() {
                                 <ChevronDown size={14} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
                             </button>
 
+                            {/* Quick Clear */}
+                            {activeFilterCount > 0 && !showFilters && (
+                                <button
+                                    onClick={() => {
+                                        setProjectId('')
+                                        setStatus('')
+                                        setTempFilters({ projectId: '', status: '' })
+                                    }}
+                                    className="px-2 h-9 text-xs font-semibold text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
+                                    title="Clear all filters"
+                                >
+                                    <X size={14} /> Clear
+                                </button>
+                            )}
+
                             {showFilters && (
                                 <>
                                     <div className="fixed inset-0 z-20" onClick={() => setShowFilters(false)} />
@@ -357,8 +388,13 @@ export default function TasksPage() {
                                             <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.1em]">Filter By</span>
                                             {activeFilterCount > 0 && (
                                                 <button
-                                                    onClick={() => { setProjectId(''); setStatus(''); setShowFilters(false) }}
-                                                    className="text-xs text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                                                    onClick={() => {
+                                                        const reset = { projectId: '', status: '' }
+                                                        setTempFilters(reset)
+                                                        setProjectId('')
+                                                        setStatus('')
+                                                    }}
+                                                    className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase tracking-wider transition-colors"
                                                 >
                                                     Reset All
                                                 </button>
@@ -370,8 +406,8 @@ export default function TasksPage() {
                                                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Project</label>
                                                 <select
                                                     className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer font-medium"
-                                                    value={projectId}
-                                                    onChange={(e) => setProjectId(e.target.value)}
+                                                    value={tempFilters.projectId}
+                                                    onChange={(e) => setTempFilters(p => ({ ...p, projectId: e.target.value }))}
                                                 >
                                                     <option value="">All Projects</option>
                                                     {projectsData?.map(p => (
@@ -384,8 +420,8 @@ export default function TasksPage() {
                                                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status</label>
                                                 <select
                                                     className="input text-sm h-11 bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer font-medium"
-                                                    value={status}
-                                                    onChange={(e) => setStatus(e.target.value)}
+                                                    value={tempFilters.status}
+                                                    onChange={(e) => setTempFilters(p => ({ ...p, status: e.target.value }))}
                                                 >
                                                     <option value="">All Statuses</option>
                                                     <option value="pending">Pending</option>
@@ -398,13 +434,17 @@ export default function TasksPage() {
 
                                         <div className="flex gap-3 pt-2">
                                             <button
-                                                onClick={() => { setProjectId(''); setStatus(''); setShowFilters(false) }}
+                                                onClick={() => setTempFilters({ projectId: '', status: '' })}
                                                 className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
                                             >
                                                 Clear
                                             </button>
                                             <button
-                                                onClick={() => setShowFilters(false)}
+                                                onClick={() => {
+                                                    setProjectId(tempFilters.projectId)
+                                                    setStatus(tempFilters.status)
+                                                    setShowFilters(false)
+                                                }}
                                                 className="flex-[2] h-11 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]"
                                             >
                                                 Apply Filters
@@ -438,8 +478,8 @@ export default function TasksPage() {
                 {isLoading ? (
                     <div className="py-20 flex justify-center"><Spinner size="lg" /></div>
                 ) : (
-                    <div className="table-wrapper rounded-none border-0 shadow-none">
-                        <table className="w-full">
+                    <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
+                        <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr>
                                     <th>Task Name</th>
@@ -509,6 +549,16 @@ export default function TasksPage() {
                             </div>
                         )}
                     </div>
+                )}
+                {!isLoading && data?.data?.length > 0 && (
+                    <Pagination
+                        currentPage={data.pagination.page}
+                        totalPages={data.pagination.totalPages}
+                        totalResults={data.pagination.total}
+                        limit={limit}
+                        onPageChange={setPage}
+                        onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                    />
                 )}
             </div>
 

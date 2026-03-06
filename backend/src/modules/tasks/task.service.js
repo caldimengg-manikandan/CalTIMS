@@ -2,29 +2,43 @@
 
 const Task = require('./task.model');
 const Project = require('../projects/project.model');
+const { parsePagination, buildPaginationMeta } = require('../../shared/utils/pagination');
 
 class TaskService {
-  async getAll(filters = {}) {
-    const { search, projectId, status, isActive } = filters;
-    const query = {};
+  async getAll(query = {}) {
+    const { page, limit, skip } = parsePagination(query);
+    const { search, projectId, status, isActive } = query;
+    const filter = {};
 
     if (search) {
-      query.name = { $regex: search, $options: 'i' };
+      filter.name = { $regex: search, $options: 'i' };
     }
 
     if (projectId) {
-      query.projectId = projectId;
+      filter.projectId = projectId;
     }
 
     if (status) {
-      query.status = status;
+      filter.status = status;
     }
 
     if (isActive !== undefined) {
-      query.isActive = isActive === 'true' || isActive === true;
+      filter.isActive = isActive === 'true' || isActive === true;
     }
 
-    return await Task.find(query).populate('projectId', 'name code').sort({ createdAt: -1 });
+    const [tasks, total] = await Promise.all([
+      Task.find(filter)
+        .populate('projectId', 'name code')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Task.countDocuments(filter),
+    ]);
+
+    return { 
+      data: tasks, 
+      pagination: buildPaginationMeta(total, page, limit) 
+    };
   }
 
   async getById(id) {

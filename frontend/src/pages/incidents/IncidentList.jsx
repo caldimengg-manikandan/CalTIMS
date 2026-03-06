@@ -9,6 +9,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import Spinner from '@/components/ui/Spinner';
 import incidentService from '@/services/incidents/incidentService';
 import CreateIncidentModal from '@/components/incidents/CreateIncidentModal';
+import Pagination from '@/components/ui/Pagination';
 
 const PRIORITIES = ['All', 'Low', 'Medium', 'High', 'Urgent'];
 const STATUSES = ['All', 'Open', 'In Progress', 'Pending', 'Resolved', 'Closed', 'Withdrawn'];
@@ -19,6 +20,7 @@ export default function IncidentList() {
     const isAdmin = user?.role === 'admin';
 
     const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(10);
     const [filters, setFilters] = useState({
         status: 'All',
         priority: 'All',
@@ -35,7 +37,7 @@ export default function IncidentList() {
             if (filters.search) apiFilters.search = filters.search;
             return incidentService.getIncidents({
                 page,
-                limit: 10,
+                limit,
                 sortBy: 'createdAt',
                 sortOrder: 'desc',
                 ...apiFilters
@@ -69,8 +71,7 @@ export default function IncidentList() {
 
     return (
         <div className="space-y-6 max-w-[1600px] mx-auto animate-fade-in p-4 lg:p-6">
-            <div className="flex items-center justify-between">
-                <PageHeader title={isAdmin ? "Incidents Dashboard" : "My Incidents"} />
+            <PageHeader title={isAdmin ? "Incidents Dashboard" : "My Incidents"}>
                 {!isAdmin && (
                     <button
                         onClick={() => setIsCreateModalOpen(true)}
@@ -79,7 +80,7 @@ export default function IncidentList() {
                         <Plus size={16} /> Report an Issue
                     </button>
                 )}
-            </div>
+            </PageHeader>
 
             <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-slate-100 dark:border-white p-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
@@ -140,8 +141,8 @@ export default function IncidentList() {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto text-sm">
-                    <table className="w-full">
+                <div className="table-wrapper max-h-container rounded-none border-0 shadow-none text-sm">
+                    <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-50/50 dark:bg-black/50">
                             <tr>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ID</th>
@@ -213,28 +214,15 @@ export default function IncidentList() {
                 </div>
 
                 {/* Pagination */}
-                {data?.pagination && data.pagination.totalPages > 1 && (
-                    <div className="p-6 border-t border-slate-100 dark:border-white flex items-center justify-between">
-                        <div className="text-sm text-slate-500">
-                            Page <span className="font-semibold text-slate-700">{data.pagination.page}</span> of <span className="font-semibold text-slate-700">{data.pagination.totalPages}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={!data.pagination.hasPrevPage}
-                                className="p-2 border rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30"
-                            >
-                                <ChevronLeft size={20} />
-                            </button>
-                            <button
-                                onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
-                                disabled={!data.pagination.hasNextPage}
-                                className="p-2 border rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30"
-                            >
-                                <ChevronRight size={20} />
-                            </button>
-                        </div>
-                    </div>
+                {!isLoading && data?.data?.length > 0 && (
+                    <Pagination
+                        currentPage={data.pagination.page}
+                        totalPages={data.pagination.totalPages}
+                        totalResults={data.pagination.total}
+                        limit={limit}
+                        onPageChange={setPage}
+                        onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                    />
                 )}
             </div>
 

@@ -14,6 +14,7 @@ import {
     ChevronDown, Eye
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import Pagination from '@/components/ui/Pagination'
 
 
 
@@ -347,21 +348,27 @@ function LeaveDetailModal({ leave, onClose, onApprove, onReject }) {
                     </div>
                 ))}
                 {leave.reason && (
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                        <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Reason</p>
-                        <p className="text-sm text-slate-600 dark:text-slate-300">{leave.reason}</p>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 font-bold">Application Reason</p>
+                        <div className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed font-medium break-words whitespace-pre-wrap">
+                            {leave.reason}
+                        </div>
                     </div>
                 )}
                 {leave.rejectionReason && (
-                    <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl">
-                        <p className="text-[10px] text-red-400 uppercase tracking-wider mb-1">Rejection Reason</p>
-                        <p className="text-sm text-red-600 dark:text-red-300 italic">"{leave.rejectionReason}"</p>
+                    <div className="p-4 bg-rose-50/50 dark:bg-rose-900/10 rounded-2xl border border-rose-100 dark:border-rose-900/20 shadow-sm">
+                        <p className="text-[10px] text-rose-600 dark:text-rose-400 uppercase tracking-widest mb-2 font-bold">Rejection Reason</p>
+                        <div className="text-sm text-rose-700 dark:text-rose-200 leading-relaxed font-medium italic break-words whitespace-pre-wrap">
+                            "{leave.rejectionReason}"
+                        </div>
                     </div>
                 )}
                 {leave.cancellationReason && (
-                    <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl">
-                        <p className="text-[10px] text-orange-400 uppercase tracking-wider mb-1">Cancellation Reason</p>
-                        <p className="text-sm text-orange-600 dark:text-orange-300 italic">"{leave.cancellationReason}"</p>
+                    <div className="p-4 bg-amber-50/50 dark:bg-amber-900/10 rounded-2xl border border-amber-100 dark:border-amber-900/20 shadow-sm">
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-2 font-bold">Cancellation Reason</p>
+                        <div className="text-sm text-amber-700 dark:text-amber-200 leading-relaxed font-medium italic break-words whitespace-pre-wrap">
+                            "{leave.cancellationReason}"
+                        </div>
                     </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -419,18 +426,40 @@ function AdminLeaveView() {
 
     const [eligibilityFilters, setEligibilityFilters] = React.useState({ department: '' })
     const [showEligibilityFilters, setShowEligibilityFilters] = React.useState(false)
+    const [tempFilters, setTempFilters] = React.useState(filters)
+    const [tempEligibilityFilters, setTempEligibilityFilters] = React.useState(eligibilityFilters)
+
+    // Pagination state for applications
+    const [appPage, setAppPage] = React.useState(1)
+    const [appLimit, setAppLimit] = React.useState(10)
+
+    // Pagination state for eligibility
+    const [eligPage, setEligPage] = React.useState(1)
+    const [eligLimit, setEligLimit] = React.useState(10)
 
     const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''
 
     const { data, isLoading } = useQuery({
-        queryKey: ['leaves-admin', filters, effectiveSearch],
-        queryFn: () => leaveAPI.getAll({ ...filters, isAdminView: true, search: effectiveSearch }).then(r => r.data),
+        queryKey: ['leaves-admin', filters, effectiveSearch, appPage, appLimit],
+        queryFn: () => leaveAPI.getAll({ ...filters, isAdminView: true, search: effectiveSearch, page: appPage, limit: appLimit }).then(r => r.data),
     })
 
-    const { data: employees = [] } = useQuery({
-        queryKey: ['employees', 'all'],
-        queryFn: () => userAPI.getAll({ limit: 1000 }).then(r => r.data.data || [])
+    // Reset appPage when filters change
+    React.useEffect(() => {
+        setAppPage(1)
+    }, [filters, effectiveSearch])
+
+    // Reset eligPage when filters change
+    React.useEffect(() => {
+        setEligPage(1)
+    }, [eligibilityFilters, effectiveSearch])
+
+    const { data: employeesData, isLoading: employeesLoading } = useQuery({
+        queryKey: ['employees', 'all', eligPage, eligLimit, eligibilityFilters, effectiveSearch],
+        queryFn: () => userAPI.getAll({ ...eligibilityFilters, search: effectiveSearch, page: eligPage, limit: eligLimit }).then(r => r.data)
     })
+
+    const employees = employeesData?.data || []
 
     const leaves = data?.data || []
     const activeFilterCount = Object.values(filters).filter(v => v !== '').length
@@ -595,11 +624,14 @@ function AdminLeaveView() {
                                     onChange={(e) => setSearch(e.target.value)}
                                 />
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex flex-wrap items-center gap-2 shrink-0">
                                 {/* Filter Button */}
                                 <div className="relative">
                                     <button
-                                        onClick={() => setShowFilters(p => !p)}
+                                        onClick={() => {
+                                            if (!showFilters) setTempFilters(filters)
+                                            setShowFilters(p => !p)
+                                        }}
                                         className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showFilters || activeFilterCount > 0
                                             ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
                                             : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
@@ -622,8 +654,12 @@ function AdminLeaveView() {
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Filter By</span>
                                                     {activeFilterCount > 0 && (
-                                                        <button onClick={() => { setFilters({ status: '', leaveType: '', userId: '', leaveId: '' }); setShowFilters(false) }}
-                                                            className="text-xs text-primary-600 hover:text-primary-700 font-medium">
+                                                        <button onClick={() => {
+                                                            const reset = { status: '', leaveType: '', userId: '', leaveId: '' }
+                                                            setTempFilters(reset)
+                                                            setFilters(reset)
+                                                        }}
+                                                            className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase tracking-wider">
                                                             Reset All
                                                         </button>
                                                     )}
@@ -648,8 +684,8 @@ function AdminLeaveView() {
                                                             <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Employee</label>
                                                             <select
                                                                 className="input text-sm h-10"
-                                                                value={filters.userId}
-                                                                onChange={e => setFilters(f => ({ ...f, userId: e.target.value }))}
+                                                                value={tempFilters.userId}
+                                                                onChange={e => setTempFilters(f => ({ ...f, userId: e.target.value }))}
                                                             >
                                                                 <option value="">All Employees</option>
                                                                 {employees.map(emp => (
@@ -664,8 +700,8 @@ function AdminLeaveView() {
                                                             <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status</label>
                                                             <select
                                                                 className="input text-sm h-10"
-                                                                value={filters.status}
-                                                                onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
+                                                                value={tempFilters.status}
+                                                                onChange={e => setTempFilters(f => ({ ...f, status: e.target.value }))}
                                                             >
                                                                 <option value="">All Status</option>
                                                                 {filterOptions?.statuses?.map(s => (
@@ -677,8 +713,8 @@ function AdminLeaveView() {
                                                             <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Type</label>
                                                             <select
                                                                 className="input text-sm h-10"
-                                                                value={filters.leaveType}
-                                                                onChange={e => setFilters(f => ({ ...f, leaveType: e.target.value }))}
+                                                                value={tempFilters.leaveType}
+                                                                onChange={e => setTempFilters(f => ({ ...f, leaveType: e.target.value }))}
                                                             >
                                                                 <option value="">All Types</option>
                                                                 {filterOptions?.leaveTypes?.map(t => (
@@ -689,8 +725,11 @@ function AdminLeaveView() {
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-3 pt-2">
-                                                    <button onClick={() => { setFilters({ status: '', leaveType: '', userId: '', leaveId: '' }); setShowFilters(false) }} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
-                                                    <button onClick={() => setShowFilters(false)} className="flex-[2] h-11 bg-primary-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]">Apply</button>
+                                                    <button onClick={() => setTempFilters({ status: '', leaveType: '', userId: '', leaveId: '' })} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
+                                                    <button onClick={() => {
+                                                        setFilters(tempFilters)
+                                                        setShowFilters(false)
+                                                    }} className="flex-[2] h-11 bg-primary-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]">Apply Filters</button>
                                                 </div>
                                             </div>
                                         </>
@@ -713,8 +752,8 @@ function AdminLeaveView() {
                                 <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No applications found</p>
                             </div>
                         ) : (
-                            <div className="table-wrapper rounded-none border-0 shadow-none">
-                                <table className="w-full">
+                            <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
+                                <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr>
                                             <th>ID</th>
@@ -774,6 +813,16 @@ function AdminLeaveView() {
                                 </table>
                             </div>
                         )}
+                        {!isLoading && leaves.length > 0 && (
+                            <Pagination
+                                currentPage={data.pagination.page}
+                                totalPages={data.pagination.totalPages}
+                                totalResults={data.pagination.total}
+                                limit={appLimit}
+                                onPageChange={setAppPage}
+                                onLimitChange={(l) => { setAppLimit(l); setAppPage(1); }}
+                            />
+                        )}
                     </div>
                 </>
             ) : (
@@ -792,11 +841,14 @@ function AdminLeaveView() {
                                     onChange={(e) => setSearch(e.target.value)}
                                 />
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex flex-wrap items-center gap-2 shrink-0">
                                 {/* Filter Button */}
                                 <div className="relative">
                                     <button
-                                        onClick={() => setShowEligibilityFilters(p => !p)}
+                                        onClick={() => {
+                                            if (!showEligibilityFilters) setTempEligibilityFilters(eligibilityFilters)
+                                            setShowEligibilityFilters(p => !p)
+                                        }}
                                         className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showEligibilityFilters || activeEligibilityFilterCount > 0
                                             ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
                                             : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
@@ -819,8 +871,12 @@ function AdminLeaveView() {
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Filter By</span>
                                                     {activeEligibilityFilterCount > 0 && (
-                                                        <button onClick={() => { setEligibilityFilters({ department: '' }); setShowEligibilityFilters(false) }}
-                                                            className="text-xs text-primary-600 hover:text-primary-700 font-medium">
+                                                        <button onClick={() => {
+                                                            const reset = { department: '' }
+                                                            setTempEligibilityFilters(reset)
+                                                            setEligibilityFilters(reset)
+                                                        }}
+                                                            className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase tracking-wider">
                                                             Reset All
                                                         </button>
                                                     )}
@@ -831,8 +887,8 @@ function AdminLeaveView() {
                                                         <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Department</label>
                                                         <select
                                                             className="input text-sm h-10"
-                                                            value={eligibilityFilters.department}
-                                                            onChange={e => setEligibilityFilters({ department: e.target.value })}
+                                                            value={tempEligibilityFilters.department}
+                                                            onChange={e => setTempEligibilityFilters({ department: e.target.value })}
                                                         >
                                                             <option value="">All Departments</option>
                                                             {eligibilityDepartments.map(dept => (
@@ -842,8 +898,11 @@ function AdminLeaveView() {
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-3 pt-2">
-                                                    <button onClick={() => { setEligibilityFilters({ department: '' }); setShowEligibilityFilters(false) }} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
-                                                    <button onClick={() => setShowEligibilityFilters(false)} className="flex-[2] h-11 bg-primary-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]">Apply</button>
+                                                    <button onClick={() => setTempEligibilityFilters({ department: '' })} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
+                                                    <button onClick={() => {
+                                                        setEligibilityFilters(tempEligibilityFilters)
+                                                        setShowEligibilityFilters(false)
+                                                    }} className="flex-[2] h-11 bg-primary-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]">Apply Filters</button>
                                                 </div>
                                             </div>
                                         </>
@@ -909,34 +968,49 @@ function AdminLeaveView() {
                                 </tbody>
                             </table>
                         </div>
+                        {!employeesLoading && filteredEmployees.length > 0 && (
+                            <Pagination
+                                currentPage={employeesData.pagination.page}
+                                totalPages={employeesData.pagination.totalPages}
+                                totalResults={employeesData.pagination.total}
+                                limit={eligLimit}
+                                onPageChange={setEligPage}
+                                onLimitChange={(l) => { setEligLimit(l); setEligPage(1); }}
+                            />
+                        )}
                     </div>
                 </>
-            )}
+            )
+            }
 
             {/* ══ Modals ══ */}
-            {rejectTarget && (
-                <RejectModal
-                    leave={rejectTarget}
-                    onClose={() => setRejectTarget(null)}
-                    onConfirm={(reason) => rejectMutation.mutate({ id: rejectTarget._id, reason })}
-                    isPending={rejectMutation.isPending}
-                />
-            )}
+            {
+                rejectTarget && (
+                    <RejectModal
+                        leave={rejectTarget}
+                        onClose={() => setRejectTarget(null)}
+                        onConfirm={(reason) => rejectMutation.mutate({ id: rejectTarget._id, reason })}
+                        isPending={rejectMutation.isPending}
+                    />
+                )
+            }
             <LeaveDetailModal
                 leave={viewTarget}
                 onClose={() => setViewTarget(null)}
                 onApprove={(id) => approveMutation.mutate(id)}
                 onReject={(leave) => setRejectTarget(leave)}
             />
-            {editTarget && (
-                <EditEligibilityModal
-                    user={editTarget}
-                    onClose={() => setEditTarget(null)}
-                    onSave={(leaveBalance) => updateEligibilityMutation.mutate({ id: editTarget._id, leaveBalance })}
-                    isPending={updateEligibilityMutation.isPending}
-                />
-            )}
-        </div>
+            {
+                editTarget && (
+                    <EditEligibilityModal
+                        user={editTarget}
+                        onClose={() => setEditTarget(null)}
+                        onSave={(leaveBalance) => updateEligibilityMutation.mutate({ id: editTarget._id, leaveBalance })}
+                        isPending={updateEligibilityMutation.isPending}
+                    />
+                )
+            }
+        </div >
     )
 }
 
@@ -947,6 +1021,10 @@ function EmployeeLeaveView() {
     const [showModal, setShowModal] = React.useState(false)
     const [cancelTarget, setCancelTarget] = React.useState(null)
     const [viewTarget, setViewTarget] = React.useState(null)
+
+    // Pagination state
+    const [page, setPage] = React.useState(1)
+    const [limit, setLimit] = React.useState(10)
 
     const { data: tsSettings } = useQuery({
         queryKey: ['settings', 'timesheet'],
@@ -960,10 +1038,12 @@ function EmployeeLeaveView() {
         enabled: !!user?.id,
     })
 
-    const { data: leaves, isLoading } = useQuery({
-        queryKey: ['leaves'],
-        queryFn: () => leaveAPI.getAll().then(r => r.data.data),
+    const { data: leavesData, isLoading } = useQuery({
+        queryKey: ['leaves', page, limit],
+        queryFn: () => leaveAPI.getAll({ page, limit }).then(r => r.data),
     })
+
+    const leaves = leavesData?.data || []
 
     const cancelMutation = useMutation({
         mutationFn: ({ id, reason }) => leaveAPI.cancel(id, reason),
@@ -1036,8 +1116,8 @@ function EmployeeLeaveView() {
                         </button>
                     </div>
                 ) : (
-                    <div className="table-wrapper rounded-none rounded-b-2xl border-0 shadow-none">
-                        <table className="w-full">
+                    <div className="table-wrapper max-h-container rounded-none rounded-b-2xl border-0 shadow-none">
+                        <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr>
                                     <th>ID</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th><th>Applied On</th><th></th>
@@ -1090,6 +1170,16 @@ function EmployeeLeaveView() {
                             </tbody>
                         </table>
                     </div>
+                )}
+                {!isLoading && leaves.length > 0 && (
+                    <Pagination
+                        currentPage={leavesData.pagination.page}
+                        totalPages={leavesData.pagination.totalPages}
+                        totalResults={leavesData.pagination.total}
+                        limit={limit}
+                        onPageChange={setPage}
+                        onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                    />
                 )}
             </div>
             {cancelTarget && (

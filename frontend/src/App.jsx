@@ -26,6 +26,8 @@ const AnnouncementsPage = lazy(() => import('@/features/announcements/pages/Anno
 const ReportsPage = lazy(() => import('@/features/reports/pages/ReportsPage'))
 const ProfilePage = lazy(() => import('@/features/employees/pages/ProfilePage'))
 const SettingsLayout = lazy(() => import('@/features/settings/pages/SettingsLayout'))
+const CalendarPage = lazy(() => import('@/features/calendar/pages/CalendarPage'))
+const AdminCalendarPage = lazy(() => import('@/features/calendar/pages/AdminCalendarPage'))
 const IncidentList = lazy(() => import('@/pages/incidents/IncidentList'))
 const IncidentDetails = lazy(() => import('@/pages/incidents/IncidentDetails'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
@@ -82,6 +84,7 @@ export default function App() {
                     <Route path="/timesheets" element={<PageSuspense><TimesheetEntry /></PageSuspense>} />
                     <Route path="/timesheets/history" element={<PageSuspense><TimesheetHistory /></PageSuspense>} />
                     <Route path="/leaves" element={<PageSuspense><LeavePage /></PageSuspense>} />
+                    <Route path="/calendar" element={<PageSuspense><CalendarPage /></PageSuspense>} />
                     <Route path="/announcements" element={
                         <ProtectedRoute roles={['admin']}>
                             <PageSuspense><AnnouncementsPage /></PageSuspense>
@@ -113,6 +116,11 @@ export default function App() {
                     } />
 
                     {/* Admin only */}
+                    <Route path="/calendar/manage" element={
+                        <ProtectedRoute roles={['admin']}>
+                            <PageSuspense><AdminCalendarPage /></PageSuspense>
+                        </ProtectedRoute>
+                    } />
                     <Route path="/employees" element={
                         <ProtectedRoute roles={['admin']}>
                             <PageSuspense><EmployeesPage /></PageSuspense>
