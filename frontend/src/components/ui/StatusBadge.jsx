@@ -21,7 +21,6 @@ const statusMap = {
     casual: 'badge-success',
     unpaid: 'badge-gray',
     open: 'badge-info',
-    pending: 'badge-warning',
     resolved: 'badge-success',
     closed: 'badge-gray',
     withdrawn: 'badge-danger',

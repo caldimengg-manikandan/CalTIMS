@@ -6,8 +6,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 const mongoSanitize = require('express-mongo-sanitize');
-const rateLimit = require('express-rate-limit');
-
+// ─── Body Parsing & Sanitization ─────────────────────────────────────────────
 const { errorHandler, notFound } = require('./middleware/error.middleware');
 const logger = require('./shared/utils/logger');
 
@@ -35,31 +34,11 @@ app.use(helmet());
 app.use(
   cors({
     origin: process.env.CLIENT_URL,
-    credentials: true,
+    credentials: false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
-
-// ─── Rate Limiting ───────────────────────────────────────────────────────────
-const globalLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX) || 500,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Too many requests, please try again later.' },
-  skip: () => process.env.NODE_ENV === 'development',
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'development' ? 1000 : 20,
-  message: { success: false, message: 'Too many auth requests, please try again later.' },
-});
-
-app.use('/api/', globalLimiter);
-app.use('/api/v1/auth/login', authLimiter);
-app.use('/api/v1/auth/forgot-password', authLimiter);
 
 // ─── Body Parsing & Sanitization ─────────────────────────────────────────────
 app.use(express.json({ limit: '10kb' }));

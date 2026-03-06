@@ -21,8 +21,9 @@ import {
     BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell
 } from 'recharts'
 
+// -- Animation Variants --
 const fadeUp = {
-    hidden: { opacity: 0, y: 20 },
+    hidden: { opacity: 0, y: 30 },
     visible: { opacity: 1, y: 0 }
 }
 
@@ -38,14 +39,18 @@ export default function DashboardPage() {
     const weekStart = startOfWeek(today, { weekStartsOn: weekStartDay })
     const weekEnd = endOfWeek(today, { weekStartsOn: weekStartDay })
 
-    // -- Personalization State --
+    // State
     const [isSettingsOpen, setIsSettingsOpen] = useState(false)
     const [prefs, setPrefs] = useState(() => {
-        try {
-            const saved = localStorage.getItem('dashboard_prefs')
-            return saved ? JSON.parse(saved) : { chart: true, projects: true, quickActions: true, announcements: true, calendar: true, feed: true }
-        } catch {
-            return { chart: true, projects: true, quickActions: true, announcements: true, calendar: true, feed: true }
+        const saved = localStorage.getItem('dashboard_prefs')
+        return saved ? JSON.parse(saved) : {
+            quickActions: true,
+            chart: true,
+            projects: isAdmin,
+            announcements: true,
+            calendar: true,
+            feed: true,
+            insights: !isAdmin
         }
     })
 
@@ -150,7 +155,6 @@ export default function DashboardPage() {
                         )}
                     </div>
 
-                    {/* Deadline Widget right aligned inside Hero for Employees, KPI for Admins */}
                     <div className="md:col-span-5 flex flex-col items-center md:items-end md:justify-end">
                         <button
                             onClick={() => setIsSettingsOpen(true)}
@@ -159,49 +163,38 @@ export default function DashboardPage() {
                             <Settings2 size={14} /> Customize Dashboard
                         </button>
 
-                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/10 w-full max-w-sm">
-                            <h3 className="text-xs font-black text-slate-300 uppercase tracking-widest mb-4 text-center">
-                                {isAdmin && appVersion === 'pro' ? 'Team Compliance' : 'Timesheet Deadline'}
-                            </h3>
-                            {isAdmin && appVersion === 'pro' ? (() => {
-                                const submittedC = summaryData?.submittedCount || 0
-                                const pendingC = summaryData?.notSubmittedCount || 0
-                                const totalC = submittedC + pendingC === 0 ? 0 : Math.round((submittedC / (submittedC + pendingC)) * 100)
-                                return (
-                                    <div>
-                                        <div className="flex justify-between items-end mb-2">
-                                            <span className="text-4xl font-black text-white">{totalC}%</span>
+                        <div className="w-full max-w-xs transition-all duration-500">
+                            {isAdmin ? (
+                                <div className="p-6 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 shadow-xl group hover:bg-white/15 transition-all">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="w-10 h-10 rounded-2xl bg-primary-500/20 text-primary-400 flex items-center justify-center">
+                                            <Activity size={20} />
                                         </div>
-                                        <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden mb-5">
-                                            <motion.div
-                                                initial={{ width: 0 }}
-                                                animate={{ width: `${totalC}%` }}
-                                                transition={{ duration: 1, delay: 0.2, ease: "easeOut" }}
-                                                className="h-full rounded-full bg-emerald-500"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4 text-center">
-                                            <div
-                                                className="cursor-pointer hover:bg-white/5 rounded-xl p-2 transition-colors"
-                                                onClick={() => navigate('/timesheets/manage?status=Submitted')}
-                                            >
-                                                <p className="text-xl font-black text-white mb-0.5">{submittedC}</p>
-                                                <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Submitted</p>
-                                            </div>
-                                            <div
-                                                className="cursor-pointer hover:bg-white/5 rounded-xl p-2 transition-colors"
-                                                onClick={() => navigate('/timesheets/compliance')}
-                                            >
-                                                <p className="text-xl font-black text-white mb-0.5">{pendingC}</p>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Pending</p>
-                                            </div>
+                                        <div className="text-right">
+                                            <p className="text-2xl font-black text-white">{summaryData?.notSubmittedCount || 0}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Pending Compliance</p>
                                         </div>
                                     </div>
-                                )
-                            })() : (
-                                <div className="text-center">
-                                    <div className="flex justify-center mb-3">
-                                        <Clock size={32} className={isComplete ? "text-emerald-400" : "text-amber-400"} />
+                                    <button
+                                        onClick={() => {
+                                            if (appVersion === 'basic') {
+                                                return toast.error('This feature is available in the Pro version.', { icon: '🔒' })
+                                            }
+                                            navigate('/timesheets/compliance')
+                                        }}
+                                        className={clsx(
+                                            "w-full py-2.5 rounded-xl text-white text-[10px] font-black uppercase tracking-widest transition-all border",
+                                            appVersion === 'basic' ? "bg-slate-700/50 border-white/5 opacity-50 cursor-not-allowed" : "bg-white/10 hover:bg-white/20 border-white/10"
+                                        )}
+                                    >
+                                        Review Compliance
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="p-6 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 shadow-xl">
+                                    <div className="flex items-center gap-3 mb-2 opacity-60">
+                                        <Clock size={14} />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Next Deadline</span>
                                     </div>
                                     <p className="text-2xl font-black text-white mb-1">Friday 6:00 PM</p>
                                     <p className={`text-sm font-bold ${isComplete ? 'text-emerald-400' : 'text-amber-400'}`}>
@@ -284,7 +277,7 @@ export default function DashboardPage() {
                     className="card p-5 group hover:border-primary-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer"
                 >
                     <div className="flex items-start justify-between">
-                        <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center group-hover:scale-110 transition-transform">
                             <CalendarDays size={20} />
                         </div>
                         <span className="text-2xl font-black text-slate-800">{isAdmin ? summaryData?.totalEmployees : (leaveBalance?.casual || 0)}</span>
@@ -476,19 +469,19 @@ export default function DashboardPage() {
                 </motion.div>
             </div>
 
-            {/* 5️⃣ ACTIVITY FEED (Full Width Bottom) */}
-            {prefs.feed && appVersion === 'pro' && (
+            {/* 5️⃣ ACTIVITY FEED */}
+            {prefs.feed && (
                 <motion.section
                     initial="hidden" animate="visible" variants={fadeUp} transition={{ duration: 0.4, delay: 0.4 }}
                     className="card p-6"
                 >
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-                            <Bell size={18} className="text-primary-500" /> Recent Activity
-                        </h3>
-                        <button className="text-[10px] font-black uppercase text-primary-500 hover:text-primary-600 transition-colors">
-                            View All
-                        </button>
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                                <Activity size={20} className="text-primary-500" /> Recent Activity
+                            </h3>
+                            <p className="text-xs font-bold text-slate-400 mt-1">Latest system-wide events and updates</p>
+                        </div>
                     </div>
 
                     <div className="space-y-4">

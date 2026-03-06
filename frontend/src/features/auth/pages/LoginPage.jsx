@@ -27,8 +27,8 @@ export default function LoginPage() {
     const { mutate: login, isPending } = useMutation({
         mutationFn: (data) => authAPI.login(data),
         onSuccess: (res) => {
-            const { accessToken, user } = res.data.data
-            setAuth(user, accessToken)
+            const { accessToken, refreshToken, user } = res.data.data
+            setAuth(user, accessToken, refreshToken)
             toast.success(`Welcome back, ${user.name.split(' ')[0]}!`)
             navigate('/dashboard')
         },

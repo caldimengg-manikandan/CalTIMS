@@ -1,4 +1,5 @@
 import React from 'react'
+import { useLocation } from 'react-router-dom'
 import PageHeader from '@/components/ui/PageHeader'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { leaveAPI, userAPI, settingsAPI } from '@/services/endpoints'
@@ -139,6 +140,7 @@ function ApplyLeaveModal({ onClose, balance }) {
     const handleSubmit = (e) => {
         e.preventDefault()
         if (!form.startDate || !form.endDate) return toast.error('Please select dates')
+        if (!/^\d{4}-/.test(form.startDate) || !/^\d{4}-/.test(form.endDate)) return toast.error('Year must be exactly 4 digits')
         if (new Date(form.endDate) < new Date(form.startDate)) return toast.error('End date must be after start date')
         if (hasInsufficientBalance) return toast.error(`Insufficient ${form.leaveType} leave balance`)
         mutation.mutate({ ...form, totalDays: days })
@@ -181,12 +183,12 @@ function ApplyLeaveModal({ onClose, balance }) {
                 <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                         <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Start Date <span className="text-slate-400 font-normal">(*)</span></label>
-                        <input type="date" className="input" value={form.startDate}
+                        <input type="date" className="input" max="9999-12-31" value={form.startDate}
                             onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} required />
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">End Date <span className="text-slate-400 font-normal">(*)</span></label>
-                        <input type="date" className="input" value={form.endDate} min={form.startDate}
+                        <input type="date" className="input" max="9999-12-31" value={form.endDate} min={form.startDate}
                             onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} required />
                     </div>
                 </div>
@@ -1109,7 +1111,12 @@ function EmployeeLeaveView() {
 // ─── Main Export: Role-based routing ─────────────────────────────────────────
 export default function LeavePage() {
     const { user } = useAuthStore()
+    const location = useLocation()
     const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager'
+    const isManageView = location.pathname.includes('/manage')
 
-    return isAdminOrManager ? <AdminLeaveView /> : <EmployeeLeaveView />
+    if (isAdminOrManager && isManageView) {
+        return <AdminLeaveView />
+    }
+    return <EmployeeLeaveView />
 }

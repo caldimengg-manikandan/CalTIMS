@@ -60,6 +60,7 @@ function AnnouncementModal({ existing, onClose, onSuccess }) {
         e.preventDefault()
         if (!form.title.trim()) return toast.error('Title is required')
         if (!form.content.trim()) return toast.error('Content is required')
+        if (form.expiresAt && !/^\d{4}-/.test(form.expiresAt)) return toast.error('Expiry year must be exactly 4 digits')
         const payload = {
             ...form,
             expiresAt: form.expiresAt || null,
@@ -175,6 +176,7 @@ function AnnouncementModal({ existing, onClose, onSuccess }) {
                             value={form.expiresAt}
                             onChange={e => set('expiresAt', e.target.value)}
                             min={new Date().toISOString().slice(0, 10)}
+                            max="9999-12-31"
                         />
                     </div>
 

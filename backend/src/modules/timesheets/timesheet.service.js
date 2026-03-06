@@ -729,8 +729,36 @@ const timesheetService = {
           timesheetCount: { $size: '$timesheetCount' }
         }
       },
+      {
+        $match: {
+          projectName: { $nin: ['Leave', null] },
+          projectCode: { $ne: 'LEAVE-SYS' }
+        }
+      },
       { $sort: { totalHours: -1 } }
     ]);
+
+    const ProjectModel = mongoose.model('Project');
+    const allActiveProjects = await ProjectModel.find({ status: 'active' }).lean();
+    
+    // Merge active projects that might not have any timesheets
+    const mergedProjectTotals = allActiveProjects.reduce((acc, p) => {
+      if (p.name === 'Leave' || p.code === 'LEAVE-SYS') return acc;
+      const existing = projectTotals.find(pt => pt.projectCode === p.code || pt.projectName === p.name);
+      if (existing) {
+        acc.push(existing);
+      } else {
+        acc.push({
+          projectName: p.name,
+          projectCode: p.code,
+          totalHours: 0,
+          timesheetCount: 0
+        });
+      }
+      return acc;
+    }, []);
+
+    mergedProjectTotals.sort((a, b) => b.totalHours - a.totalHours);
 
     return {
       submittedCount: submitted.length,
@@ -748,7 +776,7 @@ const timesheetService = {
       totalEmployees: activeUsers.length,
       totalManagers: activeManagers,
       totalAdmins: activeAdmins,
-      projectTotals,
+      projectTotals: mergedProjectTotals,
       totalTimesheets: allTimesheets.length,
       pendingTimesheets: submitted.filter(ts => ts.status === TIMESHEET_STATUS.SUBMITTED).length,
       approvedTimesheets: submitted.filter(ts => ts.status === TIMESHEET_STATUS.APPROVED).length,
@@ -817,9 +845,39 @@ const timesheetService = {
             rejectedCount: 1,
           },
         },
+        {
+          $match: {
+            label: { $ne: 'Leave' },
+            code: { $ne: 'LEAVE-SYS' }
+          }
+        },
         { $sort: { totalHours: -1 } },
       ]);
-      return { kpi: 'project-hours', data };
+
+      const ProjectModel = mongoose.model('Project');
+      const allActiveProjects = await ProjectModel.find({ status: 'active' }).lean();
+      
+      const mergedData = allActiveProjects.reduce((acc, p) => {
+        if (p.name === 'Leave' || p.code === 'LEAVE-SYS') return acc;
+        const existing = data.find(d => d.code === p.code || d.label === p.name);
+        if (existing) {
+          acc.push(existing);
+        } else {
+          acc.push({
+            label: p.name,
+            code: p.code,
+            totalHours: 0,
+            submittedCount: 0,
+            approvedCount: 0,
+            rejectedCount: 0
+          });
+        }
+        return acc;
+      }, []);
+
+      mergedData.sort((a, b) => b.totalHours - a.totalHours);
+
+      return { kpi: 'project-hours', data: mergedData };
     }
 
     if (kpi === 'status-overview') {

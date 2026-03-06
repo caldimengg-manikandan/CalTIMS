@@ -7,17 +7,21 @@ export const useAuthStore = create(
       // State
       user: null,
       accessToken: null,
+      refreshToken: null,
       isAuthenticated: false,
 
       // Actions
-      setAuth: (user, accessToken) =>
-        set({ user, accessToken, isAuthenticated: true }),
+      setAuth: (user, accessToken, refreshToken) =>
+        set({ user, accessToken, refreshToken, isAuthenticated: true }),
 
       setAccessToken: (accessToken) =>
         set({ accessToken }),
 
+      setRefreshToken: (refreshToken) =>
+        set({ refreshToken }),
+
       logout: () =>
-        set({ user: null, accessToken: null, isAuthenticated: false }),
+        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false }),
 
       updateUser: (userData) =>
         set((state) => ({ user: { ...state.user, ...userData } })),
@@ -32,7 +36,8 @@ export const useAuthStore = create(
       name: 'timesheet-auth',
       partialize: (state) => ({ 
         user: state.user, 
-        accessToken: state.accessToken, 
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated 
       }),
     }

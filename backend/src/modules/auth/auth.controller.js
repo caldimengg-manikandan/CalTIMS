@@ -2,34 +2,30 @@
 
 const asyncHandler = require('../../shared/utils/asyncHandler');
 const ApiResponse = require('../../shared/utils/apiResponse');
-const { authService, setRefreshTokenCookie } = require('./auth.service');
+const { authService } = require('./auth.service');
 
 const authController = {
   login: asyncHandler(async (req, res) => {
     const { accessToken, refreshToken, user } = await authService.login(req.body);
-    setRefreshTokenCookie(res, refreshToken);
     ApiResponse.success(res, {
       message: 'Login successful',
-      data: { accessToken, user },
+      data: { accessToken, refreshToken, user },
     });
   }),
 
   refresh: asyncHandler(async (req, res) => {
-    const refreshToken = req.cookies?.refreshToken;
+    const { refreshToken } = req.body;
     const { accessToken, refreshToken: newRefreshToken } = await authService.refreshAccessToken(refreshToken);
-    setRefreshTokenCookie(res, newRefreshToken);
-    ApiResponse.success(res, { message: 'Token refreshed', data: { accessToken } });
+    ApiResponse.success(res, { message: 'Token refreshed', data: { accessToken, refreshToken: newRefreshToken } });
   }),
 
   logout: asyncHandler(async (req, res) => {
     await authService.logout(req.user._id);
-    res.clearCookie('refreshToken');
     ApiResponse.success(res, { message: 'Logged out successfully' });
   }),
 
   changePassword: asyncHandler(async (req, res) => {
     await authService.changePassword(req.user._id, req.body);
-    res.clearCookie('refreshToken');
     ApiResponse.success(res, { message: 'Password changed successfully. Please log in again.' });
   }),
 

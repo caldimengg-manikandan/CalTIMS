@@ -27,8 +27,9 @@ const navSections = [
     {
         label: 'Workspace',
         items: [
-            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', roles: ['employee'] },
-            { to: '/leaves', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager'] },
+            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', roles: ['employee', 'manager', 'admin'] },
+            { to: '/leaves/manage', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager'] },
+            { to: '/calendar', icon: Calendar, label: 'Calendar', roles: ['admin', 'manager', 'employee'] },
             { to: '/announcements', icon: Megaphone, label: 'Announcements', roles: ['admin'] },
             { to: '/incidents', icon: AlertCircle, label: 'Help & Support', roles: ['admin', 'manager', 'employee'], proFeature: true },
         ]

@@ -137,7 +137,7 @@ export default function TimesheetEntryPage() {
             const from = format(weekStart, 'yyyy-MM-dd')
             const to = format(addDays(weekStart, 6), 'yyyy-MM-dd')
             const r = await calendarAPI.getAll({ from, to, eventType: 'holiday' })
-            return (r.data?.data || []).filter(e => e.isGlobal)
+            return (r.data?.data || []).filter(e => e.isPublic)
         },
         staleTime: 5 * 60 * 1000,
     })
@@ -397,9 +397,10 @@ export default function TimesheetEntryPage() {
 
     const submitWeekMutation = useMutation({
         mutationFn: async () => {
-            // Basic validation: must have some hours somewhere
+            // Basic validation: must have some hours somewhere, unless there's a holiday or leave
             const hasAnyHours = rows.some(r => r.dayHours.some(h => h !== '00:00'))
-            if (!hasAnyHours) {
+            const hasHolidayOrLeave = holidays.size > 0 || rows.some(r => r.isLeaveRow)
+            if (!hasAnyHours && !hasHolidayOrLeave) {
                 throw new Error('Please enter some hours before submitting.')
             }
 
@@ -712,7 +713,7 @@ export default function TimesheetEntryPage() {
                                     return (
                                         <th key={i} className={clsx(
                                             "px-2 py-3 border-r border-slate-200 dark:border-white text-center min-w-[110px] transition-colors relative",
-                                            isHoliday ? "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300" : ""
+                                            isHoliday ? "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 shadow-inner" : ""
                                         )}>
                                             <div className="flex flex-col items-center gap-1">
                                                 <div className="flex flex-col">
@@ -831,12 +832,12 @@ export default function TimesheetEntryPage() {
                                             const isHoliday = holidays.has(format(weekDays[i], 'yyyy-MM-dd'));
 
                                             return (
-                                                <td key={i} className={`px-2 py-3 border-r border-slate-100 dark:border-white transition-colors ${isHoliday ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                                                <td key={i} className={`px-2 py-3 border-r border-slate-100 dark:border-white transition-colors ${isHoliday ? 'bg-blue-50/80 dark:bg-blue-900/20' : ''}`}>
                                                     <div className={`flex flex-col items-center justify-center p-1.5 focus-within:ring-1 focus-within:ring-indigo-500 transition-all ${isLop && isPendingCell ? 'bg-rose-100/50 border-rose-200 dark:border-rose-900 border rounded-lg' :
                                                         isLop && isApprovedCell ? 'bg-rose-100/30 border-rose-300 dark:border-rose-800 border rounded-lg' :
                                                             isPendingCell ? 'bg-amber-100/30 border-amber-200 dark:border-amber-800 border rounded-lg' :
                                                                 isApprovedCell ? 'bg-emerald-100/30 border-emerald-200 dark:border-emerald-800 border rounded-lg' :
-                                                                    isHoliday ? 'bg-blue-100/40 dark:bg-blue-800/20 border-blue-200 dark:border-blue-700 border rounded-lg' :
+                                                                    isHoliday ? 'bg-blue-100/60 dark:bg-blue-800/40 border-blue-300 dark:border-blue-600 border rounded-lg' :
                                                                         'bg-slate-50 dark:bg-black border-slate-200 dark:border-white border rounded-lg'
                                                         } ${lockedDays[i] && !row.isLeaveRow ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800' : ''}`}>
                                                         <div className="flex items-center justify-center w-full">
@@ -945,10 +946,12 @@ export default function TimesheetEntryPage() {
                                 {weekDays.map((_, i) => {
                                     const dayTotal = calculateDayTotal(i)
                                     const isLow = dayTotal > 0 && dayTotal < workingHoursPerDay
+                                    const isHoliday = holidays.has(format(weekDays[i], 'yyyy-MM-dd'));
                                     return (
                                         <td key={i} className={clsx(
                                             "px-2 py-4 text-center text-sm font-bold transition-colors",
-                                            isLow ? "text-rose-500 bg-rose-50/50 dark:bg-rose-950/20" : "text-indigo-700 dark:text-white"
+                                            isLow ? "text-rose-500 bg-rose-50/50 dark:bg-rose-950/20" : "text-indigo-700 dark:text-white",
+                                            isHoliday && !isLow ? "bg-blue-100/80 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200" : ""
                                         )}>
                                             <div className="flex flex-col items-center gap-0.5">
                                                 <span>{formatHours(dayTotal)}</span>
@@ -981,7 +984,7 @@ export default function TimesheetEntryPage() {
 
                 <button
                     onClick={() => submitWeekMutation.mutate()}
-                    disabled={submitWeekMutation.isPending || totalWeekHours === 0 || isWeekSubmitted}
+                    disabled={submitWeekMutation.isPending || (totalWeekHours === 0 && holidays.size === 0 && !rows.some(r => r.isLeaveRow)) || isWeekSubmitted}
                     title={isWeekSubmitted ? 'This week has already been submitted' : ''}
                     className="flex items-center gap-3 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:pointer-events-none"
                 >
