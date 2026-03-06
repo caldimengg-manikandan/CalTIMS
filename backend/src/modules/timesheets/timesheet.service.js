@@ -924,7 +924,7 @@ const timesheetService = {
         // Override baseStats with team data for Admin
         hoursThisWeek: totalTeamHoursThisWeek,
         dailyHours: teamDailyHours,
-        personalStatus: personalTs?.status || null,
+        personalStatus: personalStatus,
         
         submittedCount: submittedThisWeek.length,
         notSubmittedCount: notSubmitted.length,
