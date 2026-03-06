@@ -39,6 +39,9 @@ const settingsSchema = new mongoose.Schema(
       },
       maxEntriesPerDay: { type: Number, default: 0 }, // 0 means no limit
       maxEntriesPerWeek: { type: Number, default: 0 }, // 0 means no limit
+      permissionMaxHoursPerDay: { type: Number, default: 4 },
+      permissionMaxDaysPerWeek: { type: Number, default: 0 }, // 0 means no limit
+      permissionMaxDaysPerMonth: { type: Number, default: 0 }, // 0 means no limit
     },
 
     // ── General Settings ───────────────────────────────────────────────────────
@@ -46,6 +49,8 @@ const settingsSchema = new mongoose.Schema(
       companyName: { type: String, default: 'TimesheetPro' },
       timezone: { type: String, default: 'Asia/Kolkata' },
       workingHoursPerDay: { type: Number, default: 8, min: 1, max: 24 },
+      strictDailyHours: { type: Boolean, default: false },
+      isWeekendWorkable: { type: Boolean, default: false },
       weekStartDay: { type: String, enum: ['monday', 'sunday'], default: 'monday' },
       dateFormat: {
         type: String,

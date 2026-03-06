@@ -196,7 +196,8 @@ function SecurityTab() {
         }
         changeMutation.mutate({
             currentPassword: pwdForm.oldPassword,
-            newPassword: pwdForm.newPassword
+            newPassword: pwdForm.newPassword,
+            confirmPassword: pwdForm.confirmPassword
         })
     }
 

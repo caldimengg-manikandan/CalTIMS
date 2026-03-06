@@ -20,7 +20,7 @@ export default function LoginPage() {
     const { setAuth } = useAuthStore()
     const [showPassword, setShowPassword] = React.useState(false)
 
-    const { register, handleSubmit, formState: { errors } } = useForm({
+    const { register, handleSubmit, setError, formState: { errors } } = useForm({
         resolver: zodResolver(schema),
     })
 
@@ -32,6 +32,12 @@ export default function LoginPage() {
             toast.success(`Welcome back, ${user.name.split(' ')[0]}!`)
             navigate('/dashboard')
         },
+        onError: (err) => {
+            const message = err.response?.data?.message || 'Invalid email or password'
+            toast.error(message)
+            setError('email', { type: 'manual', message: 'Incorrect email' })
+            setError('password', { type: 'manual', message: 'Incorrect password' })
+        }
     })
 
     return (

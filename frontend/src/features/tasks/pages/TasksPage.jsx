@@ -428,10 +428,7 @@ export default function TasksPage() {
                             <Plus size={15} /> Bulk Add
                         </button>
 
-                        {/* Add */}
-                        <button onClick={() => { setAddForm(INITIAL_FORM); setAddOpen(true) }} className="btn-primary h-9 text-sm px-4">
-                            <Plus size={15} /> Add Task
-                        </button>
+
                     </div>
                 </div>
             </div>

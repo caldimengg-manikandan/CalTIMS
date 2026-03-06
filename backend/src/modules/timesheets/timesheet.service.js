@@ -305,19 +305,28 @@ const timesheetService = {
     const settingsDoc = await Settings.findOne().lean();
     const limits = settingsDoc?.timesheet || {};
 
-    // 0 means no limit
-    if (!limits.maxEntriesPerDay && !limits.maxEntriesPerWeek) return;
-
     const entriesByDay = {}; // YYYY-MM-DD -> count
     let totalEntries = 0;
+    const permissionDays = new Set();
+    const permissionHoursByDay = {}; // YYYY-MM-DD -> total hours
 
     timesheet.rows.forEach(row => {
+      const isPermission = row.category?.toLowerCase() === 'permission';
       row.entries.forEach(e => {
         if (e.hoursWorked > 0) {
           try {
-            const dateStr = new Date(e.date).toISOString().split('T')[0];
+            const d = new Date(e.date);
+            const dateStr = d.toISOString().split('T')[0];
+            
+            // Standard entry limits
             entriesByDay[dateStr] = (entriesByDay[dateStr] || 0) + 1;
             totalEntries++;
+
+            // Permission limits
+            if (isPermission) {
+              permissionDays.add(dateStr);
+              permissionHoursByDay[dateStr] = (permissionHoursByDay[dateStr] || 0) + e.hoursWorked;
+            }
           } catch (err) {
             // Skip invalid dates
           }
@@ -325,6 +334,7 @@ const timesheetService = {
       });
     });
 
+    // ── Standard Entry Limits ───────────────────────────────────────────────
     if (limits.maxEntriesPerDay > 0) {
       for (const date in entriesByDay) {
         if (entriesByDay[date] > limits.maxEntriesPerDay) {
@@ -336,6 +346,69 @@ const timesheetService = {
     if (limits.maxEntriesPerWeek > 0) {
       if (totalEntries > limits.maxEntriesPerWeek) {
         throw new AppError(`Weekly entry limit exceeded. Maximum allowed: ${limits.maxEntriesPerWeek} entries. You have ${totalEntries}.`, 400);
+      }
+    }
+
+    // ── Permission Limits ───────────────────────────────────────────────────
+    const { permissionMaxHoursPerDay = 4, permissionMaxDaysPerWeek = 0, permissionMaxDaysPerMonth = 0 } = limits;
+
+    // Daily Permission Hours Limit
+    if (permissionMaxHoursPerDay > 0) {
+      for (const date in permissionHoursByDay) {
+        if (permissionHoursByDay[date] > permissionMaxHoursPerDay) {
+          throw new AppError(`Daily permission hour limit exceeded for ${date}. Maximum allowed: ${permissionMaxHoursPerDay} hours. You entered ${permissionHoursByDay[date]} hours.`, 400);
+        }
+      }
+    }
+
+    // Weekly Permission Days Limit
+    if (permissionMaxDaysPerWeek > 0) {
+      if (permissionDays.size > permissionMaxDaysPerWeek) {
+        throw new AppError(`Weekly permission day limit exceeded. Maximum allowed: ${permissionMaxDaysPerWeek} days. You have permission entries for ${permissionDays.size} days.`, 400);
+      }
+    }
+
+    // Monthly Permission Days Limit
+    if (permissionMaxDaysPerMonth > 0 && permissionDays.size > 0) {
+      const monthStart = new Date(timesheet.weekStartDate);
+      monthStart.setUTCDate(1);
+      monthStart.setUTCHours(0, 0, 0, 0);
+
+      const monthEnd = new Date(monthStart);
+      monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+      monthEnd.setUTCDate(0);
+      monthEnd.setUTCHours(23, 59, 59, 999);
+
+      // Query other timesheets for the same user in the same month
+      const otherTimesheets = await Timesheet.find({
+        userId: timesheet.userId,
+        weekStartDate: { $gte: monthStart, $lte: monthEnd },
+        _id: { $ne: timesheet._id }
+      }).lean();
+
+      const monthPermissionDays = new Set([...permissionDays]);
+      
+      otherTimesheets.forEach(ts => {
+        ts.rows.forEach(row => {
+          if (row.category?.toLowerCase() === 'permission') {
+            row.entries.forEach(e => {
+              if (e.hoursWorked > 0) {
+                try {
+                  const d = new Date(e.date);
+                  const dateStr = d.toISOString().split('T')[0];
+                  // Only count days within this month
+                  if (d >= monthStart && d <= monthEnd) {
+                    monthPermissionDays.add(dateStr);
+                  }
+                } catch (err) {}
+              }
+            });
+          }
+        });
+      });
+
+      if (monthPermissionDays.size > permissionMaxDaysPerMonth) {
+        throw new AppError(`Monthly permission day limit exceeded. Maximum allowed: ${permissionMaxDaysPerMonth} days. You already have ${monthPermissionDays.size} days in this month.`, 400);
       }
     }
   },

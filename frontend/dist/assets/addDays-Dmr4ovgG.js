@@ -1,0 +1,1 @@
+import{t as e,H as s}from"./index-DAiwE5HM.js";function i(a,r){const t=e(a);return isNaN(r)?s(a,NaN):(r&&t.setDate(t.getDate()+r),t)}export{i as a};

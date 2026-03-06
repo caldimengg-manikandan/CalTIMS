@@ -532,6 +532,9 @@ function TimesheetTab() {
     const [eligibleLeaveTypes, setEligibleLeaveTypes] = useState([])
     const [maxEntriesPerDay, setMaxEntriesPerDay] = useState(0)
     const [maxEntriesPerWeek, setMaxEntriesPerWeek] = useState(0)
+    const [permissionMaxHoursPerDay, setPermissionMaxHoursPerDay] = useState(4)
+    const [permissionMaxDaysPerWeek, setPermissionMaxDaysPerWeek] = useState(0)
+    const [permissionMaxDaysPerMonth, setPermissionMaxDaysPerMonth] = useState(0)
 
     const { data, isLoading } = useQuery({
         queryKey: ['settings', 'timesheet'],
@@ -545,6 +548,9 @@ function TimesheetTab() {
             setEligibleLeaveTypes(data.eligibleLeaveTypes || [])
             setMaxEntriesPerDay(data.maxEntriesPerDay || 0)
             setMaxEntriesPerWeek(data.maxEntriesPerWeek || 0)
+            setPermissionMaxHoursPerDay(data.permissionMaxHoursPerDay || 4)
+            setPermissionMaxDaysPerWeek(data.permissionMaxDaysPerWeek || 0)
+            setPermissionMaxDaysPerMonth(data.permissionMaxDaysPerMonth || 0)
         }
     }, [data])
 
@@ -554,7 +560,10 @@ function TimesheetTab() {
             leaveTypes,
             eligibleLeaveTypes,
             maxEntriesPerDay: Number(maxEntriesPerDay),
-            maxEntriesPerWeek: Number(maxEntriesPerWeek)
+            maxEntriesPerWeek: Number(maxEntriesPerWeek),
+            permissionMaxHoursPerDay: Number(permissionMaxHoursPerDay),
+            permissionMaxDaysPerWeek: Number(permissionMaxDaysPerWeek),
+            permissionMaxDaysPerMonth: Number(permissionMaxDaysPerMonth)
         }),
         onSuccess: () => { toast.success('Timesheet settings saved!'); qc.invalidateQueries(['settings', 'timesheet']) },
         onError: e => toast.error(e.response?.data?.message || 'Save failed'),
@@ -638,33 +647,48 @@ function TimesheetTab() {
                 <SectionCard title="Entry Limits" subtitle="Enforce maximum entries per day/week" icon={Settings2}>
                     <div className="space-y-4">
                         <div>
-                            <label className="label mb-1.5 block">Max Entries Per Day</label>
+                            <label className="label mb-1.5 block">Daily Hour Limit</label>
                             <div className="flex items-center gap-3">
                                 <input
                                     type="number"
                                     min="0"
                                     className="input flex-1 text-sm font-bold"
-                                    value={maxEntriesPerDay}
-                                    onChange={e => setMaxEntriesPerDay(e.target.value)}
-                                    placeholder="0 for no limit"
+                                    value={permissionMaxHoursPerDay}
+                                    onChange={e => setPermissionMaxHoursPerDay(e.target.value)}
+                                    placeholder="4"
                                 />
-                                <span className="text-xs text-slate-400 font-medium">Entries</span>
+                                <span className="text-xs text-slate-400 font-medium">Hours</span>
                             </div>
                         </div>
                         <div>
-                            <label className="label mb-1.5 block">Max Entries Per Week</label>
+                            <label className="label mb-1.5 block">Weekly Days Limit</label>
                             <div className="flex items-center gap-3">
                                 <input
                                     type="number"
                                     min="0"
                                     className="input flex-1 text-sm font-bold"
-                                    value={maxEntriesPerWeek}
-                                    onChange={e => setMaxEntriesPerWeek(e.target.value)}
+                                    value={permissionMaxDaysPerWeek}
+                                    onChange={e => setPermissionMaxDaysPerWeek(e.target.value)}
                                     placeholder="0 for no limit"
                                 />
-                                <span className="text-xs text-slate-400 font-medium">Entries</span>
+                                <span className="text-xs text-slate-400 font-medium">Days</span>
                             </div>
                         </div>
+                        <div>
+                            <label className="label mb-1.5 block">Monthly Days Limit</label>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    className="input flex-1 text-sm font-bold"
+                                    value={permissionMaxDaysPerMonth}
+                                    onChange={e => setPermissionMaxDaysPerMonth(e.target.value)}
+                                    placeholder="0 for no limit"
+                                />
+                                <span className="text-xs text-slate-400 font-medium">Days</span>
+                            </div>
+                        </div>
+
                         <p className="text-[10px] text-slate-400 italic">Set to 0 to disable entry limits.</p>
                     </div>
                 </SectionCard>
@@ -825,6 +849,8 @@ function GeneralTab() {
         companyName: '',
         timezone: 'Asia/Kolkata',
         workingHoursPerDay: 8,
+        strictDailyHours: false,
+        isWeekendWorkable: false,
         weekStartDay: 'monday',
         dateFormat: 'DD/MM/YYYY',
     })
@@ -960,6 +986,31 @@ function GeneralTab() {
                             </div>
                             <p className="text-xs text-slate-400 mt-1">Standard: 8 hours</p>
                         </div>
+
+                        {/* Strict Working Hours Toggle */}
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-black border border-slate-100 dark:border-white">
+                            <div>
+                                <p className="text-sm font-semibold text-slate-700 dark:text-white">Strict Daily Hours</p>
+                                <p className="text-[10px] text-slate-400">Require exactly {form.workingHoursPerDay} hrs/day for any entry</p>
+                            </div>
+                            <button onClick={() => upd('strictDailyHours', !form.strictDailyHours)}
+                                className={`relative w-11 h-6 rounded-full transition-colors ${form.strictDailyHours ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-white/20'}`}>
+                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.strictDailyHours ? 'translate-x-5' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
+                        {/* Weekend Entry Toggle */}
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-black border border-slate-100 dark:border-white">
+                            <div>
+                                <p className="text-sm font-semibold text-slate-700 dark:text-white">Enable Weekend Entry</p>
+                                <p className="text-[10px] text-slate-400">Allow timesheet entry for Saturday and Sunday</p>
+                            </div>
+                            <button onClick={() => upd('isWeekendWorkable', !form.isWeekendWorkable)}
+                                className={`relative w-11 h-6 rounded-full transition-colors ${form.isWeekendWorkable ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-white/20'}`}>
+                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.isWeekendWorkable ? 'translate-x-5' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
                         <div>
                             <label className="label">Week Start Day</label>
                             <div className="grid grid-cols-2 gap-3">

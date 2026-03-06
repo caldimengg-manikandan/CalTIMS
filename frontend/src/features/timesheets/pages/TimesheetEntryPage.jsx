@@ -404,6 +404,24 @@ export default function TimesheetEntryPage() {
                 throw new Error('Please enter some hours before submitting.')
             }
 
+            // Strict Daily Hours Validation
+            if (general?.strictDailyHours) {
+                for (let i = 0; i < 7; i++) {
+                    const day = weekDays[i];
+                    const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
+
+                    // Skip weekend if not workable
+                    if (!general?.isWeekendWorkable && isWeekendDay) continue;
+
+                    const dayTotal = calculateDayTotal(i);
+                    // If they entered some hours, it must be >= workingHoursPerDay
+                    if (dayTotal > 0 && dayTotal < workingHoursPerDay) {
+                        const dayName = format(day, 'EEEE');
+                        throw new Error(`On ${dayName}, total hours (${formatHours(dayTotal)}) are less than the required ${workingHoursPerDay} hours.`);
+                    }
+                }
+            }
+
             const payloads = rows.filter(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS').map(row => ({
                 projectId: row.projectId,
                 category: row.taskType,
@@ -464,18 +482,13 @@ export default function TimesheetEntryPage() {
             if (field === 'projectId') {
                 const projectTasks = allTasks?.filter(t => (t.projectId?._id || t.projectId) === value) || []
                 const taskExistsInNewProject = projectTasks.some(t => t.name === r.taskType)
-                const isGlobalType = ['Select Task', 'Leave', 'Holiday', ...(LEAVE_TASK_TYPES || [])].includes(r.taskType)
+                const isGlobalType = ['Select Task', ...(LEAVE_TASK_TYPES || [])].includes(r.taskType)
 
                 if (!isGlobalType && !taskExistsInNewProject) {
                     updated.taskType = 'Select Task'
                 }
             }
 
-            // When task type changes to a leave type, auto-set hours to 09:00
-            // This logic is now mostly handled by the merged leave row, but kept for non-merged 'Leave'/'Holiday' if they exist
-            if (field === 'taskType' && (value === 'Leave' || value === 'Holiday')) {
-                updated.dayHours = updated.dayHours.map(() => '09:00')
-            }
             return updated
         }))
     }
@@ -511,11 +524,34 @@ export default function TimesheetEntryPage() {
                     return r
                 }
 
-                // 3. Permission row limit (max 4 hours)
+                // 3. Permission row limits
                 if (isPermissionRow(r.taskType)) {
-                    if (newValueTotalHours > 4) {
-                        toast.error('Permission hours cannot exceed 4 hours per day.')
+                    const maxPermHours = tsSettings?.permissionMaxHoursPerDay || 4
+                    const maxPermDays = tsSettings?.permissionMaxDaysPerWeek || 0
+
+                    if (newValueTotalHours > maxPermHours) {
+                        toast.error(`Daily hour limit exceeded. Maximum allowed: ${maxPermHours} hours.`)
                         return r
+                    }
+
+                    // Check if this is a new day for permissions and if it exceeds weekly limit
+                    const currentPermissionDays = new Set()
+                    rows.forEach(row => {
+                        if (isPermissionRow(row.taskType)) {
+                            row.dayHours.forEach((h, idx) => {
+                                if (h !== '00:00' && h !== '-8' && (row.id !== rowId || idx !== dayIndex)) {
+                                    currentPermissionDays.add(idx)
+                                }
+                            })
+                        }
+                    })
+
+                    // If we are adding hours to a day that didn't have permission hours before
+                    if (newValueTotalHours > 0 && !currentPermissionDays.has(dayIndex)) {
+                        if (maxPermDays > 0 && currentPermissionDays.size >= maxPermDays) {
+                            toast.error(`Weekly days limit exceeded. Maximum allowed: ${maxPermDays} days.`)
+                            return r
+                        }
                     }
                 }
 
@@ -680,7 +716,13 @@ export default function TimesheetEntryPage() {
                         <button
                             onClick={handleAddPermission}
                             disabled={isWeekSubmitted || rows.some(r => isPermissionRow(r.taskType))}
-                            title={isWeekSubmitted ? 'Timesheet already submitted' : rows.some(r => isPermissionRow(r.taskType)) ? 'Only one permission row allowed' : 'Add a permission row'}
+                            title={
+                                isWeekSubmitted
+                                    ? 'Timesheet already submitted'
+                                    : rows.some(r => isPermissionRow(r.taskType))
+                                        ? 'Only one permission row allowed'
+                                        : `Add a permission row (Limit: ${tsSettings?.permissionMaxHoursPerDay || 4}h/day${tsSettings?.permissionMaxDaysPerWeek > 0 ? `, ${tsSettings.permissionMaxDaysPerWeek} days/week` : ''})`
+                            }
                             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                         >
                             <Plus size={16} /> ADD PERMISSION
@@ -706,6 +748,9 @@ export default function TimesheetEntryPage() {
 
                                 {weekDays.map((day, i) => {
                                     const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
+                                    const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                                    if (!general?.isWeekendWorkable && isWeekend) return null;
+
                                     const hEvent = isHoliday ? globalHolidays?.find(e => {
                                         const d = format(day, 'yyyy-MM-dd')
                                         return format(new Date(e.startDate), 'yyyy-MM-dd') <= d && format(new Date(e.endDate), 'yyyy-MM-dd') >= d
@@ -816,20 +861,22 @@ export default function TimesheetEntryPage() {
                                                         return null;
                                                     })()}
 
-                                                    <option value="Leave">Leave</option>
-                                                    <option value="Holiday">Holiday</option>
                                                 </select>
                                             )}
                                         </td>
 
                                         {row.dayHours.map((time, i) => {
+                                            const day = weekDays[i];
+                                            const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
+                                            if (!general?.isWeekendWorkable && isWeekendDay) return null;
+
                                             const isPendingCell = row.dayMeta?.[i]?.isPending;
                                             const isApprovedCell = row.dayMeta?.[i]?.isApproved;
                                             const cellLeaveType = row.dayMeta?.[i]?.type;
                                             const isLeaveCell = isPendingCell || isApprovedCell;
                                             const isLop = cellLeaveType?.toLowerCase().includes('lop');
 
-                                            const isHoliday = holidays.has(format(weekDays[i], 'yyyy-MM-dd'));
+                                            const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
 
                                             return (
                                                 <td key={i} className={`px-2 py-3 border-r border-slate-100 dark:border-white transition-colors ${isHoliday ? 'bg-blue-50/80 dark:bg-blue-900/20' : ''}`}>
@@ -943,10 +990,13 @@ export default function TimesheetEntryPage() {
                                 <td colSpan={3} className="px-6 py-4 text-sm font-bold text-slate-700 dark:text-white">
                                     Total Hours
                                 </td>
-                                {weekDays.map((_, i) => {
+                                {weekDays.map((day, i) => {
+                                    const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
+                                    if (!general?.isWeekendWorkable && isWeekendDay) return null;
+
                                     const dayTotal = calculateDayTotal(i)
                                     const isLow = dayTotal > 0 && dayTotal < workingHoursPerDay
-                                    const isHoliday = holidays.has(format(weekDays[i], 'yyyy-MM-dd'));
+                                    const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
                                     return (
                                         <td key={i} className={clsx(
                                             "px-2 py-4 text-center text-sm font-bold transition-colors",
@@ -980,6 +1030,18 @@ export default function TimesheetEntryPage() {
                         <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
                         <span>Daily Limit: <strong>{workingHoursPerDay} hrs</strong></span>
                     </div>
+                    {tsSettings?.permissionMaxHoursPerDay > 0 && (
+                        <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <span>Permission: <strong>{tsSettings.permissionMaxHoursPerDay} hrs/day</strong></span>
+                            {tsSettings.permissionMaxDaysPerWeek > 0 && (
+                                <span className="ml-1 opacity-70">({tsSettings.permissionMaxDaysPerWeek} days/week max)</span>
+                            )}
+                            {tsSettings.permissionMaxDaysPerMonth > 0 && (
+                                <span className="ml-1 opacity-70"> / ({tsSettings.permissionMaxDaysPerMonth} days/month max)</span>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <button

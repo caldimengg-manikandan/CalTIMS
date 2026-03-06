@@ -138,7 +138,11 @@ router.get('/timesheet', asyncHandler(async (req, res) => {
 
 // POST /api/v1/settings/timesheet
 router.post('/timesheet', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
-  const { taskCategories, leaveTypes, eligibleLeaveTypes, maxEntriesPerDay, maxEntriesPerWeek } = req.body;
+  const {
+    taskCategories, leaveTypes, eligibleLeaveTypes,
+    maxEntriesPerDay, maxEntriesPerWeek,
+    permissionMaxHoursPerDay, permissionMaxDaysPerWeek, permissionMaxDaysPerMonth
+  } = req.body;
 
   const settings = await Settings.findOneAndUpdate(
     {},
@@ -149,6 +153,9 @@ router.post('/timesheet', authorize('admin', 'manager'), asyncHandler(async (req
         ...(eligibleLeaveTypes && { 'timesheet.eligibleLeaveTypes': eligibleLeaveTypes }),
         ...(maxEntriesPerDay !== undefined && { 'timesheet.maxEntriesPerDay': maxEntriesPerDay }),
         ...(maxEntriesPerWeek !== undefined && { 'timesheet.maxEntriesPerWeek': maxEntriesPerWeek }),
+        ...(permissionMaxHoursPerDay !== undefined && { 'timesheet.permissionMaxHoursPerDay': permissionMaxHoursPerDay }),
+        ...(permissionMaxDaysPerWeek !== undefined && { 'timesheet.permissionMaxDaysPerWeek': permissionMaxDaysPerWeek }),
+        ...(permissionMaxDaysPerMonth !== undefined && { 'timesheet.permissionMaxDaysPerMonth': permissionMaxDaysPerMonth }),
       },
     },
     { upsert: true, new: true }
@@ -169,7 +176,7 @@ router.get('/general', asyncHandler(async (req, res) => {
 
 // POST /api/v1/settings/general
 router.post('/general', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
-  const { companyName, timezone, workingHoursPerDay, weekStartDay, dateFormat } = req.body;
+  const { companyName, timezone, workingHoursPerDay, strictDailyHours, isWeekendWorkable, weekStartDay, dateFormat } = req.body;
 
   const settings = await Settings.findOneAndUpdate(
     {},
@@ -178,6 +185,8 @@ router.post('/general', authorize('admin', 'manager'), asyncHandler(async (req, 
         ...(companyName !== undefined && { 'general.companyName': companyName }),
         ...(timezone !== undefined && { 'general.timezone': timezone }),
         ...(workingHoursPerDay !== undefined && { 'general.workingHoursPerDay': workingHoursPerDay }),
+        ...(strictDailyHours !== undefined && { 'general.strictDailyHours': strictDailyHours }),
+        ...(isWeekendWorkable !== undefined && { 'general.isWeekendWorkable': isWeekendWorkable }),
         ...(weekStartDay !== undefined && { 'general.weekStartDay': weekStartDay }),
         ...(dateFormat !== undefined && { 'general.dateFormat': dateFormat }),
       },

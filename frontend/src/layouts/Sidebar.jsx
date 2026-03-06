@@ -52,7 +52,7 @@ export default function Sidebar() {
     const { general } = useSettingsStore()
     const { appVersion } = useSystemStore()
 
-    const companyName = general?.companyName || 'CALTIMS'
+    const companyName = 'CALTIMS'
 
     return (
         <aside className={clsx(
