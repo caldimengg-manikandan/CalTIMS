@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
-import useSystemStore from '@/store/systemStore'
+import { useSystemStore } from '@/store/systemStore'
 import AppLayout from '@/layouts/AppLayout'
 import AuthLayout from '@/layouts/AuthLayout'
 import Spinner from '@/components/ui/Spinner'
@@ -25,7 +25,7 @@ const LeavePage = lazy(() => import('@/features/leaves/pages/LeavePage'))
 const AnnouncementsPage = lazy(() => import('@/features/announcements/pages/AnnouncementsPage'))
 const ReportsPage = lazy(() => import('@/features/reports/pages/ReportsPage'))
 const ProfilePage = lazy(() => import('@/features/employees/pages/ProfilePage'))
-const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'))
+const SettingsLayout = lazy(() => import('@/features/settings/pages/SettingsLayout'))
 const IncidentList = lazy(() => import('@/pages/incidents/IncidentList'))
 const IncidentDetails = lazy(() => import('@/pages/incidents/IncidentDetails'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
@@ -140,7 +140,7 @@ export default function App() {
                     } />
                     <Route path="/settings" element={
                         <ProtectedRoute roles={['admin']}>
-                            <PageSuspense><SettingsPage /></PageSuspense>
+                            <PageSuspense><SettingsLayout /></PageSuspense>
                         </ProtectedRoute>
                     } />
                 </Route>

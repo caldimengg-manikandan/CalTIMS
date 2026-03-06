@@ -9,6 +9,7 @@ const User = require('../users/user.model');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/rbac.middleware');
 const emailService = require('../../shared/services/email.service');
+const { logAction } = require('../audit/audit.routes');
 
 router.use(authenticate);
 
@@ -26,7 +27,67 @@ async function getOrCreateSettings() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// REPORT SETTINGS
+// FULL SYSTEM SETTINGS (Enterprise Suite)
+// ════════════════════════════════════════════════════════════════════════════
+
+// GET /api/v1/settings
+router.get('/', asyncHandler(async (req, res) => {
+  const settings = await getOrCreateSettings();
+
+  // Optionally populate recipients
+  if (settings.report?.recipientIds?.length) {
+    settings.report.recipients = await User.find(
+      { _id: { $in: settings.report.recipientIds } },
+      'name email employeeId'
+    ).lean();
+  }
+
+  ApiResponse.success(res, { data: settings });
+}));
+
+// PUT /api/v1/settings
+router.put('/', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+  const updates = req.body;
+  const currentSettings = await getOrCreateSettings();
+
+  // Basic flat-map updater. Real deep merge relies on Mongoose's `set` logic or lodash.merge
+  // Since we construct the form fully on frontend, we can just replace whole sub-documents
+  // if provided, except keeping their `_id`s if necessary.
+
+  // Safe keys to update
+  const safeKeys = [
+    'organization', 'timesheet', 'leavePolicy', 'notifications',
+    'report', 'compliance', 'branding', 'integrations', 'general'
+  ];
+
+  const updateDoc = {};
+  for (const key of safeKeys) {
+    if (updates[key] !== undefined) {
+      updateDoc[key] = updates[key];
+    }
+  }
+
+  // Update
+  const newSettings = await Settings.findOneAndUpdate(
+    {},
+    { $set: updateDoc },
+    { upsert: true, new: true }
+  ).lean();
+
+  // Audit Log
+  await logAction({
+    userId: req.user._id,
+    action: 'UPDATE_SETTINGS',
+    entityType: 'Settings',
+    details: { updatedSections: Object.keys(updateDoc) },
+    ipAddress: req.ip || req.connection.remoteAddress
+  });
+
+  ApiResponse.success(res, { message: 'Settings successfully updated', data: newSettings });
+}));
+
+// ════════════════════════════════════════════════════════════════════════════
+// REPORT SETTINGS (Legacy)
 // ════════════════════════════════════════════════════════════════════════════
 
 // GET /api/v1/settings/report

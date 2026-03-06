@@ -11,7 +11,7 @@ import Modal from '@/components/ui/Modal'
 import toast from 'react-hot-toast'
 import { useThemeStore, ACCENT_PRESETS } from '@/store/themeStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import useSystemStore from '@/store/systemStore'
+import { useSystemStore } from '@/store/systemStore'
 import PageHeader from '@/components/ui/PageHeader'
 
 // ── Constants ────────────────────────────────────────────────────────────────

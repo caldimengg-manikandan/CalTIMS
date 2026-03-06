@@ -8,7 +8,7 @@ import {
 import { timesheetAPI, leaveAPI, announcementAPI, notificationAPI } from '@/services/endpoints'
 import { useAuthStore } from '@/store/authStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import useSystemStore from '@/store/systemStore'
+import { useSystemStore } from '@/store/systemStore'
 import { clsx } from 'clsx'
 import { toast } from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'

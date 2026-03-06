@@ -91,7 +91,10 @@ export const reportAPI = {
   getEmployeeAttendance: (params) => api.get('/reports/employee-attendance', { params }),
   getWeeklyTrend: (params) => api.get('/reports/weekly-trend', { params }),
   getDepartmentSummary: (params) => api.get('/reports/department-summary', { params }),
+  getComplianceSummary: (params) => api.get('/reports/compliance-summary', { params }),
+  getSmartInsights: (params) => api.get('/reports/smart-insights', { params }),
   exportPDF: (params) => api.get('/reports/pdf-export', { params, responseType: 'blob' }),
+  exportCSV: (params) => api.get('/reports/csv-export', { params, responseType: 'blob' }),
 }
 
 export const notificationAPI = {
@@ -114,8 +117,15 @@ export const settingsAPI = {
   // General settings
   getGeneralSettings: () => api.get('/settings/general'),
   saveGeneralSettings: (data) => api.post('/settings/general', data),
+  // Full Enterprise Settings
+  getSettings: () => api.get('/settings'),
+  updateSettings: (data) => api.put('/settings', data),
   // Employee list for recipient picker
   getPickerEmployees: (q) => api.get('/settings/employees', { params: { q } }),
+}
+
+export const auditAPI = {
+  getAll: (params) => api.get('/audit', { params }),
 }
 
 export const reportSchedulesAPI = {

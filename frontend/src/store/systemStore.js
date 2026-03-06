@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { systemAPI } from '../services/endpoints'
 
-const useSystemStore = create((set) => ({
+export const useSystemStore = create((set) => ({
     appVersion: 'basic', // Default to basic
     isLoading: true,
     error: null,
@@ -27,5 +27,3 @@ const useSystemStore = create((set) => ({
         }
     }
 }))
-
-export default useSystemStore

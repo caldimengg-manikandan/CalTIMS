@@ -22,7 +22,7 @@ export default function AuthLayout() {
     return (
         <div className="min-h-screen flex bg-white dark:bg-black font-sans">
             {/* Left panel — Stunning Branding with Background Image */}
-            <div className="hidden lg:flex lg:w-3/5 relative overflow-hidden">
+            <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
                 {/* Background Image with Overlay */}
                 <div
                     className="absolute inset-0 bg-cover bg-center"
@@ -36,7 +36,7 @@ export default function AuthLayout() {
                         <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-black/20">
                             <Timer size={28} className="text-indigo-600" />
                         </div>
-                        <span className="text-2xl font-bold tracking-tight">CALTIMS</span>
+                        <span className="text-2xl font-bold tracking-tight">CALTIMS - TIME INFORMATION MANAGEMENT SYSTEM </span>
                     </div>
 
                     <div className="space-y-8 max-w-lg">
@@ -44,7 +44,6 @@ export default function AuthLayout() {
                             <h1 className="text-5xl font-extrabold leading-[1.1] tracking-tight text-white">
                                 Manage time like a <span className="opacity-90">strategic asset.</span>
                             </h1>
-
                         </div>
                     </div>
 
@@ -68,7 +67,7 @@ export default function AuthLayout() {
                 </div>
 
                 <div className="flex-1 flex items-center justify-center p-8 sm:p-12 lg:p-24">
-                    <div className="w-full max-w-md animate-slide-in">
+                    <div className="w-full max-w-xl animate-slide-in">
                         <Outlet />
                     </div>
                 </div>

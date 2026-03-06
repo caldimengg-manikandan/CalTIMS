@@ -8,7 +8,7 @@ import {
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import useSystemStore from '@/store/systemStore'
+import { useSystemStore } from '@/store/systemStore'
 import { clsx } from 'clsx'
 import { toast } from 'react-hot-toast'
 import { Lock } from 'lucide-react'
