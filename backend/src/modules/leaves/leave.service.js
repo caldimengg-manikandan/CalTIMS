@@ -419,15 +419,22 @@ const leaveService = {
   },
 
   async getFilterOptions() {
-    const [leaveIds, statuses, leaveTypes] = await Promise.all([
+    const Settings = mongoose.model('Settings');
+    const [leaveIds, statuses, leaveTypesInUse, settings] = await Promise.all([
       Leave.distinct('leaveId'),
       Leave.distinct('status'),
       Leave.distinct('leaveType'),
+      Settings.findOne().select('leavePolicy.leaveTypes').lean()
     ]);
+
+    // Merge leave types from settings with those already in use
+    const settingsTypes = settings?.leavePolicy?.leaveTypes || [];
+    const allLeaveTypes = [...new Set([...settingsTypes, ...leaveTypesInUse])];
+
     return {
       leaveIds: leaveIds.filter(Boolean).sort(),
       statuses: statuses.filter(Boolean).sort(),
-      leaveTypes: leaveTypes.filter(Boolean).sort(),
+      leaveTypes: allLeaveTypes.filter(Boolean).sort(),
     };
   },
 };

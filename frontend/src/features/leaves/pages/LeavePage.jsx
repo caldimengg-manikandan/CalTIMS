@@ -14,7 +14,8 @@ import {
     ChevronDown, Eye
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import Pagination from '@/components/ui/Pagination'
+import Pagination from '@/components/ui/Pagination';
+import ProGuard from '@/components/ui/ProGuard';
 
 
 
@@ -420,14 +421,17 @@ function AdminLeaveView() {
         userId: '',
         leaveId: '',
     })
+    const [tempFilters, setTempFilters] = React.useState(filters)
+
+    const [eligibilityFilters, setEligibilityFilters] = React.useState({
+        department: '',
+    })
+    const [tempEligibilityFilters, setTempEligibilityFilters] = React.useState(eligibilityFilters)
+    const [showEligibilityFilters, setShowEligibilityFilters] = React.useState(false)
+
     const [rejectTarget, setRejectTarget] = React.useState(null)
     const [viewTarget, setViewTarget] = React.useState(null)
     const [editTarget, setEditTarget] = React.useState(null)
-
-    const [eligibilityFilters, setEligibilityFilters] = React.useState({ department: '' })
-    const [showEligibilityFilters, setShowEligibilityFilters] = React.useState(false)
-    const [tempFilters, setTempFilters] = React.useState(filters)
-    const [tempEligibilityFilters, setTempEligibilityFilters] = React.useState(eligibilityFilters)
 
     // Pagination state for applications
     const [appPage, setAppPage] = React.useState(1)
@@ -567,450 +571,458 @@ function AdminLeaveView() {
     }
 
     return (
-        <div className="space-y-6 animate-fade-in">
-            <PageHeader title="Leave Management">
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full md:w-auto self-stretch md:self-auto">
-                    <button
-                        onClick={() => setActiveTab('applications')}
-                        className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'applications' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Applications
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('eligibility')}
-                        className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'eligibility' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Leave Eligibility
-                    </button>
-                    {/* {stats.pending > 0 && activeTab === 'applications' && (
+        <ProGuard
+            title="Leave Management"
+            subtitle="Centralized leave management, policy enforcement, and eligibility tracking are Enterprise Pro features."
+            icon={ClipboardList}
+        >
+            <div className="space-y-6 animate-fade-in">
+                <PageHeader title="Leave Management">
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full md:w-auto self-stretch md:self-auto">
+                        <button
+                            onClick={() => setActiveTab('applications')}
+                            className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'applications' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            Applications
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('eligibility')}
+                            className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'eligibility' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            Leave Eligibility
+                        </button>
+                        {/* {stats.pending > 0 && activeTab === 'applications' && (
                         <div className="ml-2 flex items-center gap-1.5 px-2.5 py-1 bg-amber-500 text-white rounded-lg text-[10px] uppercase font-black tracking-wider animate-pulse self-center">
                             {stats.pending} New
                         </div>
                     )} */}
+                    </div>
+                </PageHeader>
+
+                {/* Stats Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                        { label: 'Total', value: stats.total, icon: ClipboardList, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+                        { label: 'Pending', value: stats.pending, icon: AlertCircle, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+                        { label: 'Approved', value: stats.approved, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+                        { label: 'Rejected', value: stats.rejected, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
+                    ].map((st) => (
+                        <div key={st.label} className="card p-4 flex items-center gap-3">
+                            <div className={`p-2.5 rounded-xl ${st.bg} ${st.color} shrink-0`}><st.icon size={18} /></div>
+                            <div>
+                                <p className="text-xl font-bold text-slate-800 dark:text-white leading-none mb-0.5">{st.value}</p>
+                                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">{st.label}</p>
+                            </div>
+                        </div>
+                    ))}
                 </div>
-            </PageHeader>
 
-            {/* Stats Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                    { label: 'Total', value: stats.total, icon: ClipboardList, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-                    { label: 'Pending', value: stats.pending, icon: AlertCircle, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-                    { label: 'Approved', value: stats.approved, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-                    { label: 'Rejected', value: stats.rejected, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
-                ].map((st) => (
-                    <div key={st.label} className="card p-4 flex items-center gap-3">
-                        <div className={`p-2.5 rounded-xl ${st.bg} ${st.color} shrink-0`}><st.icon size={18} /></div>
-                        <div>
-                            <p className="text-xl font-bold text-slate-800 dark:text-white leading-none mb-0.5">{st.value}</p>
-                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">{st.label}</p>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {activeTab === 'applications' ? (
-                <>
-                    {/* Toolbar */}
-                    <div className="card p-3">
-                        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-                            {/* Search */}
-                            <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                <input
-                                    type="text"
-                                    placeholder="Search overall (min. 2 characters)..."
-                                    className="input pl-9 h-9 text-sm w-full"
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                />
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 shrink-0">
-                                {/* Filter Button */}
-                                <div className="relative">
-                                    <button
-                                        onClick={() => {
-                                            if (!showFilters) setTempFilters(filters)
-                                            setShowFilters(p => !p)
-                                        }}
-                                        className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showFilters || activeFilterCount > 0
-                                            ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
-                                            : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-                                    >
-                                        <SlidersHorizontal size={15} />
-                                        Filters
-                                        {activeFilterCount > 0 && (
-                                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary-500 text-white text-[10px] font-bold">
-                                                {activeFilterCount}
-                                            </span>
-                                        )}
-                                        <ChevronDown size={14} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-                                    </button>
-
-                                    {/* Filter Dropdown */}
-                                    {showFilters && (
-                                        <>
-                                            <div className="fixed inset-0 z-20" onClick={() => setShowFilters(false)} />
-                                            <div className="absolute right-0 top-11 z-30 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-5 space-y-5">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Filter By</span>
-                                                    {activeFilterCount > 0 && (
-                                                        <button onClick={() => {
-                                                            const reset = { status: '', leaveType: '', userId: '', leaveId: '' }
-                                                            setTempFilters(reset)
-                                                            setFilters(reset)
-                                                        }}
-                                                            className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase tracking-wider">
-                                                            Reset All
-                                                        </button>
-                                                    )}
-                                                </div>
-
-                                                <div className="space-y-4 pr-1">
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div className="space-y-2">
-                                                            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Leave ID</label>
-                                                            <select
-                                                                className="input text-sm h-10"
-                                                                value={filters.leaveId}
-                                                                onChange={e => setFilters(f => ({ ...f, leaveId: e.target.value }))}
-                                                            >
-                                                                <option value="">All IDs</option>
-                                                                {filterOptions?.leaveIds?.map(id => (
-                                                                    <option key={id} value={id}>{id}</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                        <div className="space-y-2">
-                                                            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Employee</label>
-                                                            <select
-                                                                className="input text-sm h-10"
-                                                                value={tempFilters.userId}
-                                                                onChange={e => setTempFilters(f => ({ ...f, userId: e.target.value }))}
-                                                            >
-                                                                <option value="">All Employees</option>
-                                                                {employees.map(emp => (
-                                                                    <option key={emp._id} value={emp._id}>{emp.name}</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div className="space-y-2">
-                                                            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status</label>
-                                                            <select
-                                                                className="input text-sm h-10"
-                                                                value={tempFilters.status}
-                                                                onChange={e => setTempFilters(f => ({ ...f, status: e.target.value }))}
-                                                            >
-                                                                <option value="">All Status</option>
-                                                                {filterOptions?.statuses?.map(s => (
-                                                                    <option key={s} value={s} className="capitalize">{s}</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                        <div className="space-y-2">
-                                                            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Type</label>
-                                                            <select
-                                                                className="input text-sm h-10"
-                                                                value={tempFilters.leaveType}
-                                                                onChange={e => setTempFilters(f => ({ ...f, leaveType: e.target.value }))}
-                                                            >
-                                                                <option value="">All Types</option>
-                                                                {filterOptions?.leaveTypes?.map(t => (
-                                                                    <option key={t} value={t} className="capitalize">{t}</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-3 pt-2">
-                                                    <button onClick={() => setTempFilters({ status: '', leaveType: '', userId: '', leaveId: '' })} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
-                                                    <button onClick={() => {
-                                                        setFilters(tempFilters)
-                                                        setShowFilters(false)
-                                                    }} className="flex-[2] h-11 bg-primary-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]">Apply Filters</button>
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
+                {activeTab === 'applications' ? (
+                    <>
+                        {/* Toolbar */}
+                        <div className="card p-3">
+                            <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+                                {/* Search */}
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search overall (min. 2 characters)..."
+                                        className="input pl-9 h-9 text-sm w-full"
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                    />
                                 </div>
+                                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                    {/* Filter Button */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => {
+                                                if (!showFilters) setTempFilters(filters)
+                                                setShowFilters(p => !p)
+                                            }}
+                                            className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showFilters || activeFilterCount > 0
+                                                ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
+                                                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                        >
+                                            <SlidersHorizontal size={15} />
+                                            Filters
+                                            {activeFilterCount > 0 && (
+                                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary-500 text-white text-[10px] font-bold">
+                                                    {activeFilterCount}
+                                                </span>
+                                            )}
+                                            <ChevronDown size={14} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+                                        </button>
 
-                                <button onClick={handleExportCSV} className="flex items-center gap-2 px-3 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                                    <Download size={15} /> Export
-                                </button>
+                                        {/* Filter Dropdown */}
+                                        {showFilters && (
+                                            <>
+                                                <div className="fixed inset-0 z-20" onClick={() => setShowFilters(false)} />
+                                                <div className="absolute right-0 top-11 z-30 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-5 space-y-5">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Filter By</span>
+                                                        {activeFilterCount > 0 && (
+                                                            <button onClick={() => {
+                                                                const reset = { status: '', leaveType: '', userId: '', leaveId: '' }
+                                                                setTempFilters(reset)
+                                                                setFilters(reset)
+                                                            }}
+                                                                className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase tracking-wider">
+                                                                Reset All
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="space-y-4 pr-1">
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div className="space-y-2">
+                                                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Leave ID</label>
+                                                                <select
+                                                                    className="input text-sm h-10"
+                                                                    value={filters.leaveId}
+                                                                    onChange={e => setFilters(f => ({ ...f, leaveId: e.target.value }))}
+                                                                >
+                                                                    <option value="">All IDs</option>
+                                                                    {filterOptions?.leaveIds?.map(id => (
+                                                                        <option key={id} value={id}>{id}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Employee</label>
+                                                                <select
+                                                                    className="input text-sm h-10"
+                                                                    value={tempFilters.userId}
+                                                                    onChange={e => setTempFilters(f => ({ ...f, userId: e.target.value }))}
+                                                                >
+                                                                    <option value="">All Employees</option>
+                                                                    {employees.map(emp => (
+                                                                        <option key={emp._id} value={emp._id}>{emp.name}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div className="space-y-2">
+                                                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status</label>
+                                                                <select
+                                                                    className="input text-sm h-10"
+                                                                    value={tempFilters.status}
+                                                                    onChange={e => setTempFilters(f => ({ ...f, status: e.target.value }))}
+                                                                >
+                                                                    <option value="">All Status</option>
+                                                                    {filterOptions?.statuses?.map(s => (
+                                                                        <option key={s} value={s} className="capitalize">{s}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Type</label>
+                                                                <select
+                                                                    className="input text-sm h-10"
+                                                                    value={tempFilters.leaveType}
+                                                                    onChange={e => setTempFilters(f => ({ ...f, leaveType: e.target.value }))}
+                                                                >
+                                                                    <option value="">All Types</option>
+                                                                    {filterOptions?.leaveTypes?.map(t => (
+                                                                        <option key={t} value={t} className="capitalize">{t}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-3 pt-2">
+                                                        <button onClick={() => setTempFilters({ status: '', leaveType: '', userId: '', leaveId: '' })} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
+                                                        <button onClick={() => {
+                                                            setFilters(tempFilters)
+                                                            setShowFilters(false)
+                                                        }} className="flex-[2] h-11 bg-primary-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]">Apply Filters</button>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    <button onClick={handleExportCSV} className="flex items-center gap-2 px-3 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                        <Download size={15} /> Export
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div className="card p-0 overflow-hidden">
-                        {isLoading ? (
-                            <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-                        ) : leaves.length === 0 ? (
-                            <div className="py-20 text-center">
-                                <Calendar size={40} className="mx-auto text-slate-200 mb-3" />
-                                <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No applications found</p>
+                        <div className="card p-0 overflow-hidden">
+                            {isLoading ? (
+                                <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+                            ) : leaves.length === 0 ? (
+                                <div className="py-20 text-center">
+                                    <Calendar size={40} className="mx-auto text-slate-200 mb-3" />
+                                    <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No applications found</p>
+                                </div>
+                            ) : (
+                                <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>Employee</th>
+                                                <th>Leave Type</th>
+                                                <th>From</th>
+                                                <th>To</th>
+                                                <th>Days</th>
+                                                <th>Applied On</th>
+                                                <th className="text-center">Status</th>
+                                                <th className="text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {leaves.map((leave) => (
+                                                <tr key={leave._id}>
+                                                    <td>
+                                                        <span className="text-[10px] font-mono font-bold px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg">{leave.leaveId || '—'}</span>
+                                                    </td>
+                                                    <td>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center text-white font-bold text-xs shrink-0">{leave.userId?.name?.charAt(0)?.toUpperCase() || '?'}</div>
+                                                            <div>
+                                                                <p className="font-medium text-slate-800 dark:text-white leading-tight">{leave.userId?.name || '—'}</p>
+                                                                {/* <p className="text-[10px] text-slate-400 font-mono mt-0.5">{leave.userId?.employeeId || '—'}</p> */}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="capitalize text-sm font-medium text-slate-700 dark:text-white">{leave.leaveType}</td>
+                                                    <td className="text-sm text-slate-600 dark:text-slate-300">{format(new Date(leave.startDate), 'MMM d, yyyy')}</td>
+                                                    <td className="text-sm text-slate-600 dark:text-slate-300">{format(new Date(leave.endDate), 'MMM d, yyyy')}</td>
+                                                    <td>
+                                                        <span className="font-bold text-primary-600 text-sm">{leave.totalDays}</span>
+                                                        <span className="text-xs text-slate-400"> d</span>
+                                                    </td>
+                                                    <td className="text-sm text-slate-500">{format(new Date(leave.createdAt), 'MMM d, yyyy')}</td>
+                                                    <td className="text-center">
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <StatusBadge status={leave.status} />
+                                                            {leave.approvedBy?.name && (
+                                                                <span className="text-[10px] text-slate-400">by {leave.approvedBy.name.split(' ')[0]}</span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="text-right">
+                                                        <div className="flex justify-end items-center gap-1">
+                                                            <button onClick={() => setViewTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"><Eye size={16} /></button>
+                                                            {leave.status === 'pending' && (
+                                                                <>
+                                                                    <button onClick={() => setRejectTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><XCircle size={16} /></button>
+                                                                    <button onClick={() => approveMutation.mutate(leave._id)} disabled={approveMutation.isPending} className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"><CheckCircle2 size={16} /></button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                            {!isLoading && leaves.length > 0 && (
+                                <Pagination
+                                    currentPage={data.pagination.page}
+                                    totalPages={data.pagination.totalPages}
+                                    totalResults={data.pagination.total}
+                                    limit={appLimit}
+                                    onPageChange={setAppPage}
+                                    onLimitChange={(l) => { setAppLimit(l); setAppPage(1); }}
+                                />
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {/* Eligibility Toolbar */}
+                        <div className="card p-3">
+                            <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+                                {/* Search */}
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search overall (min. 2 characters)..."
+                                        className="input pl-9 h-9 text-sm w-full"
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                    {/* Filter Button */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => {
+                                                if (!showEligibilityFilters) setTempEligibilityFilters(eligibilityFilters)
+                                                setShowEligibilityFilters(p => !p)
+                                            }}
+                                            className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showEligibilityFilters || activeEligibilityFilterCount > 0
+                                                ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
+                                                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                        >
+                                            <SlidersHorizontal size={15} />
+                                            Filters
+                                            {activeEligibilityFilterCount > 0 && (
+                                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary-500 text-white text-[10px] font-bold">
+                                                    {activeEligibilityFilterCount}
+                                                </span>
+                                            )}
+                                            <ChevronDown size={14} className={`transition-transform ${showEligibilityFilters ? 'rotate-180' : ''}`} />
+                                        </button>
+
+                                        {/* Filter Dropdown */}
+                                        {showEligibilityFilters && (
+                                            <>
+                                                <div className="fixed inset-0 z-20" onClick={() => setShowEligibilityFilters(false)} />
+                                                <div className="absolute right-0 top-11 z-30 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-5 space-y-5">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Filter By</span>
+                                                        {activeEligibilityFilterCount > 0 && (
+                                                            <button onClick={() => {
+                                                                const reset = { department: '' }
+                                                                setTempEligibilityFilters(reset)
+                                                                setEligibilityFilters(reset)
+                                                            }}
+                                                                className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase tracking-wider">
+                                                                Reset All
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-2">
+                                                            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Department</label>
+                                                            <select
+                                                                className="input text-sm h-10"
+                                                                value={tempEligibilityFilters.department}
+                                                                onChange={e => setTempEligibilityFilters({ department: e.target.value })}
+                                                            >
+                                                                <option value="">All Departments</option>
+                                                                {eligibilityDepartments.map(dept => (
+                                                                    <option key={dept} value={dept}>{dept}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-3 pt-2">
+                                                        <button onClick={() => setTempEligibilityFilters({ department: '' })} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
+                                                        <button onClick={() => {
+                                                            setEligibilityFilters(tempEligibilityFilters)
+                                                            setShowEligibilityFilters(false)
+                                                        }} className="flex-[2] h-11 bg-primary-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]">Apply Filters</button>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    <button onClick={handleExportEligibilityCSV} className="flex items-center gap-2 px-3 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                        <Download size={15} /> Export
+                                    </button>
+                                </div>
                             </div>
-                        ) : (
+                        </div>
+
+                        <div className="card p-0 overflow-hidden">
                             <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
-                                <table className="w-full text-left border-collapse">
+                                <table className="w-full">
                                     <thead>
                                         <tr>
-                                            <th>ID</th>
                                             <th>Employee</th>
-                                            <th>Leave Type</th>
-                                            <th>Duration</th>
-                                            <th>Days</th>
-                                            <th>Applied On</th>
-                                            <th className="text-center">Status</th>
+                                            {LEAVE_TYPES.map(t => (
+                                                <th key={t} className="text-center capitalize">{t} Leave</th>
+                                            ))}
                                             <th className="text-right">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {leaves.map((leave) => (
-                                            <tr key={leave._id}>
-                                                <td>
-                                                    <span className="text-[10px] font-mono font-bold px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg">{leave.leaveId || '—'}</span>
-                                                </td>
+                                        {filteredEmployees.map((emp) => (
+                                            <tr key={emp._id}>
                                                 <td>
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center text-white font-bold text-xs shrink-0">{leave.userId?.name?.charAt(0)?.toUpperCase() || '?'}</div>
+                                                        <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs shrink-0">{emp.name?.charAt(0)?.toUpperCase()}</div>
                                                         <div>
-                                                            <p className="font-medium text-slate-800 dark:text-white leading-tight">{leave.userId?.name || '—'}</p>
-                                                            {/* <p className="text-[10px] text-slate-400 font-mono mt-0.5">{leave.userId?.employeeId || '—'}</p> */}
+                                                            <p className="font-medium text-slate-800 dark:text-white leading-tight">{emp.name}</p>
+                                                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">{emp.employeeId} • {emp.department}</p>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="capitalize text-sm font-medium text-slate-700 dark:text-white">{leave.leaveType}</td>
-                                                <td className="text-sm text-slate-600 dark:text-slate-300">{format(new Date(leave.startDate), 'MMM d')} → {format(new Date(leave.endDate), 'MMM d, yyyy')}</td>
-                                                <td>
-                                                    <span className="font-bold text-primary-600 text-sm">{leave.totalDays}</span>
-                                                    <span className="text-xs text-slate-400"> d</span>
-                                                </td>
-                                                <td className="text-sm text-slate-500">{format(new Date(leave.createdAt), 'MMM d, yyyy')}</td>
-                                                <td className="text-center">
-                                                    <div className="flex flex-col items-center gap-1">
-                                                        <StatusBadge status={leave.status} />
-                                                        {leave.approvedBy?.name && (
-                                                            <span className="text-[10px] text-slate-400">by {leave.approvedBy.name.split(' ')[0]}</span>
-                                                        )}
-                                                    </div>
-                                                </td>
+                                                {LEAVE_TYPES.map((t, idx) => (
+                                                    <td key={t} className="text-center">
+                                                        <div className={`inline-flex items-center justify-center px-3 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded-full text-xs font-bold leading-none min-w-[2.5rem]`}>
+                                                            {emp.leaveBalance?.[t] || 0}
+                                                        </div>
+                                                    </td>
+                                                ))}
                                                 <td className="text-right">
-                                                    <div className="flex justify-end items-center gap-1">
-                                                        <button onClick={() => setViewTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"><Eye size={16} /></button>
-                                                        {leave.status === 'pending' && (
-                                                            <>
-                                                                <button onClick={() => setRejectTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><XCircle size={16} /></button>
-                                                                <button onClick={() => approveMutation.mutate(leave._id)} disabled={approveMutation.isPending} className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"><CheckCircle2 size={16} /></button>
-                                                            </>
-                                                        )}
-                                                    </div>
+                                                    <button
+                                                        onClick={() => setEditTarget(emp)}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-primary-600 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 text-xs font-bold transition-colors"
+                                                    >
+                                                        Edit Eligibility
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}
+                                        {filteredEmployees.length === 0 && (
+                                            <tr>
+                                                <td colSpan={LEAVE_TYPES.length + 2} className="py-20 text-center">
+                                                    <Search size={40} className="mx-auto text-slate-200 mb-3" />
+                                                    <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No employees found</p>
+                                                </td>
+                                            </tr>
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
-                        )}
-                        {!isLoading && leaves.length > 0 && (
-                            <Pagination
-                                currentPage={data.pagination.page}
-                                totalPages={data.pagination.totalPages}
-                                totalResults={data.pagination.total}
-                                limit={appLimit}
-                                onPageChange={setAppPage}
-                                onLimitChange={(l) => { setAppLimit(l); setAppPage(1); }}
-                            />
-                        )}
-                    </div>
-                </>
-            ) : (
-                <>
-                    {/* Eligibility Toolbar */}
-                    <div className="card p-3">
-                        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-                            {/* Search */}
-                            <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                <input
-                                    type="text"
-                                    placeholder="Search overall (min. 2 characters)..."
-                                    className="input pl-9 h-9 text-sm w-full"
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
+                            {!employeesLoading && filteredEmployees.length > 0 && (
+                                <Pagination
+                                    currentPage={employeesData.pagination.page}
+                                    totalPages={employeesData.pagination.totalPages}
+                                    totalResults={employeesData.pagination.total}
+                                    limit={eligLimit}
+                                    onPageChange={setEligPage}
+                                    onLimitChange={(l) => { setEligLimit(l); setEligPage(1); }}
                                 />
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 shrink-0">
-                                {/* Filter Button */}
-                                <div className="relative">
-                                    <button
-                                        onClick={() => {
-                                            if (!showEligibilityFilters) setTempEligibilityFilters(eligibilityFilters)
-                                            setShowEligibilityFilters(p => !p)
-                                        }}
-                                        className={`flex items-center gap-2 px-3 h-9 rounded-lg border text-sm font-medium transition-colors ${showEligibilityFilters || activeEligibilityFilterCount > 0
-                                            ? 'border-primary-400 text-primary-600 bg-primary-50 dark:bg-primary-900/20'
-                                            : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-                                    >
-                                        <SlidersHorizontal size={15} />
-                                        Filters
-                                        {activeEligibilityFilterCount > 0 && (
-                                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary-500 text-white text-[10px] font-bold">
-                                                {activeEligibilityFilterCount}
-                                            </span>
-                                        )}
-                                        <ChevronDown size={14} className={`transition-transform ${showEligibilityFilters ? 'rotate-180' : ''}`} />
-                                    </button>
-
-                                    {/* Filter Dropdown */}
-                                    {showEligibilityFilters && (
-                                        <>
-                                            <div className="fixed inset-0 z-20" onClick={() => setShowEligibilityFilters(false)} />
-                                            <div className="absolute right-0 top-11 z-30 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-5 space-y-5">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Filter By</span>
-                                                    {activeEligibilityFilterCount > 0 && (
-                                                        <button onClick={() => {
-                                                            const reset = { department: '' }
-                                                            setTempEligibilityFilters(reset)
-                                                            setEligibilityFilters(reset)
-                                                        }}
-                                                            className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase tracking-wider">
-                                                            Reset All
-                                                        </button>
-                                                    )}
-                                                </div>
-
-                                                <div className="space-y-4">
-                                                    <div className="space-y-2">
-                                                        <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Department</label>
-                                                        <select
-                                                            className="input text-sm h-10"
-                                                            value={tempEligibilityFilters.department}
-                                                            onChange={e => setTempEligibilityFilters({ department: e.target.value })}
-                                                        >
-                                                            <option value="">All Departments</option>
-                                                            {eligibilityDepartments.map(dept => (
-                                                                <option key={dept} value={dept}>{dept}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-3 pt-2">
-                                                    <button onClick={() => setTempEligibilityFilters({ department: '' })} className="flex-1 h-11 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold transition-all">Clear</button>
-                                                    <button onClick={() => {
-                                                        setEligibilityFilters(tempEligibilityFilters)
-                                                        setShowEligibilityFilters(false)
-                                                    }} className="flex-[2] h-11 bg-primary-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary-200 dark:shadow-none transition-all active:scale-[0.98]">Apply Filters</button>
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-
-                                <button onClick={handleExportEligibilityCSV} className="flex items-center gap-2 px-3 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                                    <Download size={15} /> Export
-                                </button>
-                            </div>
+                            )}
                         </div>
-                    </div>
-
-                    <div className="card p-0 overflow-hidden">
-                        <div className="table-wrapper rounded-none border-0 shadow-none">
-                            <table className="w-full">
-                                <thead>
-                                    <tr>
-                                        <th>Employee</th>
-                                        {LEAVE_TYPES.map(t => (
-                                            <th key={t} className="text-center capitalize">{t} Leave</th>
-                                        ))}
-                                        <th className="text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredEmployees.map((emp) => (
-                                        <tr key={emp._id}>
-                                            <td>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs shrink-0">{emp.name?.charAt(0)?.toUpperCase()}</div>
-                                                    <div>
-                                                        <p className="font-medium text-slate-800 dark:text-white leading-tight">{emp.name}</p>
-                                                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{emp.employeeId} • {emp.department}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            {LEAVE_TYPES.map((t, idx) => (
-                                                <td key={t} className="text-center">
-                                                    <div className={`inline-flex items-center justify-center px-3 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded-full text-xs font-bold leading-none min-w-[2.5rem]`}>
-                                                        {emp.leaveBalance?.[t] || 0}
-                                                    </div>
-                                                </td>
-                                            ))}
-                                            <td className="text-right">
-                                                <button
-                                                    onClick={() => setEditTarget(emp)}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-primary-600 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 text-xs font-bold transition-colors"
-                                                >
-                                                    Edit Eligibility
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {filteredEmployees.length === 0 && (
-                                        <tr>
-                                            <td colSpan={LEAVE_TYPES.length + 2} className="py-20 text-center">
-                                                <Search size={40} className="mx-auto text-slate-200 mb-3" />
-                                                <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No employees found</p>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                        {!employeesLoading && filteredEmployees.length > 0 && (
-                            <Pagination
-                                currentPage={employeesData.pagination.page}
-                                totalPages={employeesData.pagination.totalPages}
-                                totalResults={employeesData.pagination.total}
-                                limit={eligLimit}
-                                onPageChange={setEligPage}
-                                onLimitChange={(l) => { setEligLimit(l); setEligPage(1); }}
-                            />
-                        )}
-                    </div>
-                </>
-            )
-            }
-
-            {/* ══ Modals ══ */}
-            {
-                rejectTarget && (
-                    <RejectModal
-                        leave={rejectTarget}
-                        onClose={() => setRejectTarget(null)}
-                        onConfirm={(reason) => rejectMutation.mutate({ id: rejectTarget._id, reason })}
-                        isPending={rejectMutation.isPending}
-                    />
+                    </>
                 )
-            }
-            <LeaveDetailModal
-                leave={viewTarget}
-                onClose={() => setViewTarget(null)}
-                onApprove={(id) => approveMutation.mutate(id)}
-                onReject={(leave) => setRejectTarget(leave)}
-            />
-            {
-                editTarget && (
-                    <EditEligibilityModal
-                        user={editTarget}
-                        onClose={() => setEditTarget(null)}
-                        onSave={(leaveBalance) => updateEligibilityMutation.mutate({ id: editTarget._id, leaveBalance })}
-                        isPending={updateEligibilityMutation.isPending}
-                    />
-                )
-            }
-        </div >
+                }
+
+                {/* ══ Modals ══ */}
+                {
+                    rejectTarget && (
+                        <RejectModal
+                            leave={rejectTarget}
+                            onClose={() => setRejectTarget(null)}
+                            onConfirm={(reason) => rejectMutation.mutate({ id: rejectTarget._id, reason })}
+                            isPending={rejectMutation.isPending}
+                        />
+                    )
+                }
+                <LeaveDetailModal
+                    leave={viewTarget}
+                    onClose={() => setViewTarget(null)}
+                    onApprove={(id) => approveMutation.mutate(id)}
+                    onReject={(leave) => setRejectTarget(leave)}
+                />
+                {
+                    editTarget && (
+                        <EditEligibilityModal
+                            user={editTarget}
+                            onClose={() => setEditTarget(null)}
+                            onSave={(leaveBalance) => updateEligibilityMutation.mutate({ id: editTarget._id, leaveBalance })}
+                            isPending={updateEligibilityMutation.isPending}
+                        />
+                    )
+                }
+            </div>
+        </ProGuard>
     )
 }
 
@@ -1059,142 +1071,148 @@ function EmployeeLeaveView() {
     const balanceColors = ['text-blue-600', 'text-emerald-600', 'text-amber-600', 'text-purple-600', 'text-rose-600', 'text-indigo-600']
 
     return (
-        <div className="space-y-6 animate-fade-in">
-            {showModal && <ApplyLeaveModal onClose={() => setShowModal(false)} balance={balance} />}
+        <ProGuard
+            title="Leave Management"
+            subtitle="Automated leave tracking, balance management, and approval workflows are exclusive to the Enterprise Pro tier."
+            icon={ClipboardList}
+        >
+            <div className="space-y-6 animate-fade-in">
+                {showModal && <ApplyLeaveModal onClose={() => setShowModal(false)} balance={balance} />}
 
-            <PageHeader title="Leave Tracker">
-                <button onClick={() => setShowModal(true)} className="btn-primary">
-                    <Plus size={16} /> Apply for Leave
-                </button>
-            </PageHeader>
+                <PageHeader title="Leave Tracker">
+                    <button onClick={() => setShowModal(true)} className="btn-primary">
+                        <Plus size={16} /> Apply for Leave
+                    </button>
+                </PageHeader>
 
-            {/* Leave Balance Cards */}
-            {balance && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4">
-                    {Object.entries(balance)
-                        .filter(([type]) => LEAVE_TYPES.includes(type))
-                        .map(([type, days], i) => (
-                            <div key={type} className="card text-center hover:shadow-md transition-shadow">
-                                <p className={`text-3xl font-bold ${balanceColors[i % balanceColors.length]}`}>{days}</p>
-                                <p className="text-sm text-slate-500 capitalize mt-1 font-medium">{type}</p>
-                                <p className="text-xs text-slate-400">days left</p>
-                            </div>
-                        ))}
-                    {/* LOP Card — shows days taken (no balance exists for LOP) */}
-                    {(() => {
-                        const lopDays = (leaves || [])
-                            .filter(l => l.leaveType === 'lop' && ['approved', 'pending'].includes(l.status))
-                            .reduce((sum, l) => sum + (l.totalDays || 0), 0)
-                        return (
-                            <div className="card text-center hover:shadow-md transition-shadow border border-red-100 dark:border-red-900/30">
-                                <p className="text-3xl font-bold text-red-500">{lopDays}</p>
-                                <p className="text-sm text-slate-500 mt-1 font-medium">LOP</p>
-                                <p className="text-xs text-slate-400">days taken</p>
-                            </div>
-                        )
-                    })()}
-                </div>
-            )}
-
-            {/* Leave Applications Table */}
-            <div className="card p-0">
-                <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                    <h3 className="text-slate-700 dark:text-white flex items-center gap-2">
-                        <FileText size={16} className="text-slate-400" />
-                        Leave Applications
-                    </h3>
-                    <span className="text-xs text-slate-400 font-medium">{leaves?.length || 0} record{leaves?.length !== 1 ? 's' : ''}</span>
-                </div>
-                {isLoading ? (
-                    <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-                ) : !leaves?.length ? (
-                    <div className="py-12 text-center">
-                        <Calendar size={36} className="mx-auto text-slate-300 mb-3" />
-                        <p className="text-slate-400">No leave applications yet.</p>
-                        <button onClick={() => setShowModal(true)} className="btn-primary mt-4 mx-auto">
-                            <Plus size={14} /> Apply for Leave
-                        </button>
-                    </div>
-                ) : (
-                    <div className="table-wrapper max-h-container rounded-none rounded-b-2xl border-0 shadow-none">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr>
-                                    <th>ID</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th><th>Applied On</th><th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {leaves.map((leave) => (
-                                    <tr key={leave._id}>
-                                        <td>
-                                            <span className="text-[10px] font-mono font-bold px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg">{leave.leaveId || '—'}</span>
-                                        </td>
-                                        <td className="capitalize font-medium">{leave.leaveType}</td>
-                                        <td>{format(new Date(leave.startDate), 'MMM d, yyyy')}</td>
-                                        <td>{format(new Date(leave.endDate), 'MMM d, yyyy')}</td>
-                                        <td className="font-semibold text-primary-600">{leave.totalDays}</td>
-                                        <td className="max-w-[200px] truncate text-slate-400 text-xs">{leave.reason || '—'}</td>
-                                        <td>
-                                            <div className="flex flex-col gap-1 items-start">
-                                                <StatusBadge status={leave.status} />
-                                                {leave.approvedBy?.name && (
-                                                    <span className="text-[10px] text-slate-400">
-                                                        {leave.status === 'approved' ? 'Approved by' : 'Rejected by'} {leave.approvedBy.name.split(' ')[0]}
-                                                    </span>
-                                                )}
-                                                {leave.status === 'rejected' && leave.rejectionReason && (
-                                                    <span className="text-[9px] text-rose-400 italic max-w-[100px] truncate">"{leave.rejectionReason}"</span>
-                                                )}
-                                                {leave.status === 'cancelled' && leave.cancellationReason && (
-                                                    <span className="text-[9px] text-orange-400 italic max-w-[100px] truncate">"{leave.cancellationReason}"</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="text-slate-400">{format(new Date(leave.createdAt), 'MMM d, yyyy')}</td>
-                                        <td>
-                                            <div className="flex items-center gap-1">
-                                                <button onClick={() => setViewTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"><Eye size={16} /></button>
-                                                {leave.status === 'pending' && (
-                                                    <button
-                                                        onClick={() => setCancelTarget(leave)}
-                                                        disabled={cancelMutation.isPending}
-                                                        className="btn-ghost btn-sm text-danger-600 hover:bg-danger-50"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                {/* Leave Balance Cards */}
+                {balance && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4">
+                        {Object.entries(balance)
+                            .filter(([type]) => LEAVE_TYPES.includes(type))
+                            .map(([type, days], i) => (
+                                <div key={type} className="card text-center hover:shadow-md transition-shadow">
+                                    <p className={`text-3xl font-bold ${balanceColors[i % balanceColors.length]}`}>{days}</p>
+                                    <p className="text-sm text-slate-500 capitalize mt-1 font-medium">{type}</p>
+                                    <p className="text-xs text-slate-400">days left</p>
+                                </div>
+                            ))}
+                        {/* LOP Card — shows days taken (no balance exists for LOP) */}
+                        {(() => {
+                            const lopDays = (leaves || [])
+                                .filter(l => l.leaveType === 'lop' && ['approved', 'pending'].includes(l.status))
+                                .reduce((sum, l) => sum + (l.totalDays || 0), 0)
+                            return (
+                                <div className="card text-center hover:shadow-md transition-shadow border border-red-100 dark:border-red-900/30">
+                                    <p className="text-3xl font-bold text-red-500">{lopDays}</p>
+                                    <p className="text-sm text-slate-500 mt-1 font-medium">LOP</p>
+                                    <p className="text-xs text-slate-400">days taken</p>
+                                </div>
+                            )
+                        })()}
                     </div>
                 )}
-                {!isLoading && leaves.length > 0 && (
-                    <Pagination
-                        currentPage={leavesData.pagination.page}
-                        totalPages={leavesData.pagination.totalPages}
-                        totalResults={leavesData.pagination.total}
-                        limit={limit}
-                        onPageChange={setPage}
-                        onLimitChange={(l) => { setLimit(l); setPage(1); }}
+
+                {/* Leave Applications Table */}
+                <div className="card p-0">
+                    <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                        <h3 className="text-slate-700 dark:text-white flex items-center gap-2">
+                            <FileText size={16} className="text-slate-400" />
+                            Leave Applications
+                        </h3>
+                        <span className="text-xs text-slate-400 font-medium">{leaves?.length || 0} record{leaves?.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    {isLoading ? (
+                        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+                    ) : !leaves?.length ? (
+                        <div className="py-12 text-center">
+                            <Calendar size={36} className="mx-auto text-slate-300 mb-3" />
+                            <p className="text-slate-400">No leave applications yet.</p>
+                            <button onClick={() => setShowModal(true)} className="btn-primary mt-4 mx-auto">
+                                <Plus size={14} /> Apply for Leave
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="table-wrapper max-h-container rounded-none rounded-b-2xl border-0 shadow-none">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th><th>Applied On</th><th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {leaves.map((leave) => (
+                                        <tr key={leave._id}>
+                                            <td>
+                                                <span className="text-[10px] font-mono font-bold px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg">{leave.leaveId || '—'}</span>
+                                            </td>
+                                            <td className="capitalize font-medium">{leave.leaveType}</td>
+                                            <td>{format(new Date(leave.startDate), 'MMM d, yyyy')}</td>
+                                            <td>{format(new Date(leave.endDate), 'MMM d, yyyy')}</td>
+                                            <td className="font-semibold text-primary-600">{leave.totalDays}</td>
+                                            <td className="max-w-[200px] truncate text-slate-400 text-xs">{leave.reason || '—'}</td>
+                                            <td>
+                                                <div className="flex flex-col gap-1 items-start">
+                                                    <StatusBadge status={leave.status} />
+                                                    {leave.approvedBy?.name && (
+                                                        <span className="text-[10px] text-slate-400">
+                                                            {leave.status === 'approved' ? 'Approved by' : 'Rejected by'} {leave.approvedBy.name.split(' ')[0]}
+                                                        </span>
+                                                    )}
+                                                    {leave.status === 'rejected' && leave.rejectionReason && (
+                                                        <span className="text-[9px] text-rose-400 italic max-w-[100px] truncate">"{leave.rejectionReason}"</span>
+                                                    )}
+                                                    {leave.status === 'cancelled' && leave.cancellationReason && (
+                                                        <span className="text-[9px] text-orange-400 italic max-w-[100px] truncate">"{leave.cancellationReason}"</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="text-slate-400">{format(new Date(leave.createdAt), 'MMM d, yyyy')}</td>
+                                            <td>
+                                                <div className="flex items-center gap-1">
+                                                    <button onClick={() => setViewTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"><Eye size={16} /></button>
+                                                    {leave.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => setCancelTarget(leave)}
+                                                            disabled={cancelMutation.isPending}
+                                                            className="btn-ghost btn-sm text-danger-600 hover:bg-danger-50"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    {!isLoading && leaves.length > 0 && (
+                        <Pagination
+                            currentPage={leavesData.pagination.page}
+                            totalPages={leavesData.pagination.totalPages}
+                            totalResults={leavesData.pagination.total}
+                            limit={limit}
+                            onPageChange={setPage}
+                            onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                        />
+                    )}
+                </div>
+                {cancelTarget && (
+                    <CancelModal
+                        leave={cancelTarget}
+                        onClose={() => setCancelTarget(null)}
+                        onConfirm={(reason) => cancelMutation.mutate({ id: cancelTarget._id, reason })}
+                        isPending={cancelMutation.isPending}
                     />
                 )}
-            </div>
-            {cancelTarget && (
-                <CancelModal
-                    leave={cancelTarget}
-                    onClose={() => setCancelTarget(null)}
-                    onConfirm={(reason) => cancelMutation.mutate({ id: cancelTarget._id, reason })}
-                    isPending={cancelMutation.isPending}
+                <LeaveDetailModal
+                    leave={viewTarget}
+                    onClose={() => setViewTarget(null)}
                 />
-            )}
-            <LeaveDetailModal
-                leave={viewTarget}
-                onClose={() => setViewTarget(null)}
-            />
-        </div>
+            </div>
+        </ProGuard>
     )
 }
 

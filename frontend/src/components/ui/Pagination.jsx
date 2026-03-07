@@ -5,7 +5,7 @@ export default function Pagination({
     currentPage = 1,
     totalPages = 1,
     totalResults = 0,
-    limit = 10,
+    limit = 1000,
     onPageChange,
     onLimitChange
 }) {
@@ -30,7 +30,7 @@ export default function Pagination({
     const uniquePages = pages.filter((item, index) => pages.indexOf(item) === index);
 
     return (
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-slate-100 dark:border-white/10 bg-white dark:bg-black relative z-10 shrink-0">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-slate-100 dark:border-white/10 bg-white dark:bg-black sticky bottom-0 z-20 shrink-0">
             <div className="flex items-center gap-3">
                 <label className="text-sm text-slate-500 dark:text-slate-400">Items per page:</label>
                 <select

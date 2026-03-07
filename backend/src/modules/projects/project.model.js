@@ -58,6 +58,13 @@ const projectSchema = new mongoose.Schema(
     },
     endDate: {
       type: Date,
+      validate: {
+        validator: function(v) {
+          if (!v) return true;
+          return !this.startDate || this.startDate <= v;
+        },
+        message: 'End date cannot be before start date'
+      }
     },
     status: {
       type: String,

@@ -17,7 +17,6 @@ const leaveSchema = new mongoose.Schema(
     },
     leaveType: {
       type: String,
-      enum: Object.values(LEAVE_TYPES),
       required: [true, 'Leave type is required'],
     },
     startDate: {

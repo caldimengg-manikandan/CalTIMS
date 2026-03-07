@@ -287,7 +287,7 @@ export default function EmployeesPage() {
     }
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="h-[calc(100vh-160px)] flex flex-col gap-4 animate-fade-in overflow-hidden">
             <PageHeader title="Employees" />
 
             {/* Toolbar */}
@@ -463,13 +463,13 @@ export default function EmployeesPage() {
             </div>
 
             {/* Table */}
-            <div className="card p-0 overflow-hidden">
+            <div className="card p-0 flex flex-col overflow-hidden min-h-0">
                 {isLoading ? (
                     <div className="py-20 flex justify-center"><Spinner size="lg" /></div>
                 ) : (
-                    <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
+                    <div className="table-wrapper max-h-[800px] lg:max-h-[calc(100vh-350px)] overflow-y-auto rounded-none border-0 shadow-none">
                         <table className="w-full">
-                            <thead>
+                            <thead className="sticky top-0 z-20 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10">
                                 <tr>
                                     <th>Employee</th>
                                     <th>Department</th>
@@ -548,17 +548,17 @@ export default function EmployeesPage() {
                                 <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No employees found</p>
                             </div>
                         )}
-                        {!isLoading && data?.data?.length > 0 && (
-                            <Pagination
-                                currentPage={data.pagination.page}
-                                totalPages={data.pagination.totalPages}
-                                totalResults={data.pagination.total}
-                                limit={limit}
-                                onPageChange={setPage}
-                                onLimitChange={(l) => { setLimit(l); setPage(1); }}
-                            />
-                        )}
                     </div>
+                )}
+                {!isLoading && data?.data?.length > 0 && (
+                    <Pagination
+                        currentPage={data.pagination.page}
+                        totalPages={data.pagination.totalPages}
+                        totalResults={data.pagination.total}
+                        limit={limit}
+                        onPageChange={setPage}
+                        onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                    />
                 )}
             </div>
 
@@ -651,6 +651,6 @@ export default function EmployeesPage() {
                     </button>
                 </div>
             </Modal>
-        </div>
+        </div >
     )
 }

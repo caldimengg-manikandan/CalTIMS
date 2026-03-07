@@ -720,6 +720,8 @@ const timesheetService = {
 
     // Use a range to find potentially overlapping timesheets if a setting was changed
     const personalFilter = { userId };
+    if (projectId) personalFilter['rows.projectId'] = new mongoose.Types.ObjectId(projectId);
+    
     if (!isAllWeeks) {
       const rangeStart = new Date(weekStart);
       rangeStart.setUTCDate(rangeStart.getUTCDate() - 7);
@@ -729,7 +731,7 @@ const timesheetService = {
     }
 
     const [allPersonalTs, personalPending, personalApproved, personalRejected] = await Promise.all([
-      Timesheet.find(personalFilter).lean(),
+      Timesheet.find(personalFilter).populate('rows.projectId', 'name code').lean(),
       Timesheet.countDocuments({ ...personalFilter, status: TIMESHEET_STATUS.SUBMITTED }),
       Timesheet.countDocuments({ ...personalFilter, status: TIMESHEET_STATUS.APPROVED }),
       Timesheet.countDocuments({ ...personalFilter, status: TIMESHEET_STATUS.REJECTED }),
@@ -737,6 +739,7 @@ const timesheetService = {
 
     const weekEnd = isAllWeeks ? null : getWeekEnd(weekStart, wsd);
 
+    let projectTotalsMap = new Map();
     allPersonalTs.forEach(ts => {
       // For status, pick the "most advanced" one or the one that exactly matches the current week key
       if (!isAllWeeks && ts.weekStartDate.toISOString() === weekStart.toISOString()) {
@@ -747,26 +750,50 @@ const timesheetService = {
 
       if (ts.rows) {
         ts.rows.forEach(row => {
-          row.entries.forEach(entry => {
-            const dateObj = new Date(entry.date);
-            // Only count if it falls within the current definition of the week
-            if (!isAllWeeks && (dateObj < weekStart || dateObj > weekEnd)) return;
+          const rowProjectId = row.projectId?._id?.toString() || row.projectId?.toString();
+          if (projectId && rowProjectId !== projectId.toString()) return;
 
-            const day = dateObj.getUTCDay(); // 0-6
-            const idx = (day - startDayIdx + 7) % 7;
-            if (idx >= 0 && idx < 7) {
-              dailyHours[idx].hours += (entry.hoursWorked || 0);
-              hoursThisWeek += (entry.hoursWorked || 0);
+          let rowHoursInWeek = 0;
+
+          if (row.entries) {
+            row.entries.forEach(entry => {
+              const dateObj = new Date(entry.date);
+              // Only count if it falls within the current definition of the week
+              if (!isAllWeeks && (dateObj < weekStart || dateObj > weekEnd)) return;
+
+              const day = dateObj.getUTCDay(); // 0-6
+              const idx = (day - startDayIdx + 7) % 7;
+              if (idx >= 0 && idx < 7) {
+                const hrs = (entry.hoursWorked || 0);
+                dailyHours[idx].hours += hrs;
+                hoursThisWeek += hrs;
+                rowHoursInWeek += hrs;
+              }
+            });
+          }
+
+          if (rowProjectId && rowHoursInWeek > 0 && row.projectId?.code !== 'LEAVE-SYS' && row.projectId?.name !== 'Leave') {
+            if (!projectTotalsMap.has(rowProjectId)) {
+              projectTotalsMap.set(rowProjectId, {
+                projectName: row.projectId?.name || 'Unknown',
+                projectCode: row.projectId?.code || 'N/A',
+                totalHours: 0
+              });
             }
-          });
+            projectTotalsMap.get(rowProjectId).totalHours += rowHoursInWeek;
+          }
         });
       }
     });
 
+    const personalProjectTotals = Array.from(projectTotalsMap.values())
+      .sort((a, b) => b.totalHours - a.totalHours);
+
     const baseStats = {
       hoursThisWeek,
       dailyHours,
-      personalStatus
+      personalStatus,
+      projectTotals: personalProjectTotals
     };
 
     // -- 2. Admin/Manager stats --
@@ -949,17 +976,18 @@ const timesheetService = {
       };
     }
 
-    // Role == EMPLOYEE
-    return {
-      ...baseStats,
-      pendingTimesheets: personalPending,
-      approvedTimesheets: personalApproved,
-      rejectedTimesheets: personalRejected,
-      totalEmployees: await User.countDocuments({ isActive: true, role: ROLES.EMPLOYEE }),
-      totalManagers: await User.countDocuments({ isActive: true, role: ROLES.MANAGER }),
-      totalAdmins: await User.countDocuments({ isActive: true, role: ROLES.ADMIN }),
-    };
-  },
+      const settingsDoc = await mongoose.model('Settings').findOne().select('timesheet.submissionDeadline').lean();
+      return {
+        ...baseStats,
+        pendingTimesheets: personalPending,
+        approvedTimesheets: personalApproved,
+        rejectedTimesheets: personalRejected,
+        totalEmployees: await User.countDocuments({ isActive: true, role: ROLES.EMPLOYEE }),
+        totalManagers: await User.countDocuments({ isActive: true, role: ROLES.MANAGER }),
+        totalAdmins: await User.countDocuments({ isActive: true, role: ROLES.ADMIN }),
+        submissionDeadline: settingsDoc?.timesheet?.submissionDeadline || 'Friday 18:00'
+      };
+    },
 
   async getAdminKpiSummary(kpi) {
     if (kpi === 'project-hours') {

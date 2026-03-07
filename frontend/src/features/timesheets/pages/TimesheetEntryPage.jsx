@@ -92,8 +92,8 @@ export default function TimesheetEntryPage() {
 
     // Fetch active projects
     const { data: projects } = useQuery({
-        queryKey: ['projects', 'active'],
-        queryFn: () => projectAPI.getAll({ status: 'active' }).then(r => r.data.data),
+        queryKey: ['projects', 'active', 'assigned'],
+        queryFn: () => projectAPI.getAll({ status: 'active', assignedOnly: true }).then(r => r.data.data),
     })
 
     // Fetch dynamic task/leave types from settings

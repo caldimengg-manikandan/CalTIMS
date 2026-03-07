@@ -62,7 +62,7 @@ export default function AuthLayout() {
                 <div className="flex justify-end p-8 lg:hidden">
                     <div className="flex items-center gap-2">
                         <Timer size={24} className="text-indigo-600" />
-                        <span className="text-xl font-bold text-slate-900">TimesheetPro</span>
+                        <span className="text-xl font-bold text-slate-900">CALTIMS</span>
                     </div>
                 </div>
 

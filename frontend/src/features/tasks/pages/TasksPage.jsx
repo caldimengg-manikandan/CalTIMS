@@ -326,7 +326,7 @@ export default function TasksPage() {
     }
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="h-[calc(100vh-160px)] flex flex-col gap-4 animate-fade-in overflow-hidden">
             <PageHeader title="Tasks" />
 
             {/* Toolbar */}
@@ -474,13 +474,13 @@ export default function TasksPage() {
             </div>
 
             {/* Table */}
-            <div className="card p-0 overflow-hidden">
+            <div className="card p-0 flex flex-col overflow-hidden min-h-0">
                 {isLoading ? (
                     <div className="py-20 flex justify-center"><Spinner size="lg" /></div>
                 ) : (
-                    <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
+                    <div className="table-wrapper max-h-[calc(100vh-450px)] overflow-y-auto rounded-none border-0 shadow-none">
                         <table className="w-full text-left border-collapse">
-                            <thead>
+                            <thead className="sticky top-0 z-20 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10 uppercase text-[11px] font-bold text-slate-400 tracking-wider">
                                 <tr>
                                     <th>Task Name</th>
                                     <th>Project</th>

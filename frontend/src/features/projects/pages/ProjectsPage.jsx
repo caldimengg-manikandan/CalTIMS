@@ -33,6 +33,12 @@ const projectSchema = z.object({
         allocationPercent: z.number().min(1).max(100).default(100)
     })).default([]),
     onlyProjectTasks: z.boolean().default(false)
+}).refine((data) => {
+    if (!data.endDate) return true;
+    return new Date(data.endDate) >= new Date(data.startDate);
+}, {
+    message: "End date cannot be before start date",
+    path: ["endDate"]
 })
 
 /* ─── Shared Modal Shell ─────────────────────────────────────── */
@@ -186,7 +192,8 @@ function ProjectFormModal({ project, onClose }) {
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">End Date</label>
-                            <input {...register('endDate')} type="date" max="9999-12-31" className="input" />
+                            <input {...register('endDate')} type="date" max="9999-12-31" className={`input ${errors.endDate ? 'border-rose-400' : ''}`} />
+                            {errors.endDate && <p className="text-[10px] text-rose-500">{errors.endDate.message}</p>}
                         </div>
                         <div className="col-span-2 space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Project Manager *</label>
@@ -440,7 +447,7 @@ export default function ProjectsPage() {
     }
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="h-[calc(100vh-160px)] flex flex-col gap-4 animate-fade-in overflow-hidden">
             <PageHeader title="Projects" />
 
             {/* Stats Row */}
@@ -617,13 +624,13 @@ export default function ProjectsPage() {
             </div>
 
             {/* Table */}
-            <div className="card p-0 overflow-hidden">
+            <div className="card p-0 flex flex-col overflow-hidden min-h-0">
                 {isLoading ? (
                     <div className="py-20 flex justify-center"><Spinner size="lg" /></div>
                 ) : (
-                    <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
+                    <div className="table-wrapper max-h-[800px] lg:max-h-[calc(100vh-450px)] overflow-y-auto rounded-none border-0 shadow-none">
                         <table className="w-full">
-                            <thead>
+                            <thead className="sticky top-0 z-20 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10">
                                 <tr>
                                     <th>Project</th>
                                     <th>Manager</th>

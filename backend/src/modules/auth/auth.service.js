@@ -29,10 +29,36 @@ const authService = {
   /**
    * Login user and return tokens
    */
-  async login({ email, password }) {
+  async login({ email, password, macAddress }) {
     const user = await User.findOne({ email, isActive: true }).select('+password');
     if (!user || !(await user.comparePassword(password))) {
       throw new AppError('Invalid email or password', 401);
+    }
+
+    // Trial Lock Logic
+    if (user.isTrialUser) {
+      if (user.isLocked) {
+        throw new AppError('Account locked. Please contact administrator.', 403);
+      }
+
+      if (!user.trialStartDate) {
+        // First time login
+        user.trialStartDate = new Date();
+        user.trialExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
+        user.macAddress = macAddress;
+        user.gmail = email;
+      } else {
+        // Subsequent login
+        if (macAddress && user.macAddress && macAddress !== user.macAddress) {
+          throw new AppError('Authentication failed: Different device detected.', 403);
+        }
+
+        if (new Date() > user.trialExpiresAt) {
+          user.isLocked = true;
+          await user.save({ validateBeforeSave: false });
+          throw new AppError('Trial expired. Please contact administrator to continue.', 403);
+        }
+      }
     }
 
     const { accessToken, refreshToken } = generateTokens(user._id, user.role);

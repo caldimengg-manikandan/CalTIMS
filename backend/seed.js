@@ -17,6 +17,9 @@ const Timesheet    = require('./src/modules/timesheets/timesheet.model');
 const Leave        = require('./src/modules/leaves/leave.model');
 const Announcement = require('./src/modules/announcements/announcement.model');
 const CalendarEvent = require('./src/modules/calendar/calendar.model');
+const Incident     = require('./src/modules/incidents/incident.model');
+const Task         = require('./src/modules/tasks/task.model');
+const Settings     = require('./src/modules/settings/settings.model');
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/timesheet_db';
 
@@ -55,21 +58,27 @@ async function seed() {
     Leave.deleteMany({}),
     Announcement.deleteMany({}),
     CalendarEvent.deleteMany({}),
+    Incident.deleteMany({}),
+    Task.deleteMany({}),
+    Settings.deleteMany({}),
   ]);
   console.log('✅ Collections cleared');
+
+  // ── Settings ──────────────────────────────────────────────────────────────
+  console.log('\n⚙️  Creating settings...');
+  await new Settings({}).save();
+  console.log('✅ Default settings created');
 
   // ── Users ──────────────────────────────────────────────────────────────────
   console.log('\n👤 Creating users...');
 
-  const [adminPw, managerPw, emp1Pw, emp2Pw, emp3Pw] = await Promise.all([
+  const [adminPw, managerPw, empPw] = await Promise.all([
     hash('Admin@1234'),
     hash('Manager@1234'),
     hash('Employee@1234'),
-    hash('Employee@1234'),
-    hash('Employee@1234'),
   ]);
 
-  const [admin, manager, emp1, emp2, emp3] = await User.insertMany([
+  const [admin, manager, emp1, emp2, emp3, emp4, emp5, emp6, emp7, emp8] = await User.insertMany([
     {
       employeeId: 'EMP0001',
       name: 'Alice Admin',
@@ -100,7 +109,7 @@ async function seed() {
       employeeId: 'EMP0003',
       name: 'Carol Developer',
       email: 'carol@timesheetpro.com',
-      password: emp1Pw,
+      password: empPw,
       role: 'employee',
       department: 'Engineering',
       designation: 'Senior Software Engineer',
@@ -113,7 +122,7 @@ async function seed() {
       employeeId: 'EMP0004',
       name: 'David Designer',
       email: 'david@timesheetpro.com',
-      password: emp2Pw,
+      password: empPw,
       role: 'employee',
       department: 'Design',
       designation: 'UI/UX Designer',
@@ -126,7 +135,7 @@ async function seed() {
       employeeId: 'EMP0005',
       name: 'Eva QA',
       email: 'eva@timesheetpro.com',
-      password: emp3Pw,
+      password: empPw,
       role: 'employee',
       department: 'Quality Assurance',
       designation: 'QA Engineer',
@@ -135,14 +144,79 @@ async function seed() {
       isActive: true,
       leaveBalance: { annual: 9, sick: 8, casual: 3 },
     },
+    {
+      employeeId: 'EMP0006',
+      name: 'Frank Frontend',
+      email: 'frank@timesheetpro.com',
+      password: empPw,
+      role: 'employee',
+      department: 'Engineering',
+      designation: 'Frontend Developer',
+      phone: '+91-9000000006',
+      joiningDate: new Date('2023-05-15'),
+      isActive: true,
+      leaveBalance: { annual: 10, sick: 5, casual: 2 },
+    },
+    {
+      employeeId: 'EMP0007',
+      name: 'Grace Backend',
+      email: 'grace@timesheetpro.com',
+      password: empPw,
+      role: 'employee',
+      department: 'Engineering',
+      designation: 'Backend Developer',
+      phone: '+91-9000000007',
+      joiningDate: new Date('2023-06-01'),
+      isActive: true,
+      leaveBalance: { annual: 11, sick: 6, casual: 3 },
+    },
+    {
+      employeeId: 'EMP0008',
+      name: 'Henry HR',
+      email: 'henry@timesheetpro.com',
+      password: empPw,
+      role: 'employee',
+      department: 'HR',
+      designation: 'HR Specialist',
+      phone: '+91-9000000008',
+      joiningDate: new Date('2023-07-20'),
+      isActive: true,
+      leaveBalance: { annual: 12, sick: 7, casual: 4 },
+    },
+    {
+      employeeId: 'EMP0009',
+      name: 'Ivy DevOps',
+      email: 'ivy@timesheetpro.com',
+      password: empPw,
+      role: 'employee',
+      department: 'Infrastructure',
+      designation: 'DevOps Engineer',
+      phone: '+91-9000000009',
+      joiningDate: new Date('2023-08-10'),
+      isActive: true,
+      leaveBalance: { annual: 13, sick: 8, casual: 5 },
+    },
+    {
+      employeeId: 'EMP0010',
+      name: 'Jack Marketing',
+      email: 'jack@timesheetpro.com',
+      password: empPw,
+      role: 'employee',
+      department: 'Marketing',
+      designation: 'Marketing Executive',
+      phone: '+91-9000000010',
+      joiningDate: new Date('2023-09-01'),
+      isActive: true,
+      leaveBalance: { annual: 14, sick: 9, casual: 6 },
+    },
   ]);
 
-  console.log(`✅ Created ${5} users`);
+  console.log(`✅ Created ${10} users`);
 
   // ── Projects ───────────────────────────────────────────────────────────────
   console.log('\n📁 Creating projects...');
 
-  const [proj1, proj2, proj3] = await Project.insertMany([
+  const [proj1, proj2, proj3, proj4, proj5, proj6, proj7, proj8, proj9, proj10] = await Project.insertMany([
     {
       name: 'TimesheetPro Platform',
       code: 'TSP-001',
@@ -188,9 +262,101 @@ async function seed() {
         { userId: emp3._id, role: 'qa', allocationPercent: 100, startDate: new Date('2024-05-01') },
       ],
     },
+    {
+      name: 'AI Chatbot Integration',
+      code: 'AIC-004',
+      description: 'Integrating LLMs into customer support',
+      clientName: 'TechGenix',
+      status: 'active',
+      startDate: new Date('2024-06-01'),
+      budget: 450000,
+      managerId: manager._id,
+      allocatedEmployees: [
+        { userId: emp4._id, role: 'developer', allocationPercent: 100, startDate: new Date('2024-06-01') },
+      ],
+    },
+    {
+      name: 'Cloud Migration',
+      code: 'CLM-005',
+      description: 'Migrating legacy servers to AWS',
+      clientName: 'Financial Services Inc.',
+      status: 'active',
+      startDate: new Date('2024-02-01'),
+      budget: 1200000,
+      managerId: manager._id,
+      allocatedEmployees: [
+        { userId: emp5._id, role: 'developer', allocationPercent: 80, startDate: new Date('2024-02-01') },
+      ],
+    },
+    {
+      name: 'Cybersecurity Audit',
+      code: 'CYB-006',
+      description: 'Full security patch and vulnerability assessment',
+      clientName: 'SafeBank',
+      status: 'completed',
+      startDate: new Date('2023-11-01'),
+      endDate: new Date('2024-01-31'),
+      budget: 200000,
+      managerId: manager._id,
+      allocatedEmployees: [
+        { userId: emp6._id, role: 'qa', allocationPercent: 100, startDate: new Date('2023-11-01') },
+      ],
+    },
+    {
+      name: 'Inventory Management',
+      code: 'INV-007',
+      description: 'Custom ERP for manufacturing client',
+      clientName: 'BuildIt Co.',
+      status: 'active',
+      startDate: new Date('2024-01-15'),
+      budget: 900000,
+      managerId: manager._id,
+      allocatedEmployees: [
+        { userId: emp7._id, role: 'developer', allocationPercent: 100, startDate: new Date('2024-01-15') },
+      ],
+    },
+    {
+      name: 'Marketing Analytics Dashboard',
+      code: 'MAD-008',
+      description: 'Real-time data visualization tool',
+      clientName: 'AdGlobal',
+      status: 'active',
+      startDate: new Date('2024-04-01'),
+      budget: 350000,
+      managerId: manager._id,
+      allocatedEmployees: [
+        { userId: emp8._id, role: 'developer', allocationPercent: 50, startDate: new Date('2024-04-01') },
+      ],
+    },
+    {
+      name: 'Legacy System Support',
+      code: 'LSS-009',
+      description: 'Maintenance for old COBOL systems',
+      clientName: 'GovDept',
+      status: 'active',
+      startDate: new Date('2023-01-01'),
+      budget: 150000,
+      managerId: manager._id,
+      allocatedEmployees: [
+        { userId: emp1._id, role: 'developer', allocationPercent: 25, startDate: new Date('2023-01-01') },
+      ],
+    },
+    {
+      name: 'SEO Enhancement',
+      code: 'SEO-010',
+      description: 'Improving search engine rankings',
+      clientName: 'MarketReach',
+      status: 'active',
+      startDate: new Date('2024-05-15'),
+      budget: 100000,
+      managerId: manager._id,
+      allocatedEmployees: [
+        { userId: emp2._id, role: 'developer', allocationPercent: 50, startDate: new Date('2024-05-15') },
+      ],
+    },
   ]);
 
-  console.log('✅ Created 3 projects');
+  console.log('✅ Created 10 projects');
 
   // ── Timesheets ─────────────────────────────────────────────────────────────
   console.log('\n⏱  Creating timesheets...');
@@ -266,6 +432,44 @@ async function seed() {
         { projectId: proj1._id, category: 'Management', entries: makeEntries(week3, [5, 5, 5, 5, 5, 0, 0]) }
       ]
     }),
+    // Frank — last week (submitted)
+    new Timesheet({
+      userId: emp4._id,
+      weekStartDate: week1, weekEndDate: addDaysUTC(week1, 6),
+      status: 'submitted', submittedAt: new Date(),
+      rows: [
+        { projectId: proj4._id, category: 'Development', entries: makeEntries(week1) }
+      ]
+    }),
+    // Grace — last week (approved)
+    new Timesheet({
+      userId: emp5._id,
+      weekStartDate: week1, weekEndDate: addDaysUTC(week1, 6),
+      status: 'approved', submittedAt: addDaysUTC(week1, 5), approvedBy: manager._id,
+      approvedAt: addDaysUTC(week1, 6),
+      rows: [
+        { projectId: proj5._id, category: 'Infrastructure', entries: makeEntries(week1) }
+      ]
+    }),
+    // Henry — last week (draft)
+    new Timesheet({
+      userId: emp6._id,
+      weekStartDate: week0, weekEndDate: addDaysUTC(week0, 6),
+      status: 'draft',
+      rows: [
+        { projectId: proj6._id, category: 'Audit', entries: makeEntries(week0, [4, 4, 4, 4, 4, 0, 0]) }
+      ]
+    }),
+    // Ivy — last week (approved)
+    new Timesheet({
+      userId: emp7._id,
+      weekStartDate: week1, weekEndDate: addDaysUTC(week1, 6),
+      status: 'approved', submittedAt: addDaysUTC(week1, 5), approvedBy: manager._id,
+      approvedAt: addDaysUTC(week1, 6),
+      rows: [
+        { projectId: proj7._id, category: 'DevOps', entries: makeEntries(week1) }
+      ]
+    }),
   ];
 
   // Save each to trigger pre-save hook for totals
@@ -309,6 +513,77 @@ async function seed() {
       reason: 'Personal work',
       status: 'pending',
     },
+    {
+      userId: emp4._id,
+      leaveType: 'annual',
+      startDate: addDaysUTC(new Date(), 20),
+      endDate: addDaysUTC(new Date(), 25),
+      totalDays: 6,
+      reason: 'Marriage',
+      status: 'pending',
+    },
+    {
+      userId: emp5._id,
+      leaveType: 'sick',
+      startDate: addDaysUTC(new Date(), -10),
+      endDate: addDaysUTC(new Date(), -10),
+      totalDays: 1,
+      reason: 'Dental checkup',
+      status: 'approved',
+      approvedBy: manager._id,
+      approvedAt: addDaysUTC(new Date(), -9),
+    },
+    {
+      userId: emp6._id,
+      leaveType: 'casual',
+      startDate: addDaysUTC(new Date(), 2),
+      endDate: addDaysUTC(new Date(), 2),
+      totalDays: 1,
+      reason: 'Home maintenance',
+      status: 'rejected',
+      approvedBy: manager._id,
+      approvedAt: addDaysUTC(new Date(), 1),
+    },
+    {
+      userId: emp7._id,
+      leaveType: 'annual',
+      startDate: addDaysUTC(new Date(), 30),
+      endDate: addDaysUTC(new Date(), 35),
+      totalDays: 6,
+      reason: 'Travel',
+      status: 'pending',
+    },
+    {
+      userId: emp8._id,
+      leaveType: 'sick',
+      startDate: addDaysUTC(new Date(), -2),
+      endDate: addDaysUTC(new Date(), -2),
+      totalDays: 1,
+      reason: 'Flu',
+      status: 'approved',
+      approvedBy: manager._id,
+      approvedAt: addDaysUTC(new Date(), -1),
+    },
+    {
+      userId: manager._id,
+      leaveType: 'casual',
+      startDate: addDaysUTC(new Date(), 5),
+      endDate: addDaysUTC(new Date(), 5),
+      totalDays: 1,
+      reason: 'Personal business',
+      status: 'pending',
+    },
+    {
+      userId: emp1._id,
+      leaveType: 'sick',
+      startDate: addDaysUTC(new Date(), -15),
+      endDate: addDaysUTC(new Date(), -14),
+      totalDays: 2,
+      reason: 'Infection',
+      status: 'approved',
+      approvedBy: admin._id,
+      approvedAt: addDaysUTC(new Date(), -13),
+    },
   ];
 
   for (const lData of leavesData) {
@@ -316,7 +591,7 @@ async function seed() {
     await leave.save();
   }
 
-  console.log('✅ Created 3 leave records');
+  console.log('✅ Created 10 leave records');
 
   // ── Announcements ──────────────────────────────────────────────────────────
   console.log('\n📢 Creating announcements...');
@@ -348,9 +623,65 @@ async function seed() {
       targetRoles: [],
       expiresAt: addDaysUTC(new Date(), 1),
     },
+    {
+      title: 'New Health Insurance Policy',
+      content: 'We have updated our health insurance provider. Please review the new benefits in the HR portal.',
+      type: 'info',
+      publishedBy: admin._id,
+      isActive: true,
+      targetRoles: [],
+    },
+    {
+      title: 'Monthly Town Hall',
+      content: 'The monthly town hall meeting is scheduled for next Wednesday at 3 PM. Agenda: Q1 Progress and Future Goals.',
+      type: 'info',
+      publishedBy: admin._id,
+      isActive: true,
+      targetRoles: [],
+    },
+    {
+      title: 'Office Dress Code Update',
+      content: 'Starting next month, we are moving to a business casual dress code for all employees.',
+      type: 'info',
+      publishedBy: admin._id,
+      isActive: true,
+      targetRoles: [],
+    },
+    {
+      title: 'Password Security Audit',
+      content: 'Please ensure your passwords meet the new complexity requirements. Multi-factor authentication is now mandatory.',
+      type: 'warning',
+      publishedBy: admin._id,
+      isActive: true,
+      targetRoles: [],
+    },
+    {
+      title: 'Employee Referral Program',
+      content: 'Refer a friend and earn a bonus! Check the current openings on our careers page.',
+      type: 'info',
+      publishedBy: admin._id,
+      isActive: true,
+      targetRoles: [],
+    },
+    {
+      title: 'Holiday Season Closing',
+      content: 'The office will be closed from Dec 24th to Jan 1st for the holiday season.',
+      type: 'info',
+      publishedBy: admin._id,
+      isActive: true,
+      targetRoles: [],
+    },
+    {
+      title: 'Critical Bug in Production',
+      content: 'A critical bug has been identified in the payment gateway. Teams are working on a fix. Expected downtime: 30 mins.',
+      type: 'urgent',
+      publishedBy: admin._id,
+      isActive: true,
+      targetRoles: ['manager', 'admin'],
+    },
   ]);
 
-  console.log('✅ Created 3 announcements');
+  console.log('✅ Created 10 announcements');
 
   // ── Calendar Events ────────────────────────────────────────────────────────
   console.log('\n📅 Creating calendar events...');
@@ -367,7 +698,7 @@ async function seed() {
     },
     {
       title: 'Q1 Sprint Planning',
-      eventType: 'meeting',
+      eventType: 'company_event',
       startDate: addDaysUTC(week0, 1), // This Tuesday
       endDate: addDaysUTC(week0, 1),
       color: '#6366f1',
@@ -377,7 +708,7 @@ async function seed() {
     },
     {
       title: 'Team Outing',
-      eventType: 'company-event',
+      eventType: 'company_event',
       startDate: addDaysUTC(new Date(), 21),
       endDate: addDaysUTC(new Date(), 21),
       color: '#22c55e',
@@ -394,9 +725,108 @@ async function seed() {
       isPublic: true,
       createdBy: admin._id,
     },
+    {
+      title: 'Monthly Progress Review',
+      eventType: 'company_event',
+      startDate: addDaysUTC(new Date(), 5),
+      endDate: addDaysUTC(new Date(), 5),
+      color: '#3b82f6',
+      isPublic: true,
+      description: 'Reviewing project milestones for the month',
+      createdBy: manager._id,
+    },
+    {
+      title: 'Independence Day',
+      eventType: 'holiday',
+      startDate: new Date('2026-08-15'),
+      endDate: new Date('2026-08-15'),
+      color: '#f97316',
+      isPublic: true,
+      createdBy: admin._id,
+    },
+    {
+      title: 'Company Anniversary',
+      eventType: 'company_event',
+      startDate: addDaysUTC(new Date(), 45),
+      endDate: addDaysUTC(new Date(), 45),
+      color: '#ec4899',
+      isPublic: true,
+      description: 'Celebrating 5 years of excellence',
+      createdBy: admin._id,
+    },
+    {
+      title: 'Internal Hackathon',
+      eventType: 'company_event',
+      startDate: addDaysUTC(new Date(), 60),
+      endDate: addDaysUTC(new Date(), 62),
+      color: '#8b5cf6',
+      isPublic: true,
+      description: '48-hour innovation challenge',
+      createdBy: manager._id,
+    },
+    {
+      title: 'Gandhi Jayanti',
+      eventType: 'holiday',
+      startDate: new Date('2026-10-02'),
+      endDate: new Date('2026-10-02'),
+      color: '#10b981',
+      isPublic: true,
+      createdBy: admin._id,
+    },
+    {
+      title: 'Year-End Party',
+      eventType: 'company_event',
+      startDate: new Date('2026-12-23'),
+      endDate: new Date('2026-12-23'),
+      color: '#ef4444',
+      isPublic: true,
+      description: 'Celebration of yearly achievements',
+      createdBy: admin._id,
+    },
   ]);
 
-  console.log('✅ Created 4 calendar events');
+  console.log('✅ Created 10 calendar events');
+
+  // ── Incidents ──────────────────────────────────────────────────────────────
+  console.log('\n🎫 Creating incidents...');
+
+  const incidentsData = [
+    { title: 'Login issue', description: 'Unable to login with manager account', category: 'general help', priority: 'High', employee: emp1._id, status: 'Open' },
+    { title: 'Project missing', description: 'E-Commerce Revamp not visible in list', category: 'project missing', priority: 'Medium', employee: emp2._id, status: 'In Progress' },
+    { title: 'Incorrect hours', description: 'Hours logged as 8 instead of 7.5', category: 'incorrect hours', priority: 'Low', employee: emp3._id, status: 'Resolved' },
+    { title: 'Timesheet error', description: 'System hangs on submit', category: 'timesheet error', priority: 'Urgent', employee: emp4._id, status: 'Open' },
+    { title: 'Leave conflict', description: 'Overlap with another team member', category: 'leave conflict', priority: 'Medium', employee: emp5._id, status: 'Pending' },
+    { title: 'General help', description: 'How to export reports?', category: 'general help', priority: 'Low', employee: emp6._id, status: 'Closed' },
+    { title: 'Sync error', description: 'Timesheet not syncing with mobile app', category: 'timesheet error', priority: 'High', employee: emp7._id, status: 'Open' },
+    { title: 'Missing task', description: 'QA testing task not in dropdown', category: 'project missing', priority: 'Medium', employee: emp8._id, status: 'In Progress' },
+    { title: 'Attachment failed', description: 'Cannot upload proof of work', category: 'general help', priority: 'Low', employee: emp1._id, status: 'Open' },
+    { title: 'Notification bug', description: 'Not receiving email for leave approval', category: 'general help', priority: 'Medium', employee: emp2._id, status: 'Open' },
+  ];
+
+  for (const iData of incidentsData) {
+    const incident = new Incident(iData);
+    await incident.save();
+  }
+
+  console.log('✅ Created 10 incidents');
+
+  // ── Tasks ──────────────────────────────────────────────────────────────────
+  console.log('\n📝 Creating tasks...');
+
+  await Task.insertMany([
+    { name: 'Fix Sidebar Navigation', description: 'Resolve the collapse issue', projectId: proj1._id, status: 'in-progress', priority: 'high' },
+    { name: 'Update Dashboard Charts', description: 'Use new Recharts version', projectId: proj1._id, status: 'pending', priority: 'medium' },
+    { name: 'Implement Auth Middleware', description: 'JWT verification', projectId: proj1._id, status: 'completed', priority: 'urgent' },
+    { name: 'Design Landing Page', description: 'Modern aesthetics', projectId: proj2._id, status: 'in-progress', priority: 'high' },
+    { name: 'QA Testing - Login', description: 'Verify all edge cases', projectId: proj2._id, status: 'pending', priority: 'medium' },
+    { name: 'Database Optimization', description: 'Index popular queries', projectId: proj3._id, status: 'on-hold', priority: 'low' },
+    { name: 'API Documentation', description: 'Swagger integration', projectId: proj3._id, status: 'pending', priority: 'medium' },
+    { name: 'Mobile Layout Fix', description: 'Tailwind responsive classes', projectId: proj4._id, status: 'in-progress', priority: 'high' },
+    { name: 'Unit Tests for Services', description: 'Jest implementation', projectId: proj1._id, status: 'pending', priority: 'medium' },
+    { name: 'User Profile UX', description: 'Refine the settings page', projectId: proj1._id, status: 'pending', priority: 'low' },
+  ]);
+
+  console.log('✅ Created 10 tasks');
 
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log('\n🎉 Seed complete!\n');

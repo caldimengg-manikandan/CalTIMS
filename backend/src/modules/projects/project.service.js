@@ -19,12 +19,16 @@ const projectService = {
     // Always exclude the system 'Leave' project from general lists
     filter.code = { ... (query.code && { $eq: query.code.toUpperCase() }), $ne: 'LEAVE-SYS' };
 
-    // Employees see only their allocated projects
-    if (requestor.role === ROLES.EMPLOYEE) {
-      filter['allocatedEmployees.userId'] = requestor._id;
-    }
-    if (requestor.role === ROLES.MANAGER) {
-      filter.$or = [{ managerId: requestor._id }, { 'allocatedEmployees.userId': requestor._id }];
+    // Restrict visibility for non-admins, or if assignedOnly is requested
+    const assignedOnly = query.assignedOnly === 'true';
+    const isEmployee = requestor.role === ROLES.EMPLOYEE;
+    const isManager = requestor.role === ROLES.MANAGER;
+
+    if (assignedOnly || isEmployee || isManager) {
+      filter.$or = [
+        { managerId: requestor._id },
+        { 'allocatedEmployees.userId': requestor._id }
+      ];
     }
 
     const [projects, total] = await Promise.all([

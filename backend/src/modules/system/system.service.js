@@ -3,23 +3,19 @@
 const SystemSettings = require('../../models/systemSettings.model');
 
 const getSystemVersion = async () => {
-    const settings = await SystemSettings.getInstance();
-    return { version: settings.appVersion };
+    return { version: 'basic' };
 };
 
 const updateSystemVersion = async (version, userId) => {
-    if (!['basic', 'pro'].includes(version)) {
-        const error = new Error('Invalid application version. Must be "basic" or "pro".');
-        error.statusCode = 400;
-        throw error;
-    }
-
+    // Force version to 'basic' regardless of input to disable Pro toggle
+    const enforcedVersion = 'basic';
+    
     const settings = await SystemSettings.getInstance();
-    settings.appVersion = version;
+    settings.appVersion = enforcedVersion;
     settings.updatedBy = userId;
     await settings.save();
 
-    return { version: settings.appVersion };
+    return { version: enforcedVersion };
 };
 
 module.exports = {

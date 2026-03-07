@@ -83,6 +83,29 @@ const userSchema = new mongoose.Schema(
       of: Number,
       default: { annual: 18, sick: 10, casual: 6 },
     },
+    gmail: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
+    macAddress: {
+      type: String,
+      trim: true,
+    },
+    trialStartDate: {
+      type: Date,
+    },
+    trialExpiresAt: {
+      type: Date,
+    },
+    isLocked: {
+      type: Boolean,
+      default: false,
+    },
+    isTrialUser: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
@@ -134,6 +157,10 @@ userSchema.methods.toPublicJSON = function () {
     isActive: this.isActive,
     avatar: this.avatar,
     leaveBalance: this.leaveBalance,
+    isLocked: this.isLocked,
+    isTrialUser: this.isTrialUser,
+    trialStartDate: this.trialStartDate,
+    trialExpiresAt: this.trialExpiresAt,
     createdAt: this.createdAt,
   };
 };

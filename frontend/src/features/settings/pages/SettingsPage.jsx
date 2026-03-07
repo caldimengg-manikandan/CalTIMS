@@ -844,7 +844,7 @@ function ThemeTab() {
 function GeneralTab() {
     const qc = useQueryClient()
     const { updateGeneralSettings } = useSettingsStore()
-    const { appVersion, toggleVersion } = useSystemStore()
+    const { appVersion } = useSystemStore()
     const [form, setForm] = useState({
         companyName: '',
         timezone: 'Asia/Kolkata',
@@ -870,22 +870,14 @@ function GeneralTab() {
             toast.success('General settings saved!')
             updateGeneralSettings(form)
             qc.invalidateQueries(['settings', 'general'])
+            qc.invalidateQueries(['dashboard-summary'])
+            qc.invalidateQueries(['reports'])
         },
         onError: e => toast.error(e.response?.data?.message || 'Save failed'),
     })
 
     const upd = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-    const handleToggleTier = async () => {
-        const nextVersion = appVersion === 'basic' ? 'pro' : 'basic'
-        try {
-            await toggleVersion(nextVersion)
-            toast.success(`Application switched to ${nextVersion.toUpperCase()} mode!`)
-            qc.invalidateQueries()
-        } catch (error) {
-            // Error is handled in store
-        }
-    }
 
     if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
 
@@ -897,23 +889,6 @@ function GeneralTab() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Application Tier */}
-                <SectionCard title="Application Tier" subtitle="Switch between Basic and Pro features (Demo)" icon={Settings2}>
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
-                        <div>
-                            <p className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                Pro Enterprise Mode
-                            </p>
-                            <p className="text-xs text-slate-400 mt-0.5">Enables Compliance, Reports, Incident support, Leave Tracker, and Leave Management</p>
-                        </div>
-                        <button
-                            onClick={handleToggleTier}
-                            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${appVersion === 'pro' ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
-                        >
-                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${appVersion === 'pro' ? 'translate-x-6' : 'translate-x-0'}`} />
-                        </button>
-                    </div>
-                </SectionCard>
 
                 {/* Organization */}
                 <SectionCard title="Organization" subtitle="Company identity settings" icon={Globe}>

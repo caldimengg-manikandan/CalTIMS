@@ -306,93 +306,95 @@ export default function AnnouncementsPage() {
                     </button>
                 </div>
             ) : (
-                <div className="max-h-[calc(100vh-320px)] overflow-y-auto pr-2 space-y-3">
-                    {announcements.map((ann) => {
-                        const cfg = TYPE_CONFIG[ann.type] || TYPE_CONFIG.info
-                        const TypeIcon = cfg.icon
-                        const isExpired = ann.expiresAt && new Date(ann.expiresAt) < new Date()
-                        return (
-                            <div
-                                key={ann._id}
-                                className={`card border-l-4 ${cfg.border} ${!ann.isActive || isExpired ? 'opacity-60' : ''} transition-all hover:shadow-md`}
-                            >
-                                <div className="flex items-start gap-4">
-                                    {/* Icon */}
-                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${cfg.badge}`}>
-                                        <TypeIcon size={16} />
-                                    </div>
-
-                                    {/* Content */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                                            <h3 className="font-semibold text-slate-800 dark:text-white text-sm">{ann.title}</h3>
-                                            {/* Type badge */}
-                                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${cfg.badge}`}>
-                                                {ann.type}
-                                            </span>
-                                            {/* Status */}
-                                            {!ann.isActive && (
-                                                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500">
-                                                    Inactive
-                                                </span>
-                                            )}
-                                            {isExpired && (
-                                                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 dark:bg-rose-950 text-rose-500">
-                                                    Expired
-                                                </span>
-                                            )}
+                <>
+                    <div className="max-h-[calc(100vh-320px)] overflow-y-auto pr-2 space-y-3">
+                        {announcements.map((ann) => {
+                            const cfg = TYPE_CONFIG[ann.type] || TYPE_CONFIG.info
+                            const TypeIcon = cfg.icon
+                            const isExpired = ann.expiresAt && new Date(ann.expiresAt) < new Date()
+                            return (
+                                <div
+                                    key={ann._id}
+                                    className={`card border-l-4 ${cfg.border} ${!ann.isActive || isExpired ? 'opacity-60' : ''} transition-all hover:shadow-md`}
+                                >
+                                    <div className="flex items-start gap-4">
+                                        {/* Icon */}
+                                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${cfg.badge}`}>
+                                            <TypeIcon size={16} />
                                         </div>
-                                        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">{ann.content}</p>
-                                        <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-400">
-                                            <span>By <span className="font-medium text-slate-600 dark:text-slate-300">{ann.publishedBy?.name}</span></span>
-                                            <span>·</span>
-                                            <span>{format(new Date(ann.createdAt), 'MMM d, yyyy')}</span>
-                                            {ann.expiresAt && (
-                                                <>
-                                                    <span>·</span>
-                                                    <span className={isExpired ? 'text-rose-400' : ''}>
-                                                        Expires {format(new Date(ann.expiresAt), 'MMM d, yyyy')}
-                                                    </span>
-                                                </>
-                                            )}
-                                            {ann.targetRoles?.length > 0 && (
-                                                <>
-                                                    <span>·</span>
-                                                    <span>
-                                                        → {ann.targetRoles.map(r => ROLE_LABELS[r]).join(', ')}
-                                                    </span>
-                                                </>
-                                            )}
-                                            {(!ann.targetRoles || ann.targetRoles.length === 0) && (
-                                                <>
-                                                    <span>·</span>
-                                                    <span>→ Everyone</span>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
 
-                                    {/* Actions */}
-                                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                                        <button
-                                            onClick={() => setEditTarget(ann)}
-                                            className="p-2 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950 transition-colors"
-                                            title="Edit"
-                                        >
-                                            <Pencil size={15} />
-                                        </button>
-                                        <button
-                                            onClick={() => setDeleteTarget(ann)}
-                                            className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
-                                            title="Delete"
-                                        >
-                                            <Trash2 size={15} />
-                                        </button>
+                                        {/* Content */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                                                <h3 className="font-semibold text-slate-800 dark:text-white text-sm">{ann.title}</h3>
+                                                {/* Type badge */}
+                                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${cfg.badge}`}>
+                                                    {ann.type}
+                                                </span>
+                                                {/* Status */}
+                                                {!ann.isActive && (
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500">
+                                                        Inactive
+                                                    </span>
+                                                )}
+                                                {isExpired && (
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 dark:bg-rose-950 text-rose-500">
+                                                        Expired
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">{ann.content}</p>
+                                            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-400">
+                                                <span>By <span className="font-medium text-slate-600 dark:text-slate-300">{ann.publishedBy?.name}</span></span>
+                                                <span>·</span>
+                                                <span>{format(new Date(ann.createdAt), 'MMM d, yyyy')}</span>
+                                                {ann.expiresAt && (
+                                                    <>
+                                                        <span>·</span>
+                                                        <span className={isExpired ? 'text-rose-400' : ''}>
+                                                            Expires {format(new Date(ann.expiresAt), 'MMM d, yyyy')}
+                                                        </span>
+                                                    </>
+                                                )}
+                                                {ann.targetRoles?.length > 0 && (
+                                                    <>
+                                                        <span>·</span>
+                                                        <span>
+                                                            → {ann.targetRoles.map(r => ROLE_LABELS[r]).join(', ')}
+                                                        </span>
+                                                    </>
+                                                )}
+                                                {(!ann.targetRoles || ann.targetRoles.length === 0) && (
+                                                    <>
+                                                        <span>·</span>
+                                                        <span>→ Everyone</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                                            <button
+                                                onClick={() => setEditTarget(ann)}
+                                                className="p-2 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950 transition-colors"
+                                                title="Edit"
+                                            >
+                                                <Pencil size={15} />
+                                            </button>
+                                            <button
+                                                onClick={() => setDeleteTarget(ann)}
+                                                className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+                                                title="Delete"
+                                            >
+                                                <Trash2 size={15} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        )
-                    })}
+                            )
+                        })}
+                    </div>
                     {!isLoading && announcements.length > 0 && (
                         <Pagination
                             currentPage={data.pagination.page}
@@ -403,7 +405,7 @@ export default function AnnouncementsPage() {
                             onLimitChange={(l) => { setLimit(l); setPage(1); }}
                         />
                     )}
-                </div>
+                </>
             )}
         </div>
     )

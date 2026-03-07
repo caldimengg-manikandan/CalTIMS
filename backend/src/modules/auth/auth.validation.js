@@ -5,6 +5,7 @@ const Joi = require('joi');
 const loginSchema = Joi.object({
   email: Joi.string().email().lowercase().trim().required(),
   password: Joi.string().min(8).required(),
+  macAddress: Joi.string().trim(),
 });
 
 const changePasswordSchema = Joi.object({

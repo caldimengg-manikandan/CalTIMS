@@ -194,7 +194,13 @@ router.post('/report/preview', authorize('admin', 'manager'), asyncHandler(async
 // GET /api/v1/settings/timesheet
 router.get('/timesheet', asyncHandler(async (req, res) => {
   const settings = await getOrCreateSettings();
-  ApiResponse.success(res, { data: settings.timesheet });
+  ApiResponse.success(res, { 
+    data: { 
+      ...settings.timesheet,
+      leaveTypes: settings.leavePolicy?.leaveTypes || [],
+      eligibleLeaveTypes: settings.leavePolicy?.eligibleLeaveTypes || []
+    } 
+  });
 }));
 
 // POST /api/v1/settings/timesheet
@@ -210,8 +216,8 @@ router.post('/timesheet', authorize('admin', 'manager'), asyncHandler(async (req
     {
       $set: {
         ...(taskCategories && { 'timesheet.taskCategories': taskCategories }),
-        ...(leaveTypes && { 'timesheet.leaveTypes': leaveTypes }),
-        ...(eligibleLeaveTypes && { 'timesheet.eligibleLeaveTypes': eligibleLeaveTypes }),
+        ...(leaveTypes && { 'leavePolicy.leaveTypes': leaveTypes }),
+        ...(eligibleLeaveTypes && { 'leavePolicy.eligibleLeaveTypes': eligibleLeaveTypes }),
         ...(maxEntriesPerDay !== undefined && { 'timesheet.maxEntriesPerDay': maxEntriesPerDay }),
         ...(maxEntriesPerWeek !== undefined && { 'timesheet.maxEntriesPerWeek': maxEntriesPerWeek }),
         ...(permissionMaxHoursPerDay !== undefined && { 'timesheet.permissionMaxHoursPerDay': permissionMaxHoursPerDay }),
@@ -222,7 +228,14 @@ router.post('/timesheet', authorize('admin', 'manager'), asyncHandler(async (req
     { upsert: true, new: true }
   ).lean();
 
-  ApiResponse.success(res, { message: 'Timesheet settings saved', data: settings.timesheet });
+  ApiResponse.success(res, { 
+    message: 'Timesheet settings saved', 
+    data: { 
+      ...settings.timesheet,
+      leaveTypes: settings.leavePolicy?.leaveTypes || [],
+      eligibleLeaveTypes: settings.leavePolicy?.eligibleLeaveTypes || []
+    } 
+  });
 }));
 
 // ════════════════════════════════════════════════════════════════════════════

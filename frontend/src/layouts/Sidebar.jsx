@@ -122,8 +122,7 @@ export default function Sidebar() {
                                         title={!sidebarOpen ? item.label : undefined}
                                         onClick={(e) => {
                                             if (item.proFeature && appVersion === 'basic') {
-                                                e.preventDefault()
-                                                toast.error('This feature is available in the Pro version.', { icon: '🔒' })
+                                                // Allow navigation so ProGuard can show the upgrade screen
                                             }
                                         }}
                                     >

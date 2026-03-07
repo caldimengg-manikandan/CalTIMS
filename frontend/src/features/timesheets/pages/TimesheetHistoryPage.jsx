@@ -19,7 +19,10 @@ import {
     Calendar,
     AlertTriangle,
     Search,
+    Lock,
 } from 'lucide-react'
+import { useSystemStore } from '@/store/systemStore'
+import { clsx } from 'clsx'
 import TimesheetDetailsModal from '../components/TimesheetDetailsModal'
 import CreateIncidentModal from '@/components/incidents/CreateIncidentModal'
 import PageHeader from '@/components/ui/PageHeader'
@@ -54,6 +57,7 @@ export default function TimesheetHistoryPage() {
     const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false)
     const [incidentTimesheetId, setIncidentTimesheetId] = useState(null)
     const [search, setSearch] = useState('')
+    const { appVersion } = useSystemStore()
 
 
 
@@ -195,7 +199,7 @@ export default function TimesheetHistoryPage() {
     const COLORS = ['bg-blue-500', 'bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-slate-500']
 
     return (
-        <div className="space-y-6 max-w-[1600px] mx-auto animate-fade-in p-4 lg:p-6">
+        <div className="space-y-6 max-w-[1600px] mx-auto animate-fade-in p-4 lg:p-6 flex flex-col min-h-0">
             <PageHeader title="History" />
             {/* Filter Section */}
             <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-slate-100 dark:border-white p-6">
@@ -284,15 +288,15 @@ export default function TimesheetHistoryPage() {
             </div>
 
             {/* Table Section */}
-            <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-slate-100 dark:border-white overflow-hidden">
-                <div className="p-6 border-b border-slate-100 dark:border-white">
+            <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-slate-100 dark:border-white overflow-hidden flex flex-col">
+                <div className="p-6 border-b border-slate-100 dark:border-white shrink-0">
                     <div className="flex items-center gap-2 text-slate-700 dark:text-white font-semibold">
                         <Calendar size={20} className="text-slate-400" />
                         <h2>Timesheets & Drafts</h2>
                     </div>
                 </div>
 
-                <div className="table-wrapper max-h-container rounded-none border-0 shadow-none text-sm">
+                <div className="table-wrapper max-h-[calc(100vh-30rem)] overflow-y-auto rounded-none border-0 shadow-none text-sm">
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-50/50 dark:bg-black/50">
                             <tr>
@@ -397,13 +401,25 @@ export default function TimesheetHistoryPage() {
                                                 )}
                                                 <button
                                                     onClick={() => {
+                                                        if (appVersion === 'basic') {
+                                                            toast.error('Reporting issues via incidents is an Enterprise Pro feature.', {
+                                                                icon: '🔒',
+                                                                style: { borderRadius: '12px', background: '#1e293b', color: '#fff' }
+                                                            });
+                                                            return;
+                                                        }
                                                         setIncidentTimesheetId(row._id);
                                                         setIsIncidentModalOpen(true);
                                                     }}
-                                                    className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
-                                                    title="Report Issue"
+                                                    className={clsx(
+                                                        "p-2 rounded-lg transition-all active:scale-95",
+                                                        appVersion === 'basic'
+                                                            ? "text-slate-300 cursor-not-allowed grayscale"
+                                                            : "text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-white dark:hover:text-black"
+                                                    )}
+                                                    title={appVersion === 'basic' ? "Unlock Pro to Report Issues" : "Report Issue"}
                                                 >
-                                                    <AlertTriangle size={18} />
+                                                    {appVersion === 'basic' ? <Lock size={16} /> : <AlertTriangle size={18} />}
                                                 </button>
                                             </div>
                                         </td>

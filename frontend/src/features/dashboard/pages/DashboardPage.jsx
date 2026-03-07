@@ -10,7 +10,7 @@ import { toast } from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import Spinner from '@/components/ui/Spinner'
 import Modal from '@/components/ui/Modal'
-import { format, startOfWeek, endOfWeek, isSameDay, addWeeks, subWeeks } from 'date-fns'
+import { format, startOfWeek, endOfWeek, isSameDay, addWeeks, subWeeks, addDays, setHours, setMinutes, isAfter, differenceInHours, differenceInMinutes, differenceInDays, setSeconds, setMilliseconds } from 'date-fns'
 import CalendarWidget from '@/features/dashboard/components/CalendarWidget'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -48,7 +48,7 @@ export default function DashboardPage() {
         return saved ? JSON.parse(saved) : {
             quickActions: true,
             chart: true,
-            projects: isAdmin,
+            projects: true,
             announcements: true,
             calendar: true,
             feed: true,
@@ -77,7 +77,7 @@ export default function DashboardPage() {
     const { data: projects = [] } = useQuery({
         queryKey: ['projects', 'all'],
         queryFn: () => projectAPI.getAll({ limit: 1000 }).then(r => r.data.data || []),
-        enabled: isAdmin
+        enabled: !!user?.id
     })
 
     const { data: leaveBalance } = useQuery({
@@ -123,6 +123,53 @@ export default function DashboardPage() {
         { day: 'Thu', hours: 0 }, { day: 'Fri', hours: 0 }, { day: 'Sat', hours: 0 }, { day: 'Sun', hours: 0 }
     ]
 
+    const getDeadlineInfo = () => {
+        const deadlineStr = summaryData?.submissionDeadline || 'Friday 18:00'
+
+        try {
+            const [dayStr, timeStr] = deadlineStr.split(' ')
+            const [hours, minutes] = timeStr.split(':').map(Number)
+
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+            const targetDay = days.indexOf(dayStr)
+
+            if (targetDay === -1) return { label: deadlineStr, remaining: 'Check policy', color: 'text-amber-400' }
+
+            let deadline = startOfWeek(new Date(), { weekStartsOn })
+            const offset = (targetDay - weekStartsOn + 7) % 7
+            deadline = addDays(deadline, offset)
+            deadline = setHours(deadline, hours)
+            deadline = setMinutes(deadline, minutes)
+            deadline = setSeconds(deadline, 0)
+            deadline = setMilliseconds(deadline, 0)
+
+            if (isComplete) {
+                return { label: format(deadline, 'EEEE h:mm a'), remaining: 'Required hours met 🎉', color: 'text-emerald-400' }
+            }
+
+            if (isAfter(new Date(), deadline)) {
+                const diffHours = Math.abs(differenceInHours(new Date(), deadline))
+                if (diffHours < 24) return { label: format(deadline, 'EEEE h:mm a'), remaining: `⏳ ${diffHours}h overdue`, color: 'text-rose-400' }
+                return { label: format(deadline, 'EEEE h:mm a'), remaining: `⏳ ${differenceInDays(new Date(), deadline)}d overdue`, color: 'text-rose-400' }
+            }
+
+            const diffHours = differenceInHours(deadline, new Date())
+            if (diffHours < 1) {
+                const diffMins = differenceInMinutes(deadline, new Date())
+                return { label: format(deadline, 'EEEE h:mm a'), remaining: `⏳ ${diffMins}m remaining`, color: 'text-amber-400' }
+            }
+            if (diffHours < 48) {
+                return { label: format(deadline, 'EEEE h:mm a'), remaining: `⏳ ${diffHours}h remaining`, color: 'text-amber-400' }
+            }
+            return { label: format(deadline, 'EEEE h:mm a'), remaining: `⏳ ${differenceInDays(deadline, new Date())}d remaining`, color: 'text-amber-400' }
+
+        } catch (err) {
+            return { label: 'Friday 6:00 PM', remaining: '48 hours remaining', color: 'text-amber-400' }
+        }
+    }
+
+    const deadlineInfo = getDeadlineInfo()
+
     return (
         <div className="max-w-[1600px] mx-auto space-y-6 pb-12">
 
@@ -145,7 +192,7 @@ export default function DashboardPage() {
                         </h1>
                         <p className="text-slate-300 text-sm md:text-base font-medium pt-2 max-w-xl">
                             Week: {format(currentWeekStart, 'MMM d')} – {format(currentWeekEnd, 'MMM d')} <span className="opacity-50 mx-2">|</span>
-                            {isAdmin ? 'System Operational' : `${loggedHoursThisWeek} of ${targetHours} hours logged`}
+                            {isAdmin ? 'System Operational' : `${Number(loggedHoursThisWeek).toFixed(2)} of ${targetHours.toFixed(2)} hours logged`}
                         </p>
 
                         {!isAdmin && (
@@ -202,9 +249,6 @@ export default function DashboardPage() {
                                     </div>
                                     <button
                                         onClick={() => {
-                                            if (appVersion === 'basic') {
-                                                return toast.error('This feature is available in the Pro version.', { icon: '🔒' })
-                                            }
                                             navigate('/timesheets/compliance')
                                         }}
                                         className={clsx(
@@ -221,9 +265,9 @@ export default function DashboardPage() {
                                         <Clock size={14} />
                                         <span className="text-[10px] font-black uppercase tracking-widest">Next Deadline</span>
                                     </div>
-                                    <p className="text-2xl font-black text-white mb-1">Friday 6:00 PM</p>
-                                    <p className={`text-sm font-bold ${isComplete ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                        {isComplete ? 'Required hours met 🎉' : '⏳ 48 hours remaining'}
+                                    <p className="text-2xl font-black text-white mb-1">{deadlineInfo.label}</p>
+                                    <p className={`text-sm font-bold ${deadlineInfo.color}`}>
+                                        {deadlineInfo.remaining}
                                     </p>
                                 </div>
                             )}
@@ -237,7 +281,7 @@ export default function DashboardPage() {
                 initial="hidden" animate="visible" variants={fadeUp} transition={{ duration: 0.4, delay: 0.1 }}
                 className="space-y-4"
             >
-                {isAdmin && (
+                {projects?.length > 0 && (
                     <div className="flex items-center justify-between px-1">
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter By Project</span>
@@ -303,10 +347,6 @@ export default function DashboardPage() {
 
                     <div
                         onClick={(e) => {
-                            if (isAdmin && appVersion === 'basic') {
-                                e.preventDefault()
-                                return toast.error('This feature is available in the Pro version.', { icon: '🔒' })
-                            }
                             isAdmin ? navigate('/timesheets/compliance') : navigate('/timesheets')
                         }}
                         className={clsx(
@@ -399,6 +439,7 @@ export default function DashboardPage() {
                                         <RechartsTooltip
                                             cursor={{ fill: '#f1f5f9' }}
                                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                            formatter={(value) => [`${Number(value).toFixed(2)}h`, 'Hours']}
                                         />
                                         <Bar dataKey="hours" radius={[6, 6, 6, 6]} barSize={40}>
                                             {chartData.map((entry, index) => (
@@ -412,7 +453,7 @@ export default function DashboardPage() {
                     )}
 
                     {/* Top Projects */}
-                    {isAdmin && prefs.projects && (
+                    {prefs.projects && (
                         <div className="card p-6">
                             <div className="flex items-center justify-between mb-6">
                                 <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
@@ -595,7 +636,7 @@ export default function DashboardPage() {
                     {[
                         { key: 'quickActions', label: 'Quick Actions Shortcuts' },
                         { key: 'chart', label: 'Hourly Productivity Chart' },
-                        ...(isAdmin ? [{ key: 'projects', label: 'Top Active Projects' }] : []),
+                        { key: 'projects', label: 'Top Active Projects' },
                         { key: 'announcements', label: 'Announcements Hub' },
                         { key: 'calendar', label: 'Calendar Widget' },
                         { key: 'feed', label: 'Recent Activity Feed' },
