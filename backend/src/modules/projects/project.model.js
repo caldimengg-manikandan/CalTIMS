@@ -97,7 +97,6 @@ const projectSchema = new mongoose.Schema(
 );
 
 // ─── Indexes ──────────────────────────────────────────────────────────────────
-projectSchema.index({ code: 1 }, { unique: true });
 projectSchema.index({ managerId: 1 });
 projectSchema.index({ status: 1 });
 projectSchema.index({ 'allocatedEmployees.userId': 1 });

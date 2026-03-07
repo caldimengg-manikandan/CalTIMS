@@ -58,6 +58,13 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // ─── Health Check ────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Timesheet API is live',
+  });
+});
+
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({
     success: true,
