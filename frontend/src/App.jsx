@@ -71,6 +71,7 @@ export default function App() {
                     <Route path="/reset-password/:token" element={<ResetPassword />} />
                 </Route>
 
+
                 {/* App routes */}
                 <Route element={
                     <ProtectedRoute>
