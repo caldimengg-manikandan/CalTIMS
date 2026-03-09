@@ -5,9 +5,11 @@ import Navbar from './Navbar'
 import { useUIStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useThemeStore } from '@/store/themeStore'
+import { useInactivityTimer } from '@/hooks/useInactivityTimer'
 import { clsx } from 'clsx'
 
 export default function AppLayout() {
+    useInactivityTimer()
     const { sidebarOpen } = useUIStore()
     const { fetchGeneralSettings, general } = useSettingsStore()
     const { applyTheme } = useThemeStore()
