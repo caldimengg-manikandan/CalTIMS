@@ -32,7 +32,8 @@ const projectSchema = z.object({
         role: z.string().default('Developer'),
         allocationPercent: z.number().min(1).max(100).default(100)
     })).default([]),
-    onlyProjectTasks: z.boolean().default(false)
+    onlyProjectTasks: z.boolean().default(false),
+    budgetHours: z.preprocess((val) => val === '' ? 0 : Number(val), z.number().min(0).default(0))
 }).refine((data) => {
     if (!data.endDate) return true;
     return new Date(data.endDate) >= new Date(data.startDate);
@@ -178,12 +179,21 @@ function ProjectFormModal({ project, onClose }) {
                             {errors.code && <p className="text-[10px] text-rose-500">{errors.code.message}</p>}
                         </div>
                         <div className="space-y-1.5">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Project Budget Hours</label>
+                            <input {...register('budgetHours')} type="number" step="0.5" className="input" placeholder="e.g. 100" />
+                            <p className="text-[10px] text-slate-400 leading-tight">Hours limit before alerts.</p>
+                        </div>
+                        <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</label>
                             <select {...register('status')} className="input">
                                 <option value="active">Active</option>
                                 <option value="on-hold">On Hold</option>
                                 <option value="completed">Completed</option>
                             </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Client Name</label>
+                            <input {...register('clientName')} className="input" placeholder="Optional" />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Start Date *</label>
@@ -202,10 +212,6 @@ function ProjectFormModal({ project, onClose }) {
                                 {managers?.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
                             </select>
                             {errors.managerId && <p className="text-[10px] text-rose-500">{errors.managerId.message}</p>}
-                        </div>
-                        <div className="col-span-2 space-y-1.5">
-                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Client Name</label>
-                            <input {...register('clientName')} className="input" placeholder="Optional" />
                         </div>
                         <div className="col-span-2 space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
@@ -302,6 +308,7 @@ function ProjectViewModal({ project, onClose, onEdit }) {
                         { icon: <Building2 size={15} />, label: 'Client', value: project.clientName || '—' },
                         { icon: <Calendar size={15} />, label: 'Start Date', value: project.startDate ? format(new Date(project.startDate), 'MMM d, yyyy') : '—' },
                         { icon: <Calendar size={15} />, label: 'End Date', value: project.endDate && isValid(new Date(project.endDate)) ? format(new Date(project.endDate), 'MMM d, yyyy') : '—' },
+                        { icon: <Briefcase size={15} />, label: 'Budget Hours', value: project.budgetHours ? `${project.budgetHours} h` : 'No limit' },
                         { icon: <Users size={15} />, label: 'Team Size', value: `${project.allocatedEmployees?.length || 0} Members` },
                         { icon: <CheckCircle2 size={15} />, label: 'Task Isolation', value: project.onlyProjectTasks ? 'Only project tasks' : 'All categories' },
                     ].map(({ icon, label, value }) => (

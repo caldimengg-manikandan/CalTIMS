@@ -15,7 +15,8 @@ export default function NotificationsTab() {
         notifyOnTimesheetApproval: true,
         notifyOnTimesheetRejection: true,
         notifyOnLeaveRequest: true,
-        notifyOnLeaveApproval: true
+        notifyOnLeaveApproval: true,
+        notifyOnLeaveRejection: true
     })
 
     const { data, isLoading } = useQuery({
@@ -117,11 +118,19 @@ export default function NotificationsTab() {
                             </button>
                         </div>
 
-                        <div className="flex items-center justify-between py-2">
+                        <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-white/10">
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Approval (To Employee)</span>
                             <button onClick={() => upd('notifyOnLeaveApproval', !notifications.notifyOnLeaveApproval)}
                                 className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveApproval ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
                                 <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveApproval ? 'translate-x-4' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
+                        <div className="flex items-center justify-between py-2">
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Rejection (To Employee)</span>
+                            <button onClick={() => upd('notifyOnLeaveRejection', !notifications.notifyOnLeaveRejection)}
+                                className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveRejection ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveRejection ? 'translate-x-4' : 'translate-x-0'}`} />
                             </button>
                         </div>
                     </div>

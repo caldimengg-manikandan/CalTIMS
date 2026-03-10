@@ -81,6 +81,10 @@ const projectSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    budgetHours: {
+      type: Number,
+      default: 0,
+    },
     isActive: {
       type: Boolean,
       default: true,

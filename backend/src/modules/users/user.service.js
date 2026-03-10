@@ -3,6 +3,7 @@
 const User = require('./user.model');
 const AppError = require('../../shared/utils/AppError');
 const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
+const { logAction } = require('../audit/audit.routes');
 
 const userService = {
   async getAll(query) {
@@ -66,9 +67,44 @@ const userService = {
     delete data.password;
     delete data.refreshTokenHash;
 
+    const changes = {};
+    for (const key of Object.keys(data)) {
+        if (data[key] !== undefined && String(data[key]) !== String(user[key])) {
+            changes[key] = { old: user[key], new: data[key] };
+        }
+    }
+
     Object.assign(user, data);
     await user.save();
+
+    if (Object.keys(changes).length > 0) {
+        logAction({
+            userId: requestorId,
+            action: 'UPDATE_EMPLOYEE',
+            entityType: 'Employee',
+            entityId: id,
+            details: { changes }
+        });
+    }
+
     return user.toPublicJSON();
+  },
+
+  async resetPassword(id, newPassword, requestorId) {
+    const user = await User.findById(id);
+    if (!user) throw new AppError('User not found', 404);
+
+    user.password = newPassword;
+    await user.save();
+
+    logAction({
+        userId: requestorId,
+        action: 'RESET_PASSWORD',
+        entityType: 'Employee',
+        entityId: id,
+        details: { changes: { password: { old: '***', new: '***' } } }
+    });
+    return true;
   },
 
   async deactivate(id) {

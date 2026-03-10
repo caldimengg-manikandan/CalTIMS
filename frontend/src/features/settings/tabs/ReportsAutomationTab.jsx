@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Mail, Settings2, X, Send, Eye, Save, Check, Clock, Search, Plus } from 'lucide-react'
+import { Mail, Settings2, X, Send, Eye, Save, Check, Clock, Search, Plus, AtSign } from 'lucide-react'
 import { reportSchedulesAPI, settingsAPI, projectAPI } from '@/services/endpoints'
 import Spinner from '@/components/ui/Spinner'
 import Modal from '@/components/ui/Modal'
@@ -33,8 +33,16 @@ function ScheduleFormModal({ open, onClose, initial, employees, allProjects }) {
     const [form, setForm] = useState(BLANK_FORM)
     const [empSearch, setEmpSearch] = useState('')
     const [projSearch, setProjSearch] = useState('')
-    const [previewHtml, setPreviewHtml] = useState(null)
+    const [previewPdfUrl, setPreviewPdfUrl] = useState(null)
     const [previewOpen, setPreviewOpen] = useState(false)
+    const [sendPdfPanel, setSendPdfPanel] = useState(false)
+    const [sendEmails, setSendEmails] = useState('')
+
+    const closePreview = () => {
+        setPreviewOpen(false)
+        setSendPdfPanel(false)
+        if (previewPdfUrl) { URL.revokeObjectURL(previewPdfUrl); setPreviewPdfUrl(null) }
+    }
 
     useEffect(() => {
         if (open) {
@@ -70,9 +78,25 @@ function ScheduleFormModal({ open, onClose, initial, employees, allProjects }) {
     })
 
     const previewMutation = useMutation({
-        mutationFn: () => reportSchedulesAPI.preview({ reportType: form.reportType, projectIds: form.projectIds }),
-        onSuccess: r => { setPreviewHtml(r.data.data?.html); setPreviewOpen(true) },
+        mutationFn: () => reportSchedulesAPI.previewPdf({ reportType: form.reportType, projectIds: form.projectIds }),
+        onSuccess: r => {
+            if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl)
+            const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }))
+            setPreviewPdfUrl(url)
+            setSendPdfPanel(false)
+            setSendEmails('')
+            setPreviewOpen(true)
+        },
         onError: e => toast.error(e.response?.data?.message || 'Preview failed'),
+    })
+
+    const sendPdfMutation = useMutation({
+        mutationFn: () => {
+            const emails = sendEmails.split(/[,\n]+/).map(e => e.trim()).filter(Boolean)
+            return reportSchedulesAPI.sendPdf({ reportType: form.reportType, projectIds: form.projectIds, recipientEmails: emails })
+        },
+        onSuccess: r => { toast.success(r.data.message || 'PDF sent!'); setSendPdfPanel(false) },
+        onError: e => toast.error(e.response?.data?.message || 'Send failed'),
     })
 
     const filtEmp = (employees || []).filter(e => !empSearch || e.name.toLowerCase().includes(empSearch.toLowerCase()) || e.email.toLowerCase().includes(empSearch.toLowerCase()))
@@ -222,12 +246,51 @@ function ScheduleFormModal({ open, onClose, initial, employees, allProjects }) {
                 </div>
             </Modal>
 
-            {/* Preview Modal */}
-            <Modal isOpen={previewOpen} onClose={() => setPreviewOpen(false)} title="Email Preview">
-                <div className="overflow-auto max-h-[60vh] rounded-xl border border-slate-200 dark:border-white/10">
-                    {previewHtml
-                        ? <iframe title="email-preview" srcDoc={previewHtml} className="w-full border-0" style={{ minHeight: '480px' }} />
+            {/* Preview Modal — shows the actual PDF */}
+            <Modal isOpen={previewOpen} onClose={closePreview} title="Report Preview (PDF)">
+                {/* PDF viewer embed */}
+                <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-800">
+                    {previewPdfUrl
+                        ? <embed
+                            src={previewPdfUrl}
+                            type="application/pdf"
+                            className="w-full"
+                            style={{ height: '65vh', minHeight: '480px' }}
+                        />
                         : <div className="p-8 text-center text-slate-400">No preview available</div>}
+                </div>
+
+                {/* Send PDF panel */}
+                <div className="mt-4 space-y-3">
+                    <button
+                        onClick={() => { setSendPdfPanel(v => !v); if (!sendEmails) setSendEmails((form.recipientIds.map(id => (employees || []).find(e => e._id === id)?.email).filter(Boolean)).join(', ')) }}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold transition-all ${sendPdfPanel
+                            ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300'
+                            : 'border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'
+                            }`}>
+                        <AtSign size={15} /> Send this PDF via Email
+                    </button>
+
+                    {sendPdfPanel && (
+                        <div className="rounded-xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/60 dark:bg-indigo-900/20 p-4 space-y-3">
+                            <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                                <AtSign size={12} /> Recipient email addresses (comma separated)
+                            </p>
+                            <textarea
+                                rows={2}
+                                className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                                placeholder="alice@company.com, bob@company.com"
+                                value={sendEmails}
+                                onChange={e => setSendEmails(e.target.value)}
+                            />
+                            <button
+                                onClick={() => sendPdfMutation.mutate()}
+                                disabled={sendPdfMutation.isPending || !sendEmails.trim()}
+                                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-400/20 disabled:opacity-50 transition-all">
+                                {sendPdfMutation.isPending ? <Spinner size="sm" /> : <Send size={14} />} Send PDF Now
+                            </button>
+                        </div>
+                    )}
                 </div>
             </Modal>
         </>

@@ -79,6 +79,9 @@ const userSchema = new mongoose.Schema(
       type: Date,
       select: false,
     },
+    passwordChangedAt: {
+      type: Date,
+    },
     leaveBalance: {
       type: Map,
       of: Number,
@@ -134,6 +137,7 @@ userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   const salt = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12;
   this.password = await bcrypt.hash(this.password, salt);
+  this.passwordChangedAt = Date.now();
   next();
 });
 
@@ -160,6 +164,7 @@ userSchema.methods.toPublicJSON = function () {
     isTrialUser: this.isTrialUser,
     trialStartDate: this.trialStartDate,
     trialExpiresAt: this.trialExpiresAt,
+    passwordChangedAt: this.passwordChangedAt,
     createdAt: this.createdAt,
   };
 };

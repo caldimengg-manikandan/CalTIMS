@@ -10,6 +10,8 @@ const { TIMESHEET_STATUS, ROLES, CALENDAR_EVENT_TYPES } = require('../../constan
 const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
 const { getWeekStart, getWeekEnd } = require('../../shared/utils/dateHelpers');
 const notificationService = require('../notifications/notification.service');
+const emailService = require('../../shared/services/email.service');
+const notifier = require('../../shared/services/notifier');
 
 // ─── Leave-aware weekly hours calculator ─────────────────────────────────────
 // This is the canonical implementation of the timesheet hour calculation rules:
@@ -418,7 +420,7 @@ const timesheetService = {
     const savedTimesheets = await this.bulkUpsert(dataArray, userId);
 
     const user = await User.findById(userId).select('name employeeId');
-    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id');
+    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
 
     for (const ts of savedTimesheets) {
       ts.status = TIMESHEET_STATUS.SUBMITTED;
@@ -430,8 +432,8 @@ const timesheetService = {
       const year = ts.weekStartDate.getFullYear();
 
       const notificationPromises = approvers.map(approver =>
-        notificationService.create({
-          userId: approver._id,
+        notifier.send(approver._id, {
+          userEmail: approver.email,
           type: 'timesheet_submitted',
           title: 'Timesheet Submitted',
           message: `${user.name} (${user.employeeId}) has submitted a timesheet for the week of ${weekStr} (${year}).`,
@@ -463,13 +465,13 @@ const timesheetService = {
 
     // Notify Admins and Managers
     const user = await User.findById(ts.userId).select('name employeeId');
-    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id');
+    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
     const weekStr = ts.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const year = ts.weekStartDate.getFullYear();
 
     const notificationPromises = approvers.map(approver =>
-      notificationService.create({
-        userId: approver._id,
+      notifier.send(approver._id, {
+        userEmail: approver.email,
         type: 'timesheet_submitted',
         title: 'Timesheet Submitted',
         message: `${user.name} (${user.employeeId}) has submitted a timesheet for the week of ${weekStr} (${year}).`,
@@ -496,13 +498,20 @@ const timesheetService = {
     timesheet.approvedAt = new Date();
     await timesheet.save();
 
+    // Check budget for each project in the timesheet
+    const projectIds = [...new Set(timesheet.rows.map(r => r.projectId?.toString()))].filter(Boolean);
+    for (const pid of projectIds) {
+      this.checkProjectBudget(pid); // Fire and forget or await? Let's not block approval
+    }
+
     // Notify employee
     const approver = await User.findById(approverId).select('name');
+    const employee = await User.findById(timesheet.userId).select('email');
     const weekStr = timesheet.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const year = timesheet.weekStartDate.getFullYear();
 
-    await notificationService.create({
-      userId: timesheet.userId,
+    await notifier.send(timesheet.userId, {
+      userEmail: employee?.email,
       type: 'timesheet_approved',
       title: '✅ Timesheet Approved',
       message: `Your timesheet for the week of ${weekStr} (${year}) has been approved by ${approver?.name || 'Admin'}.`,
@@ -523,11 +532,12 @@ const timesheetService = {
     await timesheet.save();
 
     const approver = await User.findById(approverId).select('name');
+    const employee = await User.findById(timesheet.userId).select('email');
     const weekStr = timesheet.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const year = timesheet.weekStartDate.getFullYear();
 
-    await notificationService.create({
-      userId: timesheet.userId,
+    await notifier.send(timesheet.userId, {
+      userEmail: employee?.email,
       type: 'timesheet_rejected',
       title: '❌ Timesheet Rejected',
       message: `Your timesheet for the week of ${weekStr} (${year}) was rejected by ${approver?.name || 'Admin'}: "${reason}".`,
@@ -599,6 +609,80 @@ const timesheetService = {
       data: complianceData,
       pagination: buildPaginationMeta(total, page, limit)
     };
+  },
+
+  async checkProjectBudget(projectId) {
+    try {
+      const project = await Project.findById(projectId).populate('managerId', 'name email');
+      if (!project || !project.budgetHours || project.budgetHours <= 0) return;
+
+      // Calculate total approved hours for this project across all timesheets
+      const aggregate = await Timesheet.aggregate([
+        { $match: { status: TIMESHEET_STATUS.APPROVED, 'rows.projectId': new mongoose.Types.ObjectId(projectId) } },
+        { $unwind: '$rows' },
+        { $match: { 'rows.projectId': new mongoose.Types.ObjectId(projectId) } },
+        { $group: { _id: null, totalHours: { $sum: '$rows.totalHours' } } }
+      ]);
+
+      const totalHours = aggregate.length > 0 ? aggregate[0].totalHours : 0;
+
+      if (totalHours > project.budgetHours) {
+        const Settings = mongoose.model('Settings');
+        const settings = await Settings.findOne().lean();
+        const notifSettings = settings?.notifications || {};
+        const companyName = settings?.organization?.companyName || 'CALTIMS';
+
+        // 1. In-App Notifications
+        if (notifSettings.inAppEnabled !== false) {
+          const admins = await User.find({ role: ROLES.ADMIN, isActive: true }).select('_id email');
+          
+          const notificationPromises = admins.map(admin =>
+            notificationService.create({
+              userId: admin._id,
+              type: 'project_budget_exceeded',
+              title: '⚠️ Project Budget Exceeded',
+              message: `Project ${project.name} has exceeded its budget of ${project.budgetHours} hours (Current: ${totalHours.toFixed(2)} hours).`,
+              refId: project._id,
+              refModel: 'Project',
+            })
+          );
+
+          if (project.managerId) {
+            notificationPromises.push(
+              notificationService.create({
+                userId: project.managerId._id,
+                type: 'project_budget_exceeded',
+                title: '⚠️ Project Budget Exceeded',
+                message: `Your project ${project.name} has exceeded its budget of ${project.budgetHours} hours (Current: ${totalHours.toFixed(2)} hours).`,
+                refId: project._id,
+                refModel: 'Project',
+              })
+            );
+          }
+          await Promise.all(notificationPromises);
+        }
+
+        // 2. Email Notifications
+        if (notifSettings.emailEnabled !== false) {
+          const admins = await User.find({ role: ROLES.ADMIN, isActive: true }).select('email');
+          const recipientEmails = [...new Set([
+            ...admins.map(a => a.email),
+            project.managerId?.email
+          ])].filter(Boolean);
+
+          if (recipientEmails.length > 0) {
+            await emailService.sendBudgetExceededEmail(recipientEmails, {
+              name: project.name,
+              code: project.code,
+              budgetHours: project.budgetHours,
+              totalHours: totalHours
+            }, companyName);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error checking project budget:', err);
+    }
   },
 
   async getHistory(query, requestor) {

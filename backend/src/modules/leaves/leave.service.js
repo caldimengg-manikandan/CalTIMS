@@ -10,6 +10,7 @@ const { LEAVE_STATUS, ROLES, TIMESHEET_STATUS, LEAVE_TYPES } = require('../../co
 const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
 const { getWeekStart, getWeekEnd, formatDate } = require('../../shared/utils/dateHelpers');
 const notificationService = require('../notifications/notification.service');
+const notifier = require('../../shared/services/notifier');
 
 // ─── Helper: get or create the system "Leave" project ────────────────────────
 async function getOrCreateLeaveProject(managerId) {
@@ -183,10 +184,10 @@ const leaveService = {
     const leave = await Leave.create({ ...data, userId });
 
     // Notify Admins and Managers
-    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id');
+    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
     const notificationPromises = approvers.map(approver => 
-      notificationService.create({
-        userId: approver._id,
+      notifier.send(approver._id, {
+        userEmail: approver.email,
         type: 'leave_applied',
         title: 'New Leave Application',
         message: `${user.name} (${user.employeeId}) has applied for ${leave.leaveType} leave. Leave ID: ${leave.leaveId}`,
@@ -315,8 +316,8 @@ const leaveService = {
     await createLeaveTimesheets(leave, approverId);
 
     // Notify employee
-    await notificationService.create({
-      userId: leave.userId._id,
+    await notifier.send(leave.userId._id, {
+      userEmail: leave.userId.email,
       type: 'leave_approved',
       title: '✅ Leave Approved',
       message: `Your ${leave.leaveType} leave application (${leave.leaveId}) has been approved.`,
@@ -337,8 +338,8 @@ const leaveService = {
     await leave.save();
 
     // Notify employee
-    await notificationService.create({
-      userId: leave.userId._id,
+    await notifier.send(leave.userId._id, {
+      userEmail: leave.userId.email,
       type: 'leave_rejected',
       title: '❌ Leave Rejected',
       message: `Your ${leave.leaveType} leave application (${leave.leaveId}) was rejected. Reason: ${reason}`,
@@ -366,11 +367,11 @@ const leaveService = {
     await leave.save();
 
     // Notify Admins and Managers
-    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id');
+    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
     const user = await User.findById(leave.userId).select('name employeeId');
     const notificationPromises = approvers.map(approver => 
-      notificationService.create({
-        userId: approver._id,
+      notifier.send(approver._id, {
+        userEmail: approver.email,
         type: 'leave_cancelled',
         title: 'Leave Cancelled',
         message: `${user.name} (${user.employeeId}) has cancelled their ${leave.leaveType} leave (${leave.leaveId}).`,

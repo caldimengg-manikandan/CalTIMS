@@ -22,6 +22,7 @@ router.get(
         const query = {};
         if (req.query.action) query.action = req.query.action;
         if (req.query.entityType) query.entityType = req.query.entityType;
+        if (req.query.entityId) query.entityId = req.query.entityId;
         if (req.query.userId) query.userId = req.query.userId;
 
         // Date filtering mapping for standard ?from= and ?to=

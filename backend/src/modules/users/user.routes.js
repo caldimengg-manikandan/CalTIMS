@@ -29,6 +29,9 @@ router.get('/:id', authorize('admin', 'manager'), userController.getById);
 // Update profile (admin or self)
 router.put('/:id', validate(updateUserSchema), userController.update);
 
+// Reset password (admin only)
+router.post('/:id/reset-password', authorize('admin'), userController.resetPassword);
+
 // Deactivate employee (admin only)
 router.patch('/:id/deactivate', authorize('admin'), userController.deactivate);
 

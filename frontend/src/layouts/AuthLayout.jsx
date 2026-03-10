@@ -36,7 +36,7 @@ export default function AuthLayout() {
                         <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-black/20">
                             <Timer size={28} className="text-indigo-600" />
                         </div>
-                        <span className="text-2xl font-bold tracking-tight">CALTIMS - TIME INFORMATION MANAGEMENT SYSTEM </span>
+                        <span className="text-2xl font-bold tracking-tight">CALTIMS - TIMESHEET MANAGEMENT SYSTEM </span>
                     </div>
 
                     <div className="space-y-8 max-w-lg">

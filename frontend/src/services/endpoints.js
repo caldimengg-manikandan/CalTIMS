@@ -14,6 +14,7 @@ export const userAPI = {
   getMe: () => api.get('/users/me'),
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
+  resetPassword: (id, password) => api.post(`/users/${id}/reset-password`, { password }),
   deactivate: (id) => api.patch(`/users/${id}/deactivate`),
   activate: (id) => api.patch(`/users/${id}/activate`),
   changeRole: (id, role) => api.patch(`/users/${id}/role`, { role }),
@@ -136,6 +137,8 @@ export const reportSchedulesAPI = {
   sendNow: (id) => api.post(`/report-schedules/${id}/send-now`),
   getHistory: (id) => api.get(`/report-schedules/${id}/history`),
   preview: (data) => api.post('/report-schedules/preview', data),
+  previewPdf: (data) => api.post('/report-schedules/preview/pdf', data, { responseType: 'blob' }),
+  sendPdf: (data) => api.post('/report-schedules/preview/send-pdf', data),
 }
 
 export const taskAPI = {

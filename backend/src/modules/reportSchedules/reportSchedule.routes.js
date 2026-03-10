@@ -141,4 +141,37 @@ router.post('/preview', asyncHandler(async (req, res) => {
   }
 }));
 
+// ── POST /api/v1/report-schedules/preview/pdf — download PDF ─────────────────
+router.post('/preview/pdf', asyncHandler(async (req, res) => {
+  const { reportType = 'approved', projectIds = [] } = req.body;
+  const companyName = await getCompanyName();
+  try {
+    const { buffer, reportTitle } = await emailService.buildReportPdf(reportType, companyName, projectIds);
+    const dateStr = new Date().toLocaleDateString('en-IN').replace(/\//g, '-');
+    const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${dateStr}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.end(buffer);
+  } catch (err) {
+    ApiResponse.error(res, { message: `PDF generation failed: ${err.message}`, statusCode: 500 });
+  }
+}));
+
+// ── POST /api/v1/report-schedules/preview/send-pdf — email PDF to recipients ─
+router.post('/preview/send-pdf', asyncHandler(async (req, res) => {
+  const { reportType = 'approved', projectIds = [], recipientEmails = [] } = req.body;
+  if (!recipientEmails.length) {
+    return ApiResponse.error(res, { message: 'At least one recipient email is required', statusCode: 400 });
+  }
+  const companyName = await getCompanyName();
+  try {
+    const result = await emailService.sendReportPdfEmail(recipientEmails, reportType, companyName, projectIds);
+    ApiResponse.success(res, { message: `PDF report sent to ${result.sent} recipient(s)`, data: result });
+  } catch (err) {
+    const msg = err.message.includes('SMTP') ? 'SMTP not configured. Check .env file.' : `Send failed: ${err.message}`;
+    ApiResponse.error(res, { message: msg, statusCode: 400 });
+  }
+}));
+
 module.exports = router;

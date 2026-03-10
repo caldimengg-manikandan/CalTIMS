@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import { userAPI, authAPI } from '@/services/endpoints'
 import { useAuthStore } from '@/store/authStore'
 import Spinner from '@/components/ui/Spinner'
@@ -173,15 +174,17 @@ function ThemeTab() {
 }
 
 // ── Tab 3: Security (Change Password) ────────────────────────────────────────
-function SecurityTab() {
+function SecurityTab({ isForced }) {
     const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' })
     const [showPwds, setShowPwds] = useState({ old: false, new: false, confirm: false })
+    const { logout } = useAuthStore()
 
     const changeMutation = useMutation({
         mutationFn: (data) => authAPI.changePassword(data),
         onSuccess: () => {
-            toast.success('Password changed successfully!')
+            toast.success('Password changed successfully! Please log in again.')
             setPwdForm({ oldPassword: '', newPassword: '', confirmPassword: '' })
+            setTimeout(() => logout(), 1500)
         },
         onError: (e) => toast.error(e.response?.data?.message || 'Failed to change password'),
     })
@@ -203,6 +206,15 @@ function SecurityTab() {
 
     return (
         <div className="max-w-xl">
+            {isForced && (
+                <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-start gap-3">
+                    <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <h4 className="font-bold text-sm">Action Required</h4>
+                        <p className="text-xs mt-1">Your password has expired. You must change your password before you can continue using the application.</p>
+                    </div>
+                </div>
+            )}
             <SectionCard title="Change Password" subtitle="Update your security credentials" icon={Lock}>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-1.5">
@@ -272,7 +284,16 @@ function SecurityTab() {
 // ── Main Profile Page ────────────────────────────────────────────────────────
 export default function ProfilePage() {
     const { user } = useAuthStore()
-    const [activeTab, setActiveTab] = useState('info')
+    const location = useLocation()
+    const isForced = location.state?.forcePasswordChange
+
+    const [activeTab, setActiveTab] = useState(isForced ? 'security' : 'info')
+
+    useEffect(() => {
+        if (isForced && activeTab !== 'security') {
+            setActiveTab('security')
+        }
+    }, [isForced])
 
     const { data: profile, isLoading } = useQuery({
         queryKey: ['me'],
@@ -301,6 +322,7 @@ export default function ProfilePage() {
                 {tabs.map(tab => (
                     <button
                         key={tab.id}
+                        disabled={isForced && tab.id !== 'security'}
                         onClick={() => setActiveTab(tab.id)}
                         className={`
                             flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all
@@ -308,6 +330,7 @@ export default function ProfilePage() {
                                 ? 'bg-white dark:bg-slate-800 text-primary shadow-sm ring-1 ring-slate-200 dark:ring-white/10'
                                 : 'text-slate-500 hover:text-slate-700 hover:bg-white/50 dark:hover:bg-white/5'
                             }
+                            ${isForced && tab.id !== 'security' ? 'opacity-50 cursor-not-allowed' : ''}
                         `}
                     >
                         <tab.icon size={16} />
@@ -319,7 +342,7 @@ export default function ProfilePage() {
             {/* Tab Content */}
             <div className="animate-slide-in">
                 {activeTab === 'info' && <InfoTab profile={profile} />}
-                {activeTab === 'security' && <SecurityTab />}
+                {activeTab === 'security' && <SecurityTab isForced={isForced} />}
                 {activeTab === 'theme' && <ThemeTab />}
             </div>
         </div>

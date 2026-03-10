@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { userAPI } from '@/services/endpoints'
+import { userAPI, auditAPI } from '@/services/endpoints'
 import StatusBadge from '@/components/ui/StatusBadge'
 import Spinner from '@/components/ui/Spinner'
 import PageHeader from '@/components/ui/PageHeader'
 import {
     Search, UserPlus, SlidersHorizontal, Download, Eye, UserX, UserCheck,
     X, Save, ChevronDown, Pencil, Trash2, Mail, Phone, Building2,
-    Briefcase, CalendarDays, ShieldCheck
+    Briefcase, CalendarDays, ShieldCheck, History
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -57,6 +57,39 @@ function ModalHeader({ icon, title, subtitle, onClose }) {
     )
 }
 
+/* ─── Shared Modal Shell ─────────────────────────────────────── */
+function EmployeeHistory({ entityId }) {
+    const { data: logs, isLoading } = useQuery({
+        queryKey: ['audit-logs', entityId],
+        queryFn: () => auditAPI.getAll({ entityType: 'Employee', entityId, limit: 20 }).then(r => r.data.data),
+        enabled: !!entityId
+    });
+
+    if (isLoading) return <div className="py-4 flex justify-center"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>;
+    if (!logs?.length) return <p className="text-sm text-slate-500 py-4">No history available for this employee.</p>;
+
+    return (
+        <div className="space-y-3 py-4">
+            {logs.map(log => (
+                <div key={log._id} className="text-sm p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">{log.action}</p>
+                    <p className="text-xs text-slate-400">
+                        {format(new Date(log.createdAt), 'MMM d, yyyy h:mm a')} by {log.userId?.name || 'System'}
+                    </p>
+                    {log.details?.changes && Object.entries(log.details.changes).map(([field, vals]) => (
+                        <div key={field} className="text-xs mt-2 p-2 bg-white dark:bg-slate-900 rounded-lg flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-600 dark:text-slate-300">{field}:</span>
+                            <span className="px-1.5 py-0.5 bg-rose-50 text-rose-600 rounded line-through dark:bg-rose-900/30 dark:text-rose-400">{String(vals.old)}</span>
+                            <span className="text-slate-400">&rarr;</span>
+                            <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded dark:bg-emerald-900/30 dark:text-emerald-400">{String(vals.new)}</span>
+                        </div>
+                    ))}
+                </div>
+            ))}
+        </div>
+    );
+}
+
 /* ─── Employee Form (shared by Add & Edit) ───────────────────── */
 function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, errors = {} }) {
     const getInputClass = (name) => {
@@ -78,10 +111,15 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address *</label>
                         <input name="email" type="email" className={getInputClass('email')} placeholder="john@example.com" value={formData.email} onChange={onChange} />
                     </div>
-                    {!isEdit && (
+                    {!isEdit ? (
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Password *</label>
                             <input name="password" type="password" className={getInputClass('password')} placeholder="Min 8 characters" value={formData.password} onChange={onChange} />
+                        </div>
+                    ) : (
+                        <div className="space-y-1.5">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Reset Password (Optional)</label>
+                            <input name="newPassword" type="password" className={getInputClass('newPassword')} placeholder="Min 8 characters" value={formData.newPassword || ''} onChange={onChange} />
                         </div>
                     )}
                     <div className="space-y-1.5">
@@ -141,6 +179,7 @@ export default function EmployeesPage() {
     const [editEmp, setEditEmp] = useState(null)      // employee object for edit
     const [viewEmp, setViewEmp] = useState(null)      // employee object for view
     const [deleteEmp, setDeleteEmp] = useState(null)  // employee object for delete confirm
+    const [showHistory, setShowHistory] = useState(false) // toggle history view
 
     const [addForm, setAddForm] = useState(INITIAL_FORM)
     const [editForm, setEditForm] = useState(INITIAL_FORM)
@@ -242,14 +281,24 @@ export default function EmployeesPage() {
         })
     }
 
-    const handleEditSubmit = (e) => {
+    const handleEditSubmit = async (e) => {
         e.preventDefault()
         const errors = validateFields(editForm, true)
+        if (editForm.newPassword && editForm.newPassword.length < 8) errors.newPassword = true
         if (Object.keys(errors).length > 0) {
             setEditErrors(errors)
             return toast.error('Please fill all fields correctly')
         }
-        editMut.mutate({ id: editEmp._id, data: editForm })
+
+        try {
+            if (editForm.newPassword) {
+                await userAPI.resetPassword(editEmp._id, editForm.newPassword)
+                toast.success('Password reset successfully')
+            }
+            editMut.mutate({ id: editEmp._id, data: editForm })
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to update user or password')
+        }
     }
 
     const openEdit = (emp) => {
@@ -259,6 +308,7 @@ export default function EmployeesPage() {
             name: emp.name || '',
             email: emp.email || '',
             password: '',
+            newPassword: '',
             role: emp.role || 'employee',
             department: emp.department || '',
             designation: emp.designation || '',
@@ -269,7 +319,7 @@ export default function EmployeesPage() {
 
     /* ── CSV Export ── */
     const handleExportCSV = () => {
-        const employees = data?.data || []
+        const employees = [...(data?.data || [])].reverse()
         if (!employees.length) { toast.error('No data to export'); return }
         const headers = ['Name', 'Email', 'Employee ID', 'Department', 'Designation', 'Role', 'Phone', 'Joining Date', 'Status']
         const rows = employees.map(e => [
@@ -471,10 +521,12 @@ export default function EmployeesPage() {
                         <table className="w-full">
                             <thead className="sticky top-0 z-20 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10">
                                 <tr>
-                                    <th>Employee</th>
+                                    <th>Employee ID</th>
+                                    <th>Employee Name</th>
                                     <th>Department</th>
-                                    <th>Role</th>
-                                    <th>Joined</th>
+                                    <th>Email ID</th>
+                                    <th>Designation</th>
+                                    <th>Joined Date</th>
                                     <th>Status</th>
                                     <th className="text-right">Actions</th>
                                 </tr>
@@ -483,22 +535,23 @@ export default function EmployeesPage() {
                                 {data?.data?.map((emp) => (
                                     <tr key={emp._id}>
                                         <td>
+                                            <p className="text-xs font-mono text-slate-400">{emp.employeeId}</p>
+                                        </td>
+                                        <td>
                                             <div className="flex items-center gap-3">
-                                                <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center text-white font-bold text-xs shrink-0">
-                                                    {emp.name.charAt(0)}
-                                                </div>
-                                                <div>
-                                                    <p className="font-medium text-slate-800 dark:text-white">{emp.name}</p>
-                                                    {/* <p className="text-xs text-slate-400 font-mono">{emp.employeeId}</p> */}
-                                                </div>
+                                                <p className="font-medium text-slate-800 dark:text-white">{emp.name}</p>
                                             </div>
                                         </td>
                                         <td>
                                             <p className="text-sm text-slate-600 dark:text-white">{emp.department || '—'}</p>
-                                            <p className="text-[10px] text-slate-400 uppercase tracking-wider">{emp.designation || '—'}</p>
                                         </td>
-                                        <td><StatusBadge status={emp.role} /></td>
-                                        <td className="text-sm text-slate-500">
+                                        <td>
+                                            <p className="text-sm text-slate-500">{emp.email}</p>
+                                        </td>
+                                        <td>
+                                            <p className="text-sm text-slate-600 dark:text-white">{emp.designation || '—'}</p>
+                                        </td>
+                                        <td className="text-sm text-slate-500 whitespace-nowrap">
                                             {emp.joinDate ? format(new Date(emp.joinDate), 'MMM d, yyyy') : '—'}
                                         </td>
                                         <td><StatusBadge status={emp.isActive ? 'active' : 'draft'} /></td>
@@ -577,7 +630,7 @@ export default function EmployeesPage() {
             <Modal open={!!editEmp} onClose={() => !editMut.isPending && setEditEmp(null)}>
                 <ModalHeader icon={<Pencil size={20} />} title="Edit Employee" subtitle={editEmp?.name} onClose={() => setEditEmp(null)} />
                 <EmployeeForm formId="edit-form" formData={editForm} onChange={handleEditChange} onSubmit={handleEditSubmit} errors={editErrors} isEdit />
-                <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0">
                     <button onClick={() => setEditEmp(null)} className="btn-secondary">Cancel</button>
                     <button type="submit" form="edit-form" disabled={editMut.isPending} className="btn-primary min-w-[140px]">
                         {editMut.isPending ? 'Saving...' : <><Save size={15} /> Update Employee</>}
@@ -585,47 +638,63 @@ export default function EmployeesPage() {
                 </div>
             </Modal>
 
-            <Modal open={!!viewEmp} onClose={() => setViewEmp(null)} maxWidth="max-w-lg">
-                <ModalHeader icon={<Eye size={20} />} title="Employee Details" subtitle={viewEmp?.employeeId} onClose={() => setViewEmp(null)} />
-                {viewEmp && (
-                    <div className="px-6 py-5 space-y-5">
-                        <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center text-white text-2xl font-bold shrink-0">
-                                {viewEmp.name.charAt(0)}
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-slate-800 dark:text-white">{viewEmp.name}</h3>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <StatusBadge status={viewEmp.role} />
-                                    <StatusBadge status={viewEmp.isActive ? 'active' : 'draft'} />
-                                </div>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3">
-                            {[
-                                { icon: <Mail size={15} />, label: 'Email', value: viewEmp.email },
-                                { icon: <Phone size={15} />, label: 'Phone', value: viewEmp.phone || '—' },
-                                { icon: <Building2 size={15} />, label: 'Department', value: viewEmp.department || '—' },
-                                { icon: <Briefcase size={15} />, label: 'Designation', value: viewEmp.designation || '—' },
-                                { icon: <CalendarDays size={15} />, label: 'Joining Date', value: viewEmp.joinDate ? format(new Date(viewEmp.joinDate), 'MMM d, yyyy') : '—' },
-                                { icon: <ShieldCheck size={15} />, label: 'Employee ID', value: viewEmp.employeeId },
-                            ].map(({ icon, label, value }) => (
-                                <div key={label} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                                    <span className="text-slate-400 shrink-0">{icon}</span>
-                                    <div className="min-w-0">
-                                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
-                                        <p className="text-sm font-medium text-slate-700 dark:text-white truncate">{value}</p>
+            <Modal open={!!viewEmp} onClose={() => { setViewEmp(null); setShowHistory(false) }} maxWidth={showHistory ? 'max-w-4xl' : 'max-w-lg'}>
+                <ModalHeader icon={<Eye size={20} />} title="Employee Details" subtitle={viewEmp?.employeeId} onClose={() => { setViewEmp(null); setShowHistory(false) }} />
+                <div className="flex-1 overflow-y-auto">
+                    <div className="flex flex-col md:flex-row h-full">
+                        {viewEmp && (
+                            <div className={`px-6 py-5 space-y-5 transition-all duration-300 ${showHistory ? 'w-full md:w-1/2 border-slate-100 dark:border-slate-700 md:border-r' : 'w-full'}`}>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center text-white text-2xl font-bold shrink-0">
+                                        {viewEmp.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-bold text-slate-800 dark:text-white">{viewEmp.name}</h3>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <StatusBadge status={viewEmp.role} />
+                                            <StatusBadge status={viewEmp.isActive ? 'active' : 'draft'} />
+                                        </div>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {[
+                                        { icon: <Mail size={15} />, label: 'Email', value: viewEmp.email },
+                                        { icon: <Phone size={15} />, label: 'Phone', value: viewEmp.phone || '—' },
+                                        { icon: <Building2 size={15} />, label: 'Department', value: viewEmp.department || '—' },
+                                        { icon: <Briefcase size={15} />, label: 'Designation', value: viewEmp.designation || '—' },
+                                        { icon: <CalendarDays size={15} />, label: 'Joining Date', value: viewEmp.joinDate ? format(new Date(viewEmp.joinDate), 'MMM d, yyyy') : '—' },
+                                        { icon: <ShieldCheck size={15} />, label: 'Employee ID', value: viewEmp.employeeId },
+                                    ].map(({ icon, label, value }) => (
+                                        <div key={label} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                            <span className="text-slate-400 shrink-0">{icon}</span>
+                                            <div className="min-w-0">
+                                                <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
+                                                <p className="text-sm font-medium text-slate-700 dark:text-white truncate">{value}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {showHistory && viewEmp && (
+                            <div className="w-full md:w-1/2 px-6 py-5 bg-slate-50/50 dark:bg-slate-900/50 min-h-[350px]">
+                                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Change History</h3>
+                                <EmployeeHistory entityId={viewEmp._id} />
+                            </div>
+                        )}
                     </div>
-                )}
-                <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                    <button onClick={() => { setViewEmp(null); openEdit(viewEmp) }} className="btn-secondary flex items-center gap-2">
+                </div>
+                <div className="flex justify-end items-center gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0">
+                    <button
+                        onClick={() => setShowHistory(!showHistory)}
+                        className={`flex items-center gap-2 mr-auto px-4 py-2 text-sm font-semibold rounded-xl transition-all ${showHistory ? 'bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}`}
+                    >
+                        <History size={15} /> {showHistory ? 'Hide History' : 'Change History'}
+                    </button>
+                    <button onClick={() => { setViewEmp(null); setShowHistory(false); openEdit(viewEmp) }} className="btn-secondary flex items-center gap-2">
                         <Pencil size={14} /> Edit
                     </button>
-                    <button onClick={() => setViewEmp(null)} className="btn-primary">Close</button>
+                    <button onClick={() => { setViewEmp(null); setShowHistory(false) }} className="btn-primary">Close</button>
                 </div>
             </Modal>
 

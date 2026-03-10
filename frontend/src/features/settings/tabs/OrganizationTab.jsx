@@ -8,8 +8,102 @@ import Spinner from '@/components/ui/Spinner'
 import toast from 'react-hot-toast'
 import { SectionCard } from '../components/SharedUI'
 
-const TIMEZONES = Intl.supportedValuesOf('timeZone')
+const getFormattedTimezones = () => {
+    return Intl.supportedValuesOf('timeZone').map(tz => {
+        try {
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: tz,
+                timeZoneName: 'shortOffset'
+            });
+            const parts = formatter.formatToParts(new Date());
+            const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT';
+            let name = tz.replace(/_/g, ' ');
+            if (tz === 'UTC') name = 'UTC (Coordinated Universal Time)';
+            return {
+                value: tz,
+                label: `(${offsetPart}) ${name}`
+            };
+        } catch (e) {
+            return { value: tz, label: tz.replace(/_/g, ' ') };
+        }
+    }).sort((a, b) => {
+        const parseOffset = (label) => {
+            const match = label.match(/GMT([+-]?)(\d+)?(?::(\d+))?/);
+            if (!match) return 0;
+            const sign = match[1] === '-' ? -1 : 1;
+            const hrs = parseInt(match[2] || 0) * 60;
+            const mins = parseInt(match[3] || 0);
+            return sign * (hrs + mins);
+        };
+        return parseOffset(a.label) - parseOffset(b.label) || a.label.localeCompare(b.label);
+    });
+};
+
+const TIMEZONES = getFormattedTimezones();
 const DATE_FORMATS = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD']
+
+const TimezoneSelect = ({ value, onChange, options }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const ref = React.useRef(null);
+
+    React.useEffect(() => {
+        const handleOutside = (e) => {
+            if (ref.current && !ref.current.contains(e.target)) setIsOpen(false);
+        }
+        document.addEventListener('mousedown', handleOutside);
+        return () => document.removeEventListener('mousedown', handleOutside);
+    }, []);
+
+    const selectedOption = options.find(o => o.value === value);
+    const filteredOptions = options.filter(o =>
+        o.label.toLowerCase().includes(search.toLowerCase()) ||
+        o.value.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+        <div className="relative" ref={ref}>
+            <div
+                className="input w-full flex items-center justify-between cursor-pointer"
+                onClick={() => { setIsOpen(!isOpen); setSearch(''); }}
+            >
+                <span className="truncate">{selectedOption ? selectedOption.label : 'Select Timezone'}</span>
+                <ChevronDown size={14} className="text-slate-400" />
+            </div>
+
+            {isOpen && (
+                <div className="absolute z-[100] mt-1 w-full bg-white dark:bg-[#0f0f0f] border border-slate-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
+                    <div className="p-2 border-b border-slate-100 dark:border-white/10">
+                        <input
+                            autoFocus
+                            type="text"
+                            className="input w-full text-sm py-1.5 px-3"
+                            placeholder="Search timezone..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </div>
+                    <div className="max-h-60 overflow-y-auto p-1">
+                        {filteredOptions.length > 0 ? filteredOptions.map(o => (
+                            <div
+                                key={o.value}
+                                className={`px-3 py-2 text-sm cursor-pointer rounded-lg hover:bg-primary/5 dark:hover:bg-primary/20 transition-colors ${o.value === value ? 'bg-primary/10 text-primary font-medium' : 'text-slate-700 dark:text-slate-300'}`}
+                                onClick={() => {
+                                    onChange(o.value);
+                                    setIsOpen(false);
+                                }}
+                            >
+                                {o.label}
+                            </div>
+                        )) : (
+                            <div className="p-3 text-sm text-slate-500 text-center">No results found</div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
 
 export default function OrganizationTab() {
     const qc = useQueryClient()
@@ -74,14 +168,11 @@ export default function OrganizationTab() {
                         <div>
                             <label className="label">Timezone</label>
                             <div className="relative">
-                                <select
-                                    className="input w-full appearance-none pr-9"
+                                <TimezoneSelect
                                     value={form.timezone}
-                                    onChange={e => upd('timezone', e.target.value)}
-                                >
-                                    {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
-                                </select>
-                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    onChange={(val) => upd('timezone', val)}
+                                    options={TIMEZONES}
+                                />
                             </div>
                         </div>
                         <div>

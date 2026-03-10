@@ -74,11 +74,18 @@ const settingsSchema = new mongoose.Schema(
 
     // 5. Notification Settings
     notifications: {
+      emailEnabled: { type: Boolean, default: true },
+      inAppEnabled: { type: Boolean, default: true },
+      notifyOnTimesheetSubmission: { type: Boolean, default: true },
+      notifyOnTimesheetApproval: { type: Boolean, default: true },
+      notifyOnTimesheetRejection: { type: Boolean, default: true },
+      notifyOnLeaveRequest: { type: Boolean, default: true },
+      notifyOnLeaveApproval: { type: Boolean, default: true },
+      notifyOnLeaveRejection: { type: Boolean, default: true },
+      // Legacy or background tasks
       timesheetReminder: { type: String, default: 'Friday 18:00' },
       freezeReminder: { type: String, default: 'Monday 15:00' },
       approvalReminder: { type: String, default: 'Daily 10:00' },
-      emailNotifications: { type: Boolean, default: true },
-      inAppNotifications: { type: Boolean, default: true },
     },
 
     // 6. Reports & Automation (Existing `report`)

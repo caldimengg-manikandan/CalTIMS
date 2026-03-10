@@ -69,7 +69,7 @@ api.interceptors.response.use(
     // Show toast for non-401 errors
     const message = error.response?.data?.message || 'Something went wrong'
     if (error.response?.status !== 401) {
-      toast.error(message)
+      toast.error(message, { id: message })
     }
 
     return Promise.reject(error)

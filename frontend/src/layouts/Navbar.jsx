@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { authAPI } from '@/services/endpoints'
 import NotificationBell from '@/components/ui/NotificationBell'
+import { useSettingsStore } from '@/store/settingsStore'
 
 const ROUTE_LABELS = {
     'dashboard': 'Dashboard',
@@ -27,9 +28,11 @@ const ROUTE_LABELS = {
 export default function Navbar() {
     const { toggleSidebar, theme, toggleDarkMode } = useUIStore()
     const { user, logout } = useAuthStore()
+    const { general } = useSettingsStore()
     const navigate = useNavigate()
     const location = useLocation()
     const [profileOpen, setProfileOpen] = useState(false)
+    const [currentTime, setCurrentTime] = useState(new Date())
 
     const pathnames = location.pathname.split('/').filter(x => x)
 
@@ -40,6 +43,18 @@ export default function Navbar() {
     }
     const panelRef = useRef(null)
     const avatarRef = useRef(null)
+    const timeoutRef = useRef(null)
+
+    const handleMouseEnter = () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        setProfileOpen(true)
+    }
+
+    const handleMouseLeave = () => {
+        timeoutRef.current = setTimeout(() => {
+            setProfileOpen(false)
+        }, 150)
+    }
 
     const initial = user?.name?.charAt(0)?.toUpperCase() || '?'
 
@@ -70,6 +85,36 @@ export default function Navbar() {
         }
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [profileOpen])
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+        return () => {
+            clearInterval(timer)
+            if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        }
+    }, [])
+
+    const formatTime = () => {
+        const tz = general?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+        return new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+            timeZone: tz
+        }).format(currentTime)
+    }
+
+    const formatDate = () => {
+        const tz = general?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+        return new Intl.DateTimeFormat('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            timeZone: tz
+        }).format(currentTime)
+    }
 
     const getRoleBadgeClass = (role) => {
         switch (role) {
@@ -143,6 +188,12 @@ export default function Navbar() {
 
                 {/* Right */}
                 <div className="flex items-center gap-2">
+                    {/* Dynamic Date & Time */}
+                    <div className="hidden md:flex flex-col items-end justify-center mr-3">
+                        <span className="text-xs font-bold text-slate-800 dark:text-white leading-tight">{formatTime()}</span>
+                        <span className="text-[10px] font-medium text-slate-400 capitalize bg-slate-100 dark:bg-white/10 px-1.5 rounded-sm mt-0.5">{formatDate()}</span>
+                    </div>
+
                     {/* Theme mode toggle */}
                     <button
                         onClick={toggleDarkMode}
@@ -162,6 +213,8 @@ export default function Navbar() {
                     <button
                         ref={avatarRef}
                         onClick={() => setProfileOpen(prev => !prev)}
+                        onMouseEnter={handleMouseEnter}
+                        onMouseLeave={handleMouseLeave}
                         className={`w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold shadow-md transition-all duration-200 hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 ${profileOpen ? 'ring-2 ring-primary-500 ring-offset-2 scale-105' : ''}`}
                         title="View profile"
                     >
@@ -171,17 +224,12 @@ export default function Navbar() {
             </header>
 
             {/* ── Profile Panel ───────────────────────────────── */}
-            {/* Backdrop */}
-            {profileOpen && (
-                <div
-                    className="fixed inset-0 z-40 bg-black/10 dark:bg-black/30 backdrop-blur-[1px]"
-                    onClick={() => setProfileOpen(false)}
-                />
-            )}
 
             {/* Panel */}
             <div
                 ref={panelRef}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
                 className={`fixed top-[60px] right-4 z-50 w-72 bg-white dark:bg-[#0f0f0f] rounded-2xl shadow-2xl border border-slate-100 dark:border-white/10 transition-all duration-250 origin-top-right ${profileOpen
                     ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
                     : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'

@@ -100,7 +100,6 @@ export default function NotificationBell() {
     const { data: countData } = useQuery({
         queryKey: ['notif-unread-count'],
         queryFn: () => notificationAPI.getUnreadCount().then(r => r.data.data),
-        refetchInterval: 5000,
     })
 
     const unreadCount = countData?.count || 0
@@ -109,7 +108,6 @@ export default function NotificationBell() {
         queryKey: ['notifications'],
         queryFn: () => notificationAPI.getAll({ limit: 20 }).then(r => r.data.data),
         enabled: open,
-        refetchInterval: 5000, // Keep list fresh while open
     })
 
     const notifications = notifData?.notifications || []

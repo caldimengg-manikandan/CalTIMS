@@ -31,6 +31,14 @@ const userController = {
     ApiResponse.success(res, { message: 'Profile updated successfully', data: user });
   }),
 
+  resetPassword: asyncHandler(async (req, res) => {
+    if (!req.body.password || req.body.password.length < 8) {
+      throw new require('../../shared/utils/AppError')('Password must be at least 8 characters', 400);
+    }
+    await userService.resetPassword(req.params.id, req.body.password, req.user._id);
+    ApiResponse.success(res, { message: 'Password reset successfully' });
+  }),
+
   deactivate: asyncHandler(async (req, res) => {
     const user = await userService.deactivate(req.params.id);
     ApiResponse.success(res, { message: 'Employee deactivated', data: user });
