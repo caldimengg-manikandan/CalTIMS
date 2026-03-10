@@ -9,22 +9,17 @@ import { SectionCard } from '../components/SharedUI'
 export default function NotificationsTab() {
     const qc = useQueryClient()
     const [notifications, setNotifications] = useState({
-<<<<<<< HEAD
-        emailEnabled: true,
-        inAppEnabled: true,
-        notifyOnTimesheetSubmission: true,
-        notifyOnTimesheetApproval: true,
-        notifyOnTimesheetRejection: true,
-        notifyOnLeaveRequest: true,
-        notifyOnLeaveApproval: true,
-        notifyOnLeaveRejection: true
-=======
         timesheetReminder: 'Friday 18:00',
         freezeReminder: 'Monday 15:00',
         approvalReminder: 'Daily 10:00',
         emailNotifications: true,
         inAppNotifications: true,
->>>>>>> 8b93e344d44b62b529df386e628143fa80062aa9
+        notifyOnTimesheetSubmission: true,
+        notifyOnTimesheetApproval: true,
+        notifyOnTimesheetRejection: true,
+        notifyOnLeaveRequest: true,
+        notifyOnLeaveApproval: true,
+        notifyOnLeaveRejection: true,
     })
 
     const { data, isLoading } = useQuery({
@@ -164,64 +159,62 @@ export default function NotificationsTab() {
                             Scheduled notifications follow the organization's timezone set in the General tab.
                         </p>
                     </div>
-<<<<<<< HEAD
-                </SectionCard>
-
-                <SectionCard title="Event Triggers" subtitle="Specific actions that generate notifications" icon={Mail}>
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-white/10">
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Timesheet Submission (To Manager)</span>
-                            <button onClick={() => upd('notifyOnTimesheetSubmission', !notifications.notifyOnTimesheetSubmission)}
-                                className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetSubmission ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${notifications.notifyOnTimesheetSubmission ? 'translate-x-4' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-
-                        <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-white/10">
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Timesheet Approval (To Employee)</span>
-                            <button onClick={() => upd('notifyOnTimesheetApproval', !notifications.notifyOnTimesheetApproval)}
-                                className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetApproval ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${notifications.notifyOnTimesheetApproval ? 'translate-x-4' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-
-                        <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-white/10">
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Timesheet Rejection (To Employee)</span>
-                            <button onClick={() => upd('notifyOnTimesheetRejection', !notifications.notifyOnTimesheetRejection)}
-                                className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetRejection ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${notifications.notifyOnTimesheetRejection ? 'translate-x-4' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-
-                        <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-white/10">
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Request (To Manager)</span>
-                            <button onClick={() => upd('notifyOnLeaveRequest', !notifications.notifyOnLeaveRequest)}
-                                className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveRequest ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveRequest ? 'translate-x-4' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-
-                        <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-white/10">
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Approval (To Employee)</span>
-                            <button onClick={() => upd('notifyOnLeaveApproval', !notifications.notifyOnLeaveApproval)}
-                                className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveApproval ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveApproval ? 'translate-x-4' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-
-                        <div className="flex items-center justify-between py-2">
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Rejection (To Employee)</span>
-                            <button onClick={() => upd('notifyOnLeaveRejection', !notifications.notifyOnLeaveRejection)}
-                                className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveRejection ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveRejection ? 'translate-x-4' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-                    </div>
-                </SectionCard>
-=======
                 </div>
->>>>>>> 8b93e344d44b62b529df386e628143fa80062aa9
-            </div>
+
+                <div className="lg:col-span-3">
+                    <SectionCard title="Event Triggers" subtitle="Specific actions that generate notifications" icon={Mail}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-indigo-200">
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Timesheet Submission</span>
+                                <button onClick={() => upd('notifyOnTimesheetSubmission', !notifications.notifyOnTimesheetSubmission)}
+                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetSubmission ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnTimesheetSubmission ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-emerald-200">
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Timesheet Approval</span>
+                                <button onClick={() => upd('notifyOnTimesheetApproval', !notifications.notifyOnTimesheetApproval)}
+                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetApproval ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnTimesheetApproval ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-rose-200">
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Timesheet Rejection</span>
+                                <button onClick={() => upd('notifyOnTimesheetRejection', !notifications.notifyOnTimesheetRejection)}
+                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetRejection ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnTimesheetRejection ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-indigo-200">
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Request</span>
+                                <button onClick={() => upd('notifyOnLeaveRequest', !notifications.notifyOnLeaveRequest)}
+                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveRequest ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveRequest ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-emerald-200">
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Approval</span>
+                                <button onClick={() => upd('notifyOnLeaveApproval', !notifications.notifyOnLeaveApproval)}
+                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveApproval ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveApproval ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-rose-200">
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Rejection</span>
+                                <button onClick={() => upd('notifyOnLeaveRejection', !notifications.notifyOnLeaveRejection)}
+                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveRejection ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveRejection ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+                        </div>
+                    </SectionCard>
+                </div>
+            </div >
 
             <div className="sticky bottom-4 z-20 flex justify-end">
                 <button
@@ -233,6 +226,6 @@ export default function NotificationsTab() {
                     Sync Preferences
                 </button>
             </div>
-        </div>
+        </div >
     )
 }

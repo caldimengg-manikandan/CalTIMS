@@ -39,12 +39,8 @@ export default function AuthLayout() {
                         <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-black/20">
                             <Timer size={28} className="text-indigo-600" />
                         </div>
-<<<<<<< HEAD
-                        <span className="text-2xl font-bold tracking-tight">CALTIMS - TIMESHEET MANAGEMENT SYSTEM </span>
-=======
                         <span className="text-2xl font-bold tracking-tight uppercase">CALTIMS - Time Information Management System </span>
->>>>>>> 8b93e344d44b62b529df386e628143fa80062aa9
-                    </div>
+                    </div >
 
                     <div className="space-y-8 max-w-lg">
                         <div className="space-y-4">
@@ -64,8 +60,8 @@ export default function AuthLayout() {
                             <button onClick={() => setLegalType('support')} className="hover:text-white transition-colors">Support</button>
                         </div>
                     </div>
-                </div>
-            </div>
+                </div >
+            </div >
 
             <PrivacyModal isOpen={legalType === 'privacy'} onClose={() => setLegalType(null)} />
             <TermsModal isOpen={legalType === 'terms'} onClose={() => setLegalType(null)} />
@@ -94,6 +90,6 @@ export default function AuthLayout() {
                     <span className="text-indigo-600 font-bold">Caldim</span>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }

@@ -200,31 +200,6 @@ export default function OrganizationTab() {
                 </div>
             </div>
 
-<<<<<<< HEAD
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                {/* Organization */}
-                <SectionCard title="Organization" subtitle="Company identity settings" icon={Globe}>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="label">Company Name</label>
-                            <input
-                                className="input w-full"
-                                placeholder="CALTIMS"
-                                value={form.companyName}
-                                onChange={e => upd('companyName', e.target.value)}
-                            />
-                            <p className="text-xs text-slate-400 mt-1">Shown in report emails and page header</p>
-                        </div>
-                        <div>
-                            <label className="label">Timezone</label>
-                            <div className="relative">
-                                <TimezoneSelect
-                                    value={form.timezone}
-                                    onChange={(val) => upd('timezone', val)}
-                                    options={TIMEZONES}
-                                />
-=======
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Column 1: Identity & Branding */}
                 <div className="lg:col-span-2 space-y-8">
@@ -273,7 +248,6 @@ export default function OrganizationTab() {
                                     <option value="GBP">GBP (£)</option>
                                     <option value="AED">AED (د.إ)</option>
                                 </select>
->>>>>>> 8b93e344d44b62b529df386e628143fa80062aa9
                             </div>
                         </div>
                     </SectionCard>
