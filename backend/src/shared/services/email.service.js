@@ -317,6 +317,14 @@ const emailService = {
     const { timesheets, reportTitle, generatedAt } = data;
     const date = new Date(generatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
+    const colors = {
+      primary: '#4f46e5',
+      textMain: '#0f172a',
+      textMuted: '#64748b',
+      bg: '#f8fafc',
+      border: '#e2e8f0'
+    };
+
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 40, size: 'A4' });
       const chunks = [];
@@ -324,55 +332,71 @@ const emailService = {
       doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), reportTitle, recordCount: timesheets.length }));
       doc.on('error', reject);
 
-      // ── Header band ──
-      doc.rect(0, 0, doc.page.width, 80).fill('#6366f1');
-      doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold').text(companyName, 40, 22);
-      doc.fontSize(11).font('Helvetica').text(reportTitle, 40, 50);
+      // ── Header Section ──
+      doc.rect(0, 0, doc.page.width, 80).fill(colors.primary);
+      doc.fillColor('#ffffff').fontSize(22).font('Helvetica-Bold').text(companyName.toUpperCase(), 40, 25);
+      doc.fontSize(10).font('Helvetica').fillColor('#e0e7ff').text(reportTitle, 40, 52);
 
-      // ── Meta row ──
-      doc.fillColor('#475569').fontSize(10).font('Helvetica');
-      doc.text(`Generated: ${date} (IST)   |   Records: ${timesheets.length}`, 40, 95);
+      // ── Meta Info ──
+      doc.fillColor(colors.textMuted).fontSize(9).font('Helvetica');
+      doc.text(`Generated: ${date} (IST)   |   Total Records: ${timesheets.length}`, 40, 100);
+      doc.moveTo(40, 115).lineTo(doc.page.width - 40, 115).strokeColor(colors.border).lineWidth(1).stroke();
 
       // ── Table headers ──
-      const cols = [40, 170, 290, 370, 435, 510];
-      const headers = ['Employee', 'Dept', 'Week', 'Hours', 'Status'];
-      let y = 120;
+      const cols = [40, 170, 300, 380, 450, 520];
+      const headers = ['EMPLOYEE', 'DEPARTMENT', 'WEEK', 'HOURS', 'STATUS'];
+      let y = 130;
 
-      doc.rect(40, y, doc.page.width - 80, 20).fill('#f1f5f9');
-      doc.fillColor('#64748b').fontSize(9).font('Helvetica-Bold');
-      headers.forEach((h, i) => doc.text(h, cols[i], y + 5, { width: cols[i + 1] - cols[i] - 4 }));
+      doc.rect(40, y, doc.page.width - 80, 24).fill(colors.textMain);
+      doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+      headers.forEach((h, i) => doc.text(h, cols[i], y + 8, { width: cols[i + 1] - cols[i] - 4 }));
       y += 24;
 
       // ── Rows ──
       doc.font('Helvetica').fontSize(9);
       if (timesheets.length === 0) {
-        doc.fillColor('#94a3b8').text('No records found for the selected period.', 40, y + 20, { align: 'center', width: doc.page.width - 80 });
+        doc.fillColor(colors.textMuted).text('No records found for the selected period.', 40, y + 30, { align: 'center', width: doc.page.width - 80 });
       } else {
         timesheets.forEach((ts, idx) => {
-          if (y > doc.page.height - 80) { doc.addPage(); y = 40; }
-          const rowHeight = 18;
-          if (idx % 2 === 0) doc.rect(40, y, doc.page.width - 80, rowHeight).fill('#f8fafc');
+          if (y > doc.page.height - 100) { 
+            doc.addPage(); 
+            y = 40; 
+            // Repeat Header on new page
+            doc.rect(40, y, doc.page.width - 80, 24).fill(colors.textMain);
+            doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+            headers.forEach((h, i) => doc.text(h, cols[i], y + 8, { width: cols[i + 1] - cols[i] - 4 }));
+            y += 24;
+          }
+
+          const rowHeight = 35;
+          doc.fillColor(idx % 2 === 0 ? colors.bg : '#ffffff').rect(40, y, doc.page.width - 80, rowHeight).fill();
+          
           const name = ts.userId?.name || 'Unknown';
           const empId = ts.userId?.employeeId || '';
           const dept = ts.userId?.department || '—';
           const week = ts.weekStartDate ? new Date(ts.weekStartDate).toLocaleDateString('en-IN') : '—';
           const hours = `${ts.totalHours ?? 0}h`;
           const status = ts.status || '—';
-          const statusColor = status === 'approved' ? '#16a34a' : status === 'rejected' ? '#dc2626' : '#d97706';
-          doc.fillColor('#1e293b').text(`${name}${empId ? ` #${empId}` : ''}`, cols[0], y + 4, { width: cols[1] - cols[0] - 4 });
-          doc.fillColor('#475569').text(dept, cols[1], y + 4, { width: cols[2] - cols[1] - 4 });
-          doc.text(week, cols[2], y + 4, { width: cols[3] - cols[2] - 4 });
-          doc.fillColor('#6366f1').font('Helvetica-Bold').text(hours, cols[3], y + 4, { width: cols[4] - cols[3] - 4 });
-          doc.fillColor(statusColor).text(status.toUpperCase(), cols[4], y + 4, { width: 70 });
-          doc.font('Helvetica').fillColor('#475569');
-          doc.moveTo(40, y + rowHeight).lineTo(doc.page.width - 40, y + rowHeight).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+          const statusColor = status === 'approved' ? '#059669' : status === 'rejected' ? '#dc2626' : '#d97706';
+
+          doc.fillColor(colors.textMain).font('Helvetica-Bold').text(name, cols[0], y + 12, { width: cols[1] - cols[0] - 4 });
+          doc.fillColor(colors.textMuted).font('Helvetica').fontSize(7).text(`#${empId}`, cols[0], y + 22);
+          
+          doc.fillColor(colors.textMain).fontSize(9).text(dept, cols[1], y + 12, { width: cols[2] - cols[1] - 4 });
+          doc.text(week, cols[2], y + 12, { width: cols[3] - cols[2] - 4 });
+          doc.fillColor(colors.primary).font('Helvetica-Bold').text(hours, cols[3], y + 12, { width: cols[4] - cols[3] - 4 });
+          
+          // Status tag
+          doc.fillColor(statusColor).text(status.toUpperCase(), cols[4], y + 12, { width: 70 });
+          
+          doc.moveTo(40, y + rowHeight).lineTo(doc.page.width - 40, y + rowHeight).strokeColor(colors.border).lineWidth(0.5).stroke();
           y += rowHeight;
         });
       }
 
       // ── Footer ──
-      doc.fontSize(8).fillColor('#94a3b8').font('Helvetica');
-      doc.text(`${companyName} — Automated Timesheet Report`, 40, doc.page.height - 40, { align: 'center', width: doc.page.width - 80 });
+      doc.fontSize(8).fillColor(colors.textMuted).font('Helvetica');
+      doc.text(`${companyName} — Automated Enterprise Intelligence Report`, 40, doc.page.height - 40, { align: 'center', width: doc.page.width - 80 });
 
       doc.end();
     });

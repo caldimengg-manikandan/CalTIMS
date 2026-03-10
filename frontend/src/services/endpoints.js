@@ -121,6 +121,9 @@ export const settingsAPI = {
   // Full Enterprise Settings
   getSettings: () => api.get('/settings'),
   updateSettings: (data) => api.put('/settings', data),
+  uploadBranding: (formData) => api.post('/settings/upload-branding', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
   // Employee list for recipient picker
   getPickerEmployees: (q) => api.get('/settings/employees', { params: { q } }),
 }

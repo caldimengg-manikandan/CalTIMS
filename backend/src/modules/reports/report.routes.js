@@ -520,59 +520,92 @@ router.get('/csv-export', requireProTier, asyncHandler(async (req, res) => {
   if (from) match.weekStartDate = { $gte: from };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: to };
   if (req.query.userId) match.userId = mongoose.Types.ObjectId.createFromHexString(req.query.userId);
-  if (req.query.projectId) match['rows.projectId'] = mongoose.Types.ObjectId.createFromHexString(req.query.projectId);
 
-  const timesheets = await Timesheet.aggregate([
-    { $match: match },
-    { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
-    { $unwind: '$user' },
-    { $unwind: '$rows' },
-    { $unwind: '$rows.entries' },
-    { $lookup: { from: 'projects', localField: 'rows.projectId', foreignField: '_id', as: 'project' } },
-    { $unwind: { path: '$project', preserveNullAndEmptyArrays: true } },
-    {
-      $project: {
-        _id: 0,
-        employeeName: '$user.name',
-        employeeId: '$user.employeeId',
-        department: { $ifNull: ['$user.department', ''] },
-        projectName: { $ifNull: ['$project.name', ''] },
-        category: '$rows.category',
-        date: '$rows.entries.date',
-        hours: '$rows.entries.hoursWorked',
-        description: { $ifNull: ['$rows.entries.taskDescription', ''] },
-      }
-    },
-    { $sort: { employeeName: 1, date: 1 } }
+  // Fetch categorized summary data (paralleling the PDF data)
+  const [timesheetStats, projectData, employeeData, deptStats, complianceRes] = await Promise.all([
+    Timesheet.aggregate([
+      { $match: match },
+      { $group: { _id: null, totalHours: { $sum: '$totalHours' }, totalTimesheets: { $sum: 1 }, uniqueEmployees: { $addToSet: '$userId' } } },
+    ]),
+    Timesheet.aggregate([
+      { $match: match },
+      { $unwind: '$rows' },
+      { $group: { _id: '$rows.projectId', totalHours: { $sum: '$rows.totalHours' } } },
+      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'p', pipeline: [{ $project: { name: 1 } }] } },
+      { $unwind: '$p' },
+      { $sort: { totalHours: -1 } },
+      { $limit: 15 }
+    ]),
+    Timesheet.aggregate([
+      { $match: match },
+      { $group: { _id: '$userId', totalHours: { $sum: '$totalHours' } } },
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'u', pipeline: [{ $project: { name: 1, employeeId: 1, department: 1 } }] } },
+      { $unwind: '$u' },
+      { $sort: { totalHours: -1 } },
+      { $limit: 20 }
+    ]),
+    Timesheet.aggregate([
+      { $match: match },
+      { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'u' } },
+      { $unwind: '$u' },
+      { $group: { _id: '$u.department', totalHours: { $sum: '$totalHours' } } },
+      { $sort: { totalHours: -1 } }
+    ]),
+    Timesheet.aggregate([
+      { $match: { ...(from ? { weekStartDate: { $gte: from } } : {}), ...(to ? { weekStartDate: { $lte: to } } : {}) } },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ])
   ]);
 
-  if (!timesheets.length) {
-    return res.status(404).json({ success: false, message: 'No records found for the given criteria.' });
-  }
+  const stats = timesheetStats[0] || { totalHours: 0, totalTimesheets: 0, uniqueEmployees: [] };
+  let totalComp = 0, approvedComp = 0;
+  complianceRes.forEach(r => {
+    totalComp += r.count;
+    if (r._id === 'approved') approvedComp = r.count;
+  });
+  const complianceRate = totalComp > 0 ? ((approvedComp / totalComp) * 100).toFixed(0) : '0';
+  const avgHours = stats.uniqueEmployees?.length > 0 ? (stats.totalHours / stats.uniqueEmployees.length).toFixed(1) : '0';
 
-  // Generate CSV manually 
-  let csvContent = 'Employee,Employee ID,Department,Project,Category,Date,Hours,Description\n';
-  timesheets.forEach(row => {
-    // Escape quotes and wrap text containing commas
-    const escapeCsv = (str) => typeof str === 'string' ? `"${str.replace(/"/g, '""')}"` : str;
-    const dateStr = row.date ? new Date(row.date).toISOString().split('T')[0] : '';
+  const escapeCsv = (str) => typeof str === 'string' ? `"${str.replace(/"/g, '""')}"` : str;
 
-    csvContent += [
-      escapeCsv(row.employeeName),
-      escapeCsv(row.employeeId),
-      escapeCsv(row.department),
-      escapeCsv(row.projectName),
-      escapeCsv(row.category),
-      dateStr,
-      row.hours,
-      escapeCsv(row.description)
-    ].join(',') + '\n';
+  // Build CSV Content
+  let csv = `EXECUTIVE WORKFORCE REPORT SUMMARY\n`;
+  csv += `Organization,Caldim Engineering\n`;
+  csv += `Reporting Period,${from ? from.toISOString().split('T')[0] : 'All Time'} to ${to ? to.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}\n`;
+  csv += `Generated At,${new Date().toISOString()}\n\n`;
+
+  csv += `1. KEY PERFORMANCE INDICATORS\n`;
+  csv += `Metric,Value,Description\n`;
+  csv += `Total Hours Logged,${stats.totalHours},Total approved hours in period\n`;
+  csv += `Compliance Rate,${complianceRate}%,Accuracy of timesheet submissions\n`;
+  csv += `Average Hours/Employee,${avgHours},Average productive hours per active resource\n`;
+  csv += `Resource Count,${stats.uniqueEmployees?.length || 0},Total distinct employees contributing\n\n`;
+
+  csv += `2. DEPARTMENTAL UTILIZATION\n`;
+  csv += `Department,Total Hours Contribution,% of Total\n`;
+  deptStats.forEach(d => {
+    const perc = stats.totalHours > 0 ? ((d.totalHours / stats.totalHours) * 100).toFixed(1) : 0;
+    csv += `${escapeCsv(d._id || 'Unassigned')},${d.totalHours},${perc}%\n`;
+  });
+  csv += `\n`;
+
+  csv += `3. PROJECT FOCUS AREAS\n`;
+  csv += `Project Name,Total Productive Hours\n`;
+  projectData.forEach(p => {
+    csv += `${escapeCsv(p.p?.name || 'Unknown')},${p.totalHours}\n`;
+  });
+  csv += `\n`;
+
+  csv += `4. TOP RESOURCE PERFORMANCE (TOP 20)\n`;
+  csv += `Employee Name,Employee ID,Department,Total Hours Logged\n`;
+  employeeData.forEach(e => {
+    csv += `${escapeCsv(e.u?.name || 'Unknown')},${escapeCsv(e.u?.employeeId || '-')},${escapeCsv(e.u?.department || '-')},${e.totalHours.toFixed(2)}\n`;
   });
 
-  const now = new Date();
+  const now = new Date().toISOString().split('T')[0];
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename="timesheet-export-${now.toISOString().split('T')[0]}.csv"`);
-  res.send(csvContent);
+  res.setHeader('Content-Disposition', `attachment; filename="Enterprise-Summary-${now}.csv"`);
+  res.send(csv);
 }));
 
 module.exports = router;

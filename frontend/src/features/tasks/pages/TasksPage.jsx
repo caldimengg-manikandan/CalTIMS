@@ -196,8 +196,8 @@ export default function TasksPage() {
     const invalidate = () => queryClient.invalidateQueries(['tasks'])
 
     const { data: projectsData } = useQuery({
-        queryKey: ['projects', { limit: 1000 }],
-        queryFn: () => projectAPI.getAll({ limit: 1000 }).then(r => r.data.data),
+        queryKey: ['projects', { limit: 5000 }],
+        queryFn: () => projectAPI.getAll({ limit: 5000 }).then(r => r.data.data),
     })
 
     const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''

@@ -107,7 +107,7 @@ router.patch('/:id/sync-timesheet', authorize('admin', 'manager'), asyncHandler(
 }));
 
 router.patch('/:id/cancel', asyncHandler(async (req, res) => {
-  const leave = await leaveService.cancel(req.params.id, req.user._id, req.body.reason);
+  const leave = await leaveService.cancel(req.params.id, req.user._id, req.body.reason, req.user.role);
   ApiResponse.success(res, { message: 'Leave cancelled', data: leave });
 }));
 

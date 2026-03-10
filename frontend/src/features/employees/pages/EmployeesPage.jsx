@@ -197,7 +197,7 @@ export default function EmployeesPage() {
 
     const { data: allEmployees } = useQuery({
         queryKey: ['all-employees-list'],
-        queryFn: () => userAPI.getAll({ limit: 1000 }).then(r => r.data.data),
+        queryFn: () => userAPI.getAll({ limit: 5000 }).then(r => r.data.data),
     })
 
     const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''

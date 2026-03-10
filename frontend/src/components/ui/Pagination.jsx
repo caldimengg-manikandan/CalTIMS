@@ -5,7 +5,7 @@ export default function Pagination({
     currentPage = 1,
     totalPages = 1,
     totalResults = 0,
-    limit = 1000,
+    limit = 5000,
     onPageChange,
     onLimitChange
 }) {
@@ -14,20 +14,18 @@ export default function Pagination({
 
     const pages = [];
     for (let i = 1; i <= totalPages; i++) {
-        // Show first, last, current, and pages around current
+        // Show first, last, current, and 1 page around current
         if (
             i === 1 ||
             i === totalPages ||
             (i >= currentPage - 1 && i <= currentPage + 1)
         ) {
             pages.push(i);
-        } else if (i === currentPage - 2 || i === currentPage + 2) {
+        } else if (pages[pages.length - 1] !== '...') {
             pages.push('...');
         }
     }
-
-    // Remove duplicate ellipses
-    const uniquePages = pages.filter((item, index) => pages.indexOf(item) === index);
+    const uniquePages = pages;
 
     return (
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-slate-100 dark:border-white/10 bg-white dark:bg-black sticky bottom-0 z-20 shrink-0">

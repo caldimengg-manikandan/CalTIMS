@@ -145,12 +145,12 @@ export default function AdminTimesheetPage() {
 
     const { data: projects = [] } = useQuery({
         queryKey: ['projects', 'all'],
-        queryFn: () => projectAPI.getAll({ limit: 1000 }).then(r => r.data.data || [])
+        queryFn: () => projectAPI.getAll({ limit: 5000 }).then(r => r.data.data || [])
     })
 
     const { data: employees = [] } = useQuery({
         queryKey: ['employees', 'all'],
-        queryFn: () => userAPI.getAll({ limit: 1000 }).then(r => r.data.data || [])
+        queryFn: () => userAPI.getAll({ limit: 5000 }).then(r => r.data.data || [])
     })
 
     /* ── Mutations ── */
@@ -176,15 +176,15 @@ export default function AdminTimesheetPage() {
     const resetFilters = () => setFilters({ employeeId: '', userId: '', status: '', projectId: '', year: '', week: '', page: 1, limit: 10 })
 
     const handlePageChange = (newPage) => {
-        if (newPage < 1 || newPage > (listData?.pagination?.pages || 1)) return
+        if (newPage < 1 || newPage > (listData?.pagination?.totalPages || 1)) return
         setFilters(f => ({ ...f, page: newPage }))
     }
 
     /* ── CSV Export ── */
     const handleExportCSV = async () => {
         try {
-            // Fetch up to 1000 matching results for export (capped by backend MAX_LIMIT)
-            const res = await timesheetAPI.getAdminList({ ...filters, search, limit: 1000, page: 1 })
+            // Fetch up to 5000 matching results for export (capped by backend MAX_LIMIT)
+            const res = await timesheetAPI.getAdminList({ ...filters, search, limit: 5000, page: 1 })
             const rows = res.data.data || []
 
             if (!rows.length) { toast.error('No data to export'); return }
@@ -566,7 +566,7 @@ export default function AdminTimesheetPage() {
                 {!isLoading && listData?.data?.length > 0 && (
                     <Pagination
                         currentPage={listData.pagination.page}
-                        totalPages={listData.pagination.pages}
+                        totalPages={listData.pagination.totalPages}
                         totalResults={listData.pagination.total}
                         limit={filters.limit}
                         onPageChange={(p) => setFilters(f => ({ ...f, page: p }))}

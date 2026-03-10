@@ -9,10 +9,21 @@ export const useSystemStore = create((set) => ({
     fetchVersion: async () => {
         set({ isLoading: true, error: null })
         try {
-            // Force basic mode regardless of backend response
-            set({ appVersion: 'basic', isLoading: false })
+            const { data } = await systemAPI.getVersion()
+            set({ appVersion: data.data.version || 'basic', isLoading: false })
         } catch (error) {
             set({ appVersion: 'basic', isLoading: false })
+        }
+    },
+
+    updateVersion: async (version) => {
+        try {
+            await systemAPI.updateVersion(version)
+            set({ appVersion: version })
+            return true
+        } catch (error) {
+            console.error('Failed to update version:', error)
+            return false
         }
     }
 }))

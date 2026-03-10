@@ -8,7 +8,7 @@ const notificationService = {
   },
 
   async getForUser(userId, query = {}) {
-    const limit = Math.min(parseInt(query.limit) || 20, 50);
+    const limit = Math.min(parseInt(query.limit) || 20, 5000);
     const page = parseInt(query.page) || 1;
     const skip = (page - 1) * limit;
     const filter = { userId };

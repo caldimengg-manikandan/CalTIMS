@@ -106,7 +106,7 @@ export default function NotificationBell() {
 
     const { data: notifData, isLoading } = useQuery({
         queryKey: ['notifications'],
-        queryFn: () => notificationAPI.getAll({ limit: 20 }).then(r => r.data.data),
+        queryFn: () => notificationAPI.getAll({ limit: 5000 }).then(r => r.data.data),
         enabled: open,
     })
 
@@ -157,7 +157,7 @@ export default function NotificationBell() {
                 className="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-colors relative"
                 title="Notifications"
             >
-                <Bell size={18} />
+                <Bell size={18} className="pointer-events-none" />
                 {unreadCount > 0 && (
                     <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-0.5 bg-rose-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center border border-white dark:border-white leading-none">
                         {unreadCount > 99 ? '99+' : unreadCount}
@@ -185,7 +185,7 @@ export default function NotificationBell() {
                                     disabled={markAllMutation.isPending}
                                     className="flex items-center gap-1 px-2 py-1 text-xs text-primary-600 dark:text-white hover:bg-primary-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-colors"
                                 >
-                                    <CheckCheck size={13} />
+                                    <CheckCheck size={13} className="pointer-events-none" />
                                     Mark all read
                                 </button>
                             )}
@@ -208,12 +208,12 @@ export default function NotificationBell() {
                                         : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20'
                                         }`}
                                 >
-                                    <Trash2 size={13} />
+                                    <Trash2 size={13} className="pointer-events-none" />
                                     {confirmClear ? 'Sure?' : 'Clear'}
                                 </button>
                             )}
                             <button onClick={() => setOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors">
-                                <X size={14} />
+                                <X size={14} className="pointer-events-none" />
                             </button>
                         </div>
                     </div>

@@ -576,7 +576,7 @@ function AdminLeaveView() {
             subtitle="Centralized leave management, policy enforcement, and eligibility tracking are Enterprise Pro features."
             icon={ClipboardList}
         >
-            <div className="space-y-6 animate-fade-in">
+            <div className="h-[calc(100vh-120px)] flex flex-col gap-4 animate-fade-in overflow-hidden pb-4">
                 <PageHeader title="Leave Management">
                     <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full md:w-auto self-stretch md:self-auto">
                         <button
@@ -598,6 +598,7 @@ function AdminLeaveView() {
                     )} */}
                     </div>
                 </PageHeader>
+
 
                 {/* Stats Row */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -752,7 +753,7 @@ function AdminLeaveView() {
                             </div>
                         </div>
 
-                        <div className="card p-0 overflow-hidden">
+                        <div className="card p-0 flex flex-col overflow-hidden min-h-0">
                             {isLoading ? (
                                 <div className="flex justify-center py-16"><Spinner size="lg" /></div>
                             ) : leaves.length === 0 ? (
@@ -761,9 +762,9 @@ function AdminLeaveView() {
                                     <p className="text-slate-400 uppercase text-xs tracking-widest font-semibold">No applications found</p>
                                 </div>
                             ) : (
-                                <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
+                                <div className="table-wrapper lg:max-h-[calc(100vh-450px)] overflow-y-auto rounded-none border-0 shadow-none">
                                     <table className="w-full text-left border-collapse">
-                                        <thead>
+                                        <thead className="sticky top-0 z-20 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10">
                                             <tr>
                                                 <th>ID</th>
                                                 <th>Employee</th>
@@ -927,10 +928,10 @@ function AdminLeaveView() {
                             </div>
                         </div>
 
-                        <div className="card p-0 overflow-hidden">
-                            <div className="table-wrapper max-h-container rounded-none border-0 shadow-none">
+                        <div className="card p-0 flex flex-col overflow-hidden min-h-0">
+                            <div className="table-wrapper lg:max-h-[calc(100vh-450px)] overflow-y-auto rounded-none border-0 shadow-none">
                                 <table className="w-full">
-                                    <thead>
+                                    <thead className="sticky top-0 z-20 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10">
                                         <tr>
                                             <th>Employee</th>
                                             {LEAVE_TYPES.map(t => (
@@ -1076,7 +1077,7 @@ function EmployeeLeaveView() {
             subtitle="Automated leave tracking, balance management, and approval workflows are exclusive to the Enterprise Pro tier."
             icon={ClipboardList}
         >
-            <div className="space-y-6 animate-fade-in">
+            <div className="h-[calc(100vh-120px)] flex flex-col gap-4 animate-fade-in overflow-hidden pb-4">
                 {showModal && <ApplyLeaveModal onClose={() => setShowModal(false)} balance={balance} />}
 
                 <PageHeader title="Leave Tracker">
@@ -1114,7 +1115,7 @@ function EmployeeLeaveView() {
                 )}
 
                 {/* Leave Applications Table */}
-                <div className="card p-0">
+                <div className="card p-0 flex flex-col overflow-hidden min-h-0">
                     <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
                         <h3 className="text-slate-700 dark:text-white flex items-center gap-2">
                             <FileText size={16} className="text-slate-400" />
@@ -1133,9 +1134,9 @@ function EmployeeLeaveView() {
                             </button>
                         </div>
                     ) : (
-                        <div className="table-wrapper max-h-container rounded-none rounded-b-2xl border-0 shadow-none">
+                        <div className="table-wrapper lg:max-h-[calc(100vh-450px)] overflow-y-auto rounded-none rounded-b-2xl border-0 shadow-none">
                             <table className="w-full text-left border-collapse">
-                                <thead>
+                                <thead className="sticky top-0 z-20 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10">
                                     <tr>
                                         <th>ID</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th><th>Applied On</th><th></th>
                                     </tr>

@@ -5,14 +5,30 @@ const logger = require('../shared/utils/logger');
 
 /**
  * Middleware to restrict access to Pro tier features.
- * If the system is currently natively set to 'basic', this rejects the request.
+ * Reads the current system tier from SystemSettings and blocks access
+ * when the tier is 'basic'. Allows access when tier is 'pro'.
  */
 const requireProTier = async (req, res, next) => {
-    // Definitive lockdown: No Pro features allowed
-    return res.status(403).json({
-        success: false,
-        message: 'This feature is available in the Pro version.'
-    });
+    try {
+        const settings = await SystemSettings.findOne().lean();
+        const version = settings?.appVersion || 'basic';
+
+        if (version !== 'pro') {
+            return res.status(403).json({
+                success: false,
+                message: 'This feature is available in the Pro version.'
+            });
+        }
+
+        return next();
+    } catch (err) {
+        logger.error('requireProTier middleware error:', err);
+        // Fail safe: block access if we can't determine tier
+        return res.status(403).json({
+            success: false,
+            message: 'Unable to verify tier. Please try again.'
+        });
+    }
 };
 
 module.exports = {

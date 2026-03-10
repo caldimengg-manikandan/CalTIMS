@@ -10,6 +10,7 @@ const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/rbac.middleware');
 const emailService = require('../../shared/services/email.service');
 const { logAction } = require('../audit/audit.routes');
+const upload = require('../../middleware/upload.middleware');
 
 router.use(authenticate);
 
@@ -57,7 +58,7 @@ router.put('/', authorize('admin', 'manager'), asyncHandler(async (req, res) => 
   // Safe keys to update
   const safeKeys = [
     'organization', 'timesheet', 'leavePolicy', 'notifications',
-    'report', 'compliance', 'branding', 'integrations', 'general'
+    'report', 'compliance', 'branding', 'integrations', 'general', 'roles'
   ];
 
   const updateDoc = {};
@@ -84,6 +85,24 @@ router.put('/', authorize('admin', 'manager'), asyncHandler(async (req, res) => 
   });
 
   ApiResponse.success(res, { message: 'Settings successfully updated', data: newSettings });
+}));
+
+// POST /api/v1/settings/upload-branding
+router.post('/upload-branding', authorize('admin', 'manager'), upload.single('file'), asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return ApiResponse.error(res, { message: 'No file uploaded', statusCode: 400 });
+  }
+
+  // Construct the URL. In a real app this might be a CDN or S3 bucket.
+  // Here we use the server's own address.
+  const protocol = req.protocol;
+  const host = req.get('host');
+  const fileUrl = `${protocol}://${host}/uploads/branding/${req.file.filename}`;
+
+  ApiResponse.success(res, { 
+    message: 'File uploaded successfully', 
+    data: { url: fileUrl } 
+  });
 }));
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -54,6 +54,11 @@ const settingsSchema = new mongoose.Schema(
       managerApprovalRequired: { type: Boolean, default: true },
       minHoursPerDay: { type: Number, default: 4 },
       maxHoursPerDay: { type: Number, default: 12 },
+      enforceMinHoursOnSubmit: { type: Boolean, default: false },
+      // Permission Log limits
+      permissionMaxHoursPerDay: { type: Number, default: 2 },
+      permissionMaxDaysPerWeek: { type: Number, default: 1 },
+      permissionMaxDaysPerMonth: { type: Number, default: 4 },
     },
 
     // 4. Leave Policy Settings (Existing properties + new)
@@ -90,9 +95,11 @@ const settingsSchema = new mongoose.Schema(
 
     // 6. Reports & Automation (Existing `report`)
     report: {
+      defaultFormat: { type: String, enum: ['PDF', 'Excel', 'CSV'], default: 'PDF' },
+      autoSchedule: { type: Boolean, default: false },
       frequency: {
         type: String,
-        enum: ['daily', 'weekly', 'fortnightly', 'monthly'],
+        enum: ['daily', 'weekly', 'fortnightly', 'monthly', 'Daily', 'Weekly', 'Fortnightly', 'Monthly'],
         default: 'weekly',
       },
       reportType: {
@@ -119,9 +126,12 @@ const settingsSchema = new mongoose.Schema(
 
     // 8. Branding & Customization
     branding: {
-      systemName: { type: String, default: 'CALTIMS' },
+      organizationName: { type: String, default: 'CALTIMS' },
+      tagline: { type: String, default: 'TimeSheet Management System' },
       primaryColor: { type: String, default: '#5A6ACF' },
+      secondaryColor: { type: String, default: '#6366f1' },
       logoUrl: { type: String, default: '' },
+      faviconUrl: { type: String, default: '' },
     },
 
     // 9. Integrations (mocked)

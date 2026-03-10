@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Shield, Users, Save, Plus } from 'lucide-react'
+import { Shield, Users, Save, Plus, Trash2 } from 'lucide-react'
 import { settingsAPI } from '@/services/endpoints'
 import Spinner from '@/components/ui/Spinner'
 import toast from 'react-hot-toast'
@@ -26,14 +26,14 @@ const PERMISSION_KEYS = {
 
 export default function UsersAndRolesTab() {
     const qc = useQueryClient()
-    const [roles, setRoles] = useState([])
+    const [roles, setRoles] = React.useState([])
 
     const { data, isLoading } = useQuery({
         queryKey: ['settings'],
         queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
     })
 
-    useEffect(() => {
+    React.useEffect(() => {
         if (data?.roles?.length > 0) {
             setRoles(data.roles)
         } else {
@@ -69,6 +69,7 @@ export default function UsersAndRolesTab() {
                 manageSettings: false
             }
         }])
+        toast.success('New custom role added! Don\'t forget to sync changes.')
     }
 
     const handleUpdateRoleName = (index, newName) => {
@@ -135,10 +136,10 @@ export default function UsersAndRolesTab() {
                                             {!role.isSystem && (
                                                 <button
                                                     onClick={() => handleDeleteRole(idx)}
-                                                    className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                                                    className="p-2.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-100 dark:hover:border-rose-500/20"
                                                     title="Delete Role"
                                                 >
-                                                    <Save size={16} />
+                                                    <Trash2 size={16} />
                                                 </button>
                                             )}
                                         </div>

@@ -65,6 +65,44 @@ function groupByWeek(dates, weekStartDay = 'monday') {
   return [...map.values()];
 }
 
+// ─── Helper: remove leave rows from weekly timesheets when a leave is cancelled ─
+async function removeLeaveTimesheets(leave) {
+  const leaveProject = await Project.findOne({ code: 'LEAVE-SYS' });
+  if (!leaveProject) return; // No leave project means no timesheets to clean up
+
+  const workingDays = getWorkingDaysBetween(leave.startDate, leave.endDate);
+  if (!workingDays.length) return;
+
+  const weeks = groupByWeek(workingDays, await getWeekStartDay());
+  const category = leave.leaveType.charAt(0).toUpperCase() + leave.leaveType.slice(1);
+
+  for (const { weekStart, dates } of weeks) {
+    const timesheet = await Timesheet.findOne({ userId: leave.userId._id || leave.userId, weekStartDate: weekStart });
+    if (!timesheet) continue;
+
+    const rowIdx = timesheet.rows.findIndex(r => {
+      const rowPid = r.projectId?._id || r.projectId;
+      return String(rowPid) === String(leaveProject._id) &&
+             r.category?.toLowerCase() === category.toLowerCase();
+    });
+
+    if (rowIdx === -1) continue;
+
+    // Remove the specific leave date entries from the row
+    const datesToRemove = new Set(dates.map(d => formatDate(d)));
+    timesheet.rows[rowIdx].entries = timesheet.rows[rowIdx].entries.filter(
+      e => !datesToRemove.has(formatDate(e.date))
+    );
+
+    // If the row has no more entries, remove the entire row
+    if (timesheet.rows[rowIdx].entries.length === 0) {
+      timesheet.rows.splice(rowIdx, 1);
+    }
+
+    await timesheet.save();
+  }
+}
+
 // ─── Helper: create / upsert leave rows into weekly timesheet ─────────────────
 async function createLeaveTimesheets(leave, approverId) {
   const leaveProject = await getOrCreateLeaveProject(approverId);
@@ -350,36 +388,69 @@ const leaveService = {
     return leave;
   },
 
-  async cancel(id, requestorId, reason) {
-    const leave = await Leave.findById(id);
+  async cancel(id, requestorId, reason, requestorRole) {
+    const leave = await Leave.findById(id).populate('userId');
     if (!leave) throw new AppError('Leave record not found', 404);
 
-    if (leave.userId.toString() !== requestorId.toString()) {
+    const isAdminOrManager = requestorRole === ROLES.ADMIN || requestorRole === ROLES.MANAGER;
+    const isOwner = leave.userId._id.toString() === requestorId.toString();
+
+    // Employees can only cancel their own leaves; admins/managers can cancel any leave
+    if (!isOwner && !isAdminOrManager) {
       throw new AppError('You can only cancel your own leave requests', 403);
     }
 
-    if (leave.status !== LEAVE_STATUS.PENDING) {
+    const wasApproved = leave.status === LEAVE_STATUS.APPROVED;
+    const wasPending = leave.status === LEAVE_STATUS.PENDING;
+
+    // Employees can only cancel PENDING leaves; admins/managers can cancel PENDING or APPROVED leaves
+    if (!wasPending && !(wasApproved && isAdminOrManager)) {
       throw new AppError('Only pending leave requests can be cancelled', 400);
     }
+
+    // ── Restore leave balance ONLY if the leave was approved (balance was deducted on approval) ──
+    if (wasApproved) {
+      const user = leave.userId;
+      if (user.leaveBalance && user.leaveBalance.has(leave.leaveType)) {
+        const currentBalance = user.leaveBalance.get(leave.leaveType) || 0;
+        user.leaveBalance.set(leave.leaveType, currentBalance + leave.totalDays);
+        await user.save();
+      }
+      // Remove timesheet entries created for this approved leave
+      await removeLeaveTimesheets(leave);
+    }
+    // If the leave was PENDING, balance was never deducted — nothing to restore.
 
     leave.status = LEAVE_STATUS.CANCELLED;
     leave.cancellationReason = reason;
     await leave.save();
 
-    // Notify Admins and Managers
-    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
-    const user = await User.findById(leave.userId).select('name employeeId');
-    const notificationPromises = approvers.map(approver => 
-      notifier.send(approver._id, {
-        userEmail: approver.email,
+    // Notify Admins and Managers (if cancelled by the employee themselves)
+    const user = leave.userId;
+    if (isOwner) {
+      const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
+      const notificationPromises = approvers.map(approver =>
+        notifier.send(approver._id, {
+          userEmail: approver.email,
+          type: 'leave_cancelled',
+          title: 'Leave Cancelled',
+          message: `${user.name} (${user.employeeId}) has cancelled their ${leave.leaveType} leave (${leave.leaveId}).`,
+          refId: leave._id,
+          refModel: 'Leave',
+        })
+      );
+      await Promise.all(notificationPromises);
+    } else {
+      // Notify the employee that their leave was cancelled by an admin/manager
+      await notifier.send(user._id, {
+        userEmail: user.email,
         type: 'leave_cancelled',
-        title: 'Leave Cancelled',
-        message: `${user.name} (${user.employeeId}) has cancelled their ${leave.leaveType} leave (${leave.leaveId}).`,
+        title: '❌ Leave Cancelled',
+        message: `Your ${leave.leaveType} leave (${leave.leaveId}) has been cancelled by management${reason ? '. Reason: ' + reason : ''}.`,
         refId: leave._id,
         refModel: 'Leave',
-      })
-    );
-    await Promise.all(notificationPromises);
+      });
+    }
 
     return leave;
   },

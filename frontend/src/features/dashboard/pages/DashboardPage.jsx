@@ -76,7 +76,7 @@ export default function DashboardPage() {
 
     const { data: projects = [] } = useQuery({
         queryKey: ['projects', 'all'],
-        queryFn: () => projectAPI.getAll({ limit: 1000 }).then(r => r.data.data || []),
+        queryFn: () => projectAPI.getAll({ limit: 5000 }).then(r => r.data.data || []),
         enabled: !!user?.id
     })
 
@@ -453,42 +453,93 @@ export default function DashboardPage() {
                     )}
 
                     {/* Top Projects */}
-                    {prefs.projects && (
-                        <div className="card p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-                                    <Award size={18} className="text-amber-500" /> Top Active Projects
-                                </h3>
-                                <button
-                                    onClick={() => navigate('/projects')}
-                                    className="text-[10px] font-black uppercase text-primary-500 hover:text-primary-600 transition-colors"
+                    {prefs.projects && (() => {
+                        // Merge all projects with their hours from summaryData
+                        const hourMap = {}
+                        summaryData?.projectTotals?.forEach(p => {
+                            if (p.projectId) hourMap[p.projectId] = p.totalHours || 0
+                        })
+                        const allProjectRows = projects.map(p => ({
+                            _id: p._id,
+                            name: p.name,
+                            hours: hourMap[p._id] || 0,
+                        })).sort((a, b) => b.hours - a.hours)
+
+                        const maxH = allProjectRows[0]?.hours || 1
+                        const pinned = allProjectRows.slice(0, 4)
+                        const rest = allProjectRows.slice(4)
+
+                        const ProjectRow = ({ p }) => {
+                            const pct = (p.hours / maxH) * 100
+                            const isSelected = selectedProjectId === p._id
+                            return (
+                                <div
+                                    key={p._id}
+                                    className={`group cursor-pointer px-3 py-2 rounded-xl transition-all ${isSelected ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
+                                    onClick={() => setSelectedProjectId(isSelected ? 'all' : p._id)}
                                 >
-                                    View Projects
-                                </button>
-                            </div>
-                            <div className="space-y-4">
-                                {summaryData?.projectTotals?.slice(0, 4).map((p, i) => {
-                                    const maxH = summaryData.projectTotals[0]?.totalHours || 1
-                                    const pct = (p.totalHours / maxH) * 100
-                                    return (
+                                    <div className="flex justify-between items-end mb-1.5">
+                                        <span className={`text-sm font-bold transition-colors truncate max-w-[70%] ${isSelected ? 'text-primary-600' : 'text-slate-700 group-hover:text-primary-600'}`}>
+                                            {p.name}
+                                        </span>
+                                        <span className={`text-sm font-black shrink-0 ml-2 ${isSelected ? 'text-primary-700' : 'text-slate-800'}`}>
+                                            {(p.hours || 0).toFixed(2)}h
+                                        </span>
+                                    </div>
+                                    <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                                         <div
-                                            key={i}
-                                            className="group cursor-pointer"
+                                            className={`h-full rounded-full transition-all ${isSelected ? 'bg-primary-500' : 'bg-gradient-to-r from-primary-400 to-primary-600'}`}
+                                            style={{ width: `${pct}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            )
+                        }
+
+                        return (
+                            <div className="card p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                                        <Award size={18} className="text-amber-500" /> Top Active Projects
+                                    </h3>
+                                    <div className="flex items-center gap-3">
+                                        {selectedProjectId !== 'all' && (
+                                            <button
+                                                onClick={() => setSelectedProjectId('all')}
+                                                className="text-[10px] font-black uppercase text-slate-400 hover:text-red-500 transition-colors"
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                        <button
                                             onClick={() => navigate('/projects')}
+                                            className="text-[10px] font-black uppercase text-primary-500 hover:text-primary-600 transition-colors"
                                         >
-                                            <div className="flex justify-between items-end mb-1">
-                                                <span className="text-sm font-bold text-slate-700 group-hover:text-primary-600 transition-colors">{p.projectName}</span>
-                                                <span className="text-sm font-black text-slate-800">{(p.totalHours || 0).toFixed(2)}h</span>
-                                            </div>
-                                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                <div className="h-full bg-gradient-to-r from-primary-400 to-primary-600 rounded-full" style={{ width: `${pct}%` }} />
-                                            </div>
+                                            View Projects
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {allProjectRows.length === 0 ? (
+                                    <p className="text-sm text-center text-slate-400 font-bold py-6">No projects found</p>
+                                ) : (
+                                    <>
+                                        {/* Pinned first 4 - always visible */}
+                                        <div className="space-y-1">
+                                            {pinned.map(p => <ProjectRow key={p._id} p={p} />)}
                                         </div>
-                                    )
-                                })}
+
+                                        {/* Remaining projects in scrollable area */}
+                                        {rest.length > 0 && (
+                                            <div className="mt-2 max-h-[160px] overflow-y-auto space-y-1 custom-scrollbar border-t border-slate-100 dark:border-slate-700 pt-2">
+                                                {rest.map(p => <ProjectRow key={p._id} p={p} />)}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                             </div>
-                        </div>
-                    )}
+                        )
+                    })()}
                 </motion.div>
 
                 {/* 4️⃣ WORKSPACE HUB (Right 4 cols) */}

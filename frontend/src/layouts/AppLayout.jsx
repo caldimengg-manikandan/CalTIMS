@@ -44,7 +44,7 @@ export default function AppLayout() {
             {/* Mobile Sidebar Overlay */}
             {sidebarOpen && (
                 <div
-                    className="fixed inset-0 bg-slate-900/50 dark:bg-black/50 backdrop-blur-sm z-30 md:hidden"
+                    className="fixed inset-0 bg-slate-900/50 dark:bg-black/50 backdrop-blur-sm z-40 md:hidden"
                     onClick={() => useUIStore.getState().toggleSidebar()}
                 />
             )}
@@ -60,7 +60,7 @@ export default function AppLayout() {
                     <Outlet />
                 </main>
                 {/* Fixed Footer */}
-                <footer className="py-3 px-6 bg-white dark:bg-black border-t border-slate-100 dark:border-white/10 text-center flex items-center justify-center gap-1.5 flex-shrink-0 z-40">
+                <footer className="py-3 px-6 bg-white dark:bg-black border-t border-slate-100 dark:border-white/10 text-center flex items-center justify-center gap-1.5 flex-shrink-0 z-20">
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                         © {new Date().getFullYear()} Developed by
                     </span>

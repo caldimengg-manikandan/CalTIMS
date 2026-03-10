@@ -47,7 +47,7 @@ const navSections = [
 
 export default function Sidebar() {
     const { user } = useAuthStore()
-    const { sidebarOpen, toggleSidebar } = useUIStore()
+    const { sidebarOpen, toggleSidebar, setSidebar } = useUIStore()
     const { general } = useSettingsStore()
     const { appVersion } = useSystemStore()
     const navigate = useNavigate()
@@ -89,7 +89,7 @@ export default function Sidebar() {
 
     return (
         <aside className={clsx(
-            'fixed inset-y-0 left-0 z-40 flex flex-col bg-white dark:bg-black border-r border-slate-100 dark:border-white/10 transition-all duration-300 shadow-[2px_0_24px_0_rgba(var(--color-primary-rgb),0.06)] group/sidebar',
+            'fixed inset-y-0 left-0 z-50 flex flex-col bg-white dark:bg-black border-r border-slate-100 dark:border-white/10 transition-all duration-300 shadow-[2px_0_24px_0_rgba(var(--color-primary-rgb),0.06)] group/sidebar',
             sidebarOpen ? 'w-64 translate-x-0' : 'w-[280px] -translate-x-full md:w-[68px] md:translate-x-0 md:hover:w-64 hover:shadow-2xl hover:shadow-primary-500/10'
         )}>
             <style>{`
@@ -225,6 +225,9 @@ export default function Sidebar() {
                                             if (item.proFeature && appVersion === 'basic') {
                                                 // Allow navigation so ProGuard can show the upgrade screen
                                             }
+                                            if (window.innerWidth < 1024) {
+                                                setSidebar(false);
+                                            }
                                         }}
                                     >
                                         {({ isActive }) => (
@@ -237,7 +240,7 @@ export default function Sidebar() {
                                                 <item.icon
                                                     size={18}
                                                     className={clsx(
-                                                        'flex-shrink-0 transition-colors',
+                                                        'flex-shrink-0 transition-colors pointer-events-none',
                                                         isActive ? 'text-primary-600 dark:text-primary-400' : 'text-slate-400 group-hover:text-primary-500'
                                                     )}
                                                 />
@@ -256,12 +259,12 @@ export default function Sidebar() {
                                                     </span>
                                                 )}
                                                 {!sidebarOpen && (
-                                                    <span className="truncate hidden group-hover/sidebar:inline">{item.label}</span>
+                                                    <span className="truncate hidden group-hover/sidebar:block flex-1 text-left">{item.label}</span>
                                                 )}
 
                                                 {/* Tooltip when collapsed */}
                                                 {!sidebarOpen && (
-                                                    <span className="absolute left-full ml-3 px-2.5 py-1 bg-slate-800 dark:bg-white text-white dark:text-black text-xs font-semibold rounded-lg shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+                                                    <span className="absolute left-full ml-3 px-2.5 py-1 bg-slate-800 dark:bg-white text-white dark:text-black text-xs font-semibold rounded-lg shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 group-hover/sidebar:hidden">
                                                         {item.label}
                                                     </span>
                                                 )}

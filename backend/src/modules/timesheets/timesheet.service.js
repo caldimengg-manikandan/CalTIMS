@@ -419,6 +419,49 @@ const timesheetService = {
     // Reuses bulkUpsert to save, then sets status to SUBMITTED
     const savedTimesheets = await this.bulkUpsert(dataArray, userId);
 
+    // ── Daily Hours Guardrail Enforcement on Submit ────────────────────────────
+    const Settings = mongoose.model('Settings');
+    const settingsDoc = await Settings.findOne().lean();
+    const tsPolicy = settingsDoc?.timesheet || {};
+    const { minHoursPerDay = 0, maxHoursPerDay = 24, enforceMinHoursOnSubmit = false } = tsPolicy;
+    const isWeekendWorkable = settingsDoc?.general?.isWeekendWorkable || false;
+
+    if (enforceMinHoursOnSubmit && minHoursPerDay > 0) {
+      for (const ts of savedTimesheets) {
+        // Aggregate hours per calendar day across all rows
+        const hoursPerDay = {};
+        ts.rows.forEach(row => {
+          // Skip permission rows from min-hours check
+          if (row.category?.toLowerCase() === 'permission') return;
+          row.entries.forEach(e => {
+            try {
+              const d = new Date(e.date);
+              const dayOfWeek = d.getUTCDay(); // 0=Sun, 6=Sat
+              if (!isWeekendWorkable && (dayOfWeek === 0 || dayOfWeek === 6)) return;
+              const dateStr = d.toISOString().split('T')[0];
+              hoursPerDay[dateStr] = (hoursPerDay[dateStr] || 0) + (e.hoursWorked || 0);
+            } catch (err) {}
+          });
+        });
+
+        for (const [date, hours] of Object.entries(hoursPerDay)) {
+          // Only validate days where hours were actually entered
+          if (hours > 0 && hours < minHoursPerDay) {
+            throw new AppError(
+              `On ${date}, total logged hours (${hours.toFixed(2)}h) are below the required minimum of ${minHoursPerDay}h per day.`,
+              400
+            );
+          }
+          if (hours > maxHoursPerDay) {
+            throw new AppError(
+              `On ${date}, total logged hours (${hours.toFixed(2)}h) exceed the maximum of ${maxHoursPerDay}h per day.`,
+              400
+            );
+          }
+        }
+      }
+    }
+
     const user = await User.findById(userId).select('name employeeId');
     const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
 
@@ -837,6 +880,10 @@ const timesheetService = {
           const rowProjectId = row.projectId?._id?.toString() || row.projectId?.toString();
           if (projectId && rowProjectId !== projectId.toString()) return;
 
+          // Skip leave rows — they should not count as productive hours
+          const isLeaveRow = row.projectId?.code === 'LEAVE-SYS' || row.projectId?.name === 'Leave';
+          if (isLeaveRow) return;
+
           let rowHoursInWeek = 0;
 
           if (row.entries) {
@@ -856,9 +903,10 @@ const timesheetService = {
             });
           }
 
-          if (rowProjectId && rowHoursInWeek > 0 && row.projectId?.code !== 'LEAVE-SYS' && row.projectId?.name !== 'Leave') {
+          if (rowProjectId && rowHoursInWeek > 0) {
             if (!projectTotalsMap.has(rowProjectId)) {
               projectTotalsMap.set(rowProjectId, {
+                projectId: rowProjectId,
                 projectName: row.projectId?.name || 'Unknown',
                 projectCode: row.projectId?.code || 'N/A',
                 totalHours: 0
@@ -936,6 +984,10 @@ const timesheetService = {
             // If projectId filter is active, only count rows for that project
             if (projectId && rowProjectId !== projectId.toString()) return;
 
+            // Skip leave rows — they should not count as productive hours
+            const isLeaveRow = row.projectId?.code === 'LEAVE-SYS' || row.projectId?.name === 'Leave';
+            if (isLeaveRow) return;
+
             let rowHoursInWeek = 0;
 
             if (row.entries) {
@@ -957,10 +1009,11 @@ const timesheetService = {
               rowHoursInWeek = row.totalHours || 0;
             }
 
-            // Project totals
-            if (rowProjectId && rowHoursInWeek > 0 && row.projectId?.code !== 'LEAVE-SYS' && row.projectId?.name !== 'Leave') {
+            // Project totals — all non-leave rows with hours
+            if (rowProjectId && rowHoursInWeek > 0) {
                 if (!projectTotalsMap.has(rowProjectId)) {
                     projectTotalsMap.set(rowProjectId, {
+                        projectId: rowProjectId,
                         projectName: row.projectId?.name || 'Unknown',
                         projectCode: row.projectId?.code || 'N/A',
                         totalHours: 0,
@@ -1018,9 +1071,10 @@ const timesheetService = {
         if (p.name === 'Leave' || p.code === 'LEAVE-SYS') return acc;
         const existing = projectTotalsTemp.find(pt => pt.projectCode === p.code || pt.projectName === p.name);
         if (existing) {
-          acc.push(existing);
+          acc.push({ ...existing, projectId: existing.projectId || p._id.toString() });
         } else {
           acc.push({
+            projectId: p._id.toString(),
             projectName: p.name,
             projectCode: p.code,
             totalHours: 0,
@@ -1239,7 +1293,7 @@ const timesheetService = {
   },
 
   async getAdminSummary(query = {}) {
-    const filter = { status: { $ne: TIMESHEET_STATUS.DRAFT } };
+    const filter = { status: { $nin: [TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.FROZEN] } };
     if (query.userId) filter.userId = new mongoose.Types.ObjectId(query.userId);
 
     const stats = await Timesheet.aggregate([
@@ -1278,7 +1332,7 @@ const timesheetService = {
     if (query.status) {
       filter.status = query.status;
     } else {
-      filter.status = { $ne: TIMESHEET_STATUS.DRAFT };
+      filter.status = { $nin: [TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.FROZEN] };
     }
     if (query.projectId) {
       filter['rows.projectId'] = query.projectId;

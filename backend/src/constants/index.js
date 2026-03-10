@@ -65,7 +65,7 @@ const HTTP_STATUS = Object.freeze({
 const PAGINATION = Object.freeze({
   DEFAULT_PAGE: 1,
   DEFAULT_LIMIT: 10,
-  MAX_LIMIT: 1000,
+  MAX_LIMIT: 5000,
 });
 
 module.exports = {

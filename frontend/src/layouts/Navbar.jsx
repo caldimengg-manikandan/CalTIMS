@@ -126,7 +126,7 @@ export default function Navbar() {
 
     return (
         <>
-            <header className="h-14 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10 flex items-center justify-between px-5 flex-shrink-0 z-40 relative">
+            <header className="h-14 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10 flex items-center justify-between px-5 flex-shrink-0 z-30 relative">
                 {/* Left */}
                 <div className="flex items-center gap-1.5 overflow-hidden">
                     <button
@@ -134,7 +134,7 @@ export default function Navbar() {
                         className="p-2 -ml-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white rounded-lg transition-all duration-200 shrink-0"
                         title="Toggle sidebar"
                     >
-                        <Menu size={19} />
+                        <Menu size={19} className="pointer-events-none" />
                     </button>
 
                     <div className="w-px h-5 bg-slate-200 dark:bg-white/10 mx-1.5 shrink-0" />
@@ -147,7 +147,7 @@ export default function Navbar() {
                                 className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all flex items-center gap-1.5 font-bold text-xs shrink-0"
                                 title="Go back"
                             >
-                                <ArrowLeft size={15} strokeWidth={2.5} />
+                                <ArrowLeft size={15} strokeWidth={2.5} className="pointer-events-none" />
                                 <span className="hidden sm:inline">Back</span>
                             </button>
                         )}
@@ -200,7 +200,7 @@ export default function Navbar() {
                         className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white rounded-lg transition-all duration-200"
                         title={theme === 'light' ? 'Switch to dark mode' : theme === 'dark' ? 'Switch to midnight mode' : 'Switch to light mode'}
                     >
-                        {theme === 'light' ? <Moon size={17} /> : theme === 'dark' ? <Moon size={17} className="text-primary-400" /> : <Sun size={17} />}
+                        {theme === 'light' ? <Moon size={17} className="pointer-events-none" /> : theme === 'dark' ? <Moon size={17} className="text-primary-400 pointer-events-none" /> : <Sun size={17} className="pointer-events-none" />}
                     </button>
 
                     {/* Notifications Bell */}

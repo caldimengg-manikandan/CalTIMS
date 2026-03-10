@@ -42,7 +42,7 @@ export default function IncidentList() {
 
     // Queries
     const incidentsQuery = useQuery({
-        queryKey: ['incidents', page, filters],
+        queryKey: ['incidents', page, limit, filters],
         queryFn: () => {
             const apiFilters = {};
             if (filters.status !== 'All') apiFilters.status = filters.status;
@@ -54,7 +54,7 @@ export default function IncidentList() {
     });
 
     const supportQuery = useQuery({
-        queryKey: ['support-tickets', page, filters],
+        queryKey: ['support-tickets', page, limit, filters],
         queryFn: () => {
             const apiFilters = {};
             if (filters.status !== 'All') apiFilters.status = filters.status;
@@ -182,8 +182,16 @@ export default function IncidentList() {
                                             placeholder={activeTab === 'incidents' ? "Search INC-XXXX" : "Search SUP-XXXX, Name or Email"}
                                             value={filters.search}
                                             onChange={(e) => handleFilterChange('search', e.target.value)}
-                                            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-2xl pl-12 pr-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-2xl pl-12 pr-12 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                                         />
+                                        {filters.search && (
+                                            <button
+                                                onClick={() => handleFilterChange('search', '')}
+                                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
+                                            >
+                                                <XCircle size={16} />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="space-y-1.5">
@@ -225,9 +233,9 @@ export default function IncidentList() {
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{data?.pagination?.total || 0} TOTAL RECORDS</p>
                             </div>
 
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left">
-                                    <thead className="bg-slate-50/50 dark:bg-white/5">
+                            <div className="overflow-x-auto max-h-[calc(100vh-450px)] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10 scrollbar-track-transparent">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-white/5">
                                         <tr>
                                             <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">ID</th>
                                             <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">{activeTab === 'incidents' ? 'Context' : 'Stakeholder'}</th>

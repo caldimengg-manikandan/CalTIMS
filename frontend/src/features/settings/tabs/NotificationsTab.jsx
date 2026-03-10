@@ -33,8 +33,14 @@ export default function NotificationsTab() {
                 timesheetReminder: data.notifications.timesheetReminder || 'Friday 18:00',
                 freezeReminder: data.notifications.freezeReminder || 'Monday 15:00',
                 approvalReminder: data.notifications.approvalReminder || 'Daily 10:00',
-                emailNotifications: !!data.notifications.emailNotifications,
-                inAppNotifications: !!data.notifications.inAppNotifications,
+                emailNotifications: data.notifications.emailNotifications ?? true,
+                inAppNotifications: data.notifications.inAppNotifications ?? true,
+                notifyOnTimesheetSubmission: data.notifications.notifyOnTimesheetSubmission ?? true,
+                notifyOnTimesheetApproval: data.notifications.notifyOnTimesheetApproval ?? true,
+                notifyOnTimesheetRejection: data.notifications.notifyOnTimesheetRejection ?? true,
+                notifyOnLeaveRequest: data.notifications.notifyOnLeaveRequest ?? true,
+                notifyOnLeaveApproval: data.notifications.notifyOnLeaveApproval ?? true,
+                notifyOnLeaveRejection: data.notifications.notifyOnLeaveRejection ?? true,
             })
         }
     }, [data])
@@ -59,92 +65,142 @@ export default function NotificationsTab() {
                 <p className="text-sm text-slate-500 font-medium">Control cadence and delivery channels for automated alerts</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Delivery Channels */}
-                <div className="lg:col-span-2 space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                {/* Left Column: Channels & Subscriptions */}
+                <div className="lg:col-span-8 space-y-8">
                     <SectionCard title="Delivery Channels" subtitle="Global switches for notification paths" icon={BellRing}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center justify-between p-5 rounded-3xl bg-white dark:bg-white/5 border-2 border-slate-100 dark:border-white/10 transition-all hover:border-indigo-200">
-                                <div className="flex items-center gap-4">
-                                    <div className={`p-3 rounded-2xl ${notifications.emailNotifications ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                                        <Mail size={20} />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div className="flex flex-col p-5 rounded-3xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 transition-all">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className={`p-2.5 rounded-xl ${notifications.emailNotifications ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+                                        <Mail size={18} />
                                     </div>
-                                    <div>
-                                        <p className="text-xs font-black uppercase tracking-tight text-slate-700 dark:text-slate-200">Email Alerts</p>
-                                        <p className="text-[10px] text-slate-400 font-medium">External inbox delivery</p>
-                                    </div>
+                                    <button onClick={() => upd('emailNotifications', !notifications.emailNotifications)}
+                                        className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${notifications.emailNotifications ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                                        <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${notifications.emailNotifications ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
                                 </div>
-                                <button onClick={() => upd('emailNotifications', !notifications.emailNotifications)}
-                                    className={`relative w-11 h-6 rounded-full transition-colors ${notifications.emailNotifications ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
-                                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${notifications.emailNotifications ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
+                                <p className="text-sm font-black uppercase tracking-tight text-slate-800 dark:text-slate-200">Email Alerts</p>
+                                <p className="text-[11px] text-slate-500 font-medium mt-1">Receive updates directly to your registered inbox.</p>
                             </div>
 
-                            <div className="flex items-center justify-between p-5 rounded-3xl bg-white dark:bg-white/5 border-2 border-slate-100 dark:border-white/10 transition-all hover:border-indigo-200">
-                                <div className="flex items-center gap-4">
-                                    <div className={`p-3 rounded-2xl ${notifications.inAppNotifications ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                                        <BellRing size={20} />
+                            <div className="flex flex-col p-5 rounded-3xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 transition-all">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className={`p-2.5 rounded-xl ${notifications.inAppNotifications ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+                                        <BellRing size={18} />
                                     </div>
-                                    <div>
-                                        <p className="text-xs font-black uppercase tracking-tight text-slate-700 dark:text-slate-200">In-App Notifs</p>
-                                        <p className="text-[10px] text-slate-400 font-medium">Dashboard notification bell</p>
-                                    </div>
+                                    <button onClick={() => upd('inAppNotifications', !notifications.inAppNotifications)}
+                                        className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${notifications.inAppNotifications ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                                        <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${notifications.inAppNotifications ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
                                 </div>
-                                <button onClick={() => upd('inAppNotifications', !notifications.inAppNotifications)}
-                                    className={`relative w-11 h-6 rounded-full transition-colors ${notifications.inAppNotifications ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
-                                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${notifications.inAppNotifications ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
+                                <p className="text-sm font-black uppercase tracking-tight text-slate-800 dark:text-slate-200">In-App Notifs</p>
+                                <p className="text-[11px] text-slate-500 font-medium mt-1">Real-time alerts in your dashboard notification center.</p>
                             </div>
                         </div>
                     </SectionCard>
 
-                    <SectionCard title="Notification Events" subtitle="Contextual alerts for workflows" icon={Check}>
-                        <div className="space-y-3">
-                            {[
-                                { title: 'Timesheet Reminders', desc: 'Alert users with outstanding entries', key: 'timesheetReminder' },
-                                { title: 'Submission Confirmations', desc: 'Notify managers on employee submission', key: 'inAppNotifications' }, // Reusing keys for demo logic
-                                { title: 'Approval Alerts', desc: 'Notify employees on approval/rejection', key: 'emailNotifications' }
-                            ].map((event, i) => (
-                                <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/5">
-                                    <div>
-                                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{event.title}</p>
-                                        <p className="text-[11px] text-slate-500 font-medium">{event.desc}</p>
+                    <SectionCard title="Event Subscriptions" subtitle="Select which system actions trigger an alert" icon={Check}>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+                            {/* Timesheet Events */}
+                            <div className="space-y-4">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-white/5 pb-2">Timesheet Workflows</h4>
+
+                                <div className="flex items-center justify-between group">
+                                    <div className="flex-1 pr-4">
+                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">Submission</p>
                                     </div>
-                                    <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 font-black text-[10px]">
-                                        ON
-                                    </div>
+                                    <button onClick={() => upd('notifyOnTimesheetSubmission', !notifications.notifyOnTimesheetSubmission)}
+                                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetSubmission ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${notifications.notifyOnTimesheetSubmission ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
                                 </div>
-                            ))}
+
+                                <div className="flex items-center justify-between group">
+                                    <div className="flex-1 pr-4">
+                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-emerald-500 transition-colors">Approval</p>
+                                    </div>
+                                    <button onClick={() => upd('notifyOnTimesheetApproval', !notifications.notifyOnTimesheetApproval)}
+                                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetApproval ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${notifications.notifyOnTimesheetApproval ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between group">
+                                    <div className="flex-1 pr-4">
+                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-rose-500 transition-colors">Rejection</p>
+                                    </div>
+                                    <button onClick={() => upd('notifyOnTimesheetRejection', !notifications.notifyOnTimesheetRejection)}
+                                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetRejection ? 'bg-rose-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${notifications.notifyOnTimesheetRejection ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Leave Events */}
+                            <div className="space-y-4">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-white/5 pb-2">Leave Management</h4>
+
+                                <div className="flex items-center justify-between group">
+                                    <div className="flex-1 pr-4">
+                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">Request Generated</p>
+                                    </div>
+                                    <button onClick={() => upd('notifyOnLeaveRequest', !notifications.notifyOnLeaveRequest)}
+                                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveRequest ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${notifications.notifyOnLeaveRequest ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between group">
+                                    <div className="flex-1 pr-4">
+                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-emerald-500 transition-colors">Request Approved</p>
+                                    </div>
+                                    <button onClick={() => upd('notifyOnLeaveApproval', !notifications.notifyOnLeaveApproval)}
+                                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveApproval ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${notifications.notifyOnLeaveApproval ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between group">
+                                    <div className="flex-1 pr-4">
+                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-rose-500 transition-colors">Request Rejected</p>
+                                    </div>
+                                    <button onClick={() => upd('notifyOnLeaveRejection', !notifications.notifyOnLeaveRejection)}
+                                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveRejection ? 'bg-rose-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${notifications.notifyOnLeaveRejection ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </SectionCard>
                 </div>
 
-                {/* Scheduling */}
-                <div className="space-y-8">
+                {/* Right Column: Scheduling */}
+                <div className="lg:col-span-4 space-y-8">
                     <SectionCard title="Reminder Cadence" subtitle="Schedule for automated pings" icon={Mail}>
-                        <div className="space-y-5">
+                        <div className="space-y-6 py-2">
                             <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Timesheet Deadline</label>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Timesheet Deadline</label>
                                 <input
-                                    className="input w-full h-11 text-sm font-bold"
+                                    className="input w-full h-12 text-sm font-bold bg-slate-50/50 dark:bg-white/5"
                                     value={notifications.timesheetReminder}
                                     onChange={e => upd('timesheetReminder', e.target.value)}
                                     placeholder="e.g. Friday 15:00"
                                 />
                             </div>
                             <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Freeze Warning</label>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Freeze Warning</label>
                                 <input
-                                    className="input w-full h-11 text-sm font-bold"
+                                    className="input w-full h-12 text-sm font-bold bg-slate-50/50 dark:bg-white/5"
                                     value={notifications.freezeReminder}
                                     onChange={e => upd('freezeReminder', e.target.value)}
                                     placeholder="e.g. Monday 10:00"
                                 />
                             </div>
                             <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Approval Digest</label>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Approval Digest</label>
                                 <input
-                                    className="input w-full h-11 text-sm font-bold"
+                                    className="input w-full h-12 text-sm font-bold bg-slate-50/50 dark:bg-white/5"
                                     value={notifications.approvalReminder}
                                     onChange={e => upd('approvalReminder', e.target.value)}
                                     placeholder="e.g. Daily 09:00"
@@ -153,68 +209,14 @@ export default function NotificationsTab() {
                         </div>
                     </SectionCard>
 
-                    <div className="p-4 rounded-3xl bg-indigo-600 text-white shadow-xl shadow-indigo-600/20">
-                        <p className="text-xs font-black uppercase tracking-widest opacity-80 mb-2">Pro Tip</p>
-                        <p className="text-xs font-medium leading-relaxed">
-                            Scheduled notifications follow the organization's timezone set in the General tab.
+                    <div className="p-5 rounded-3xl bg-indigo-600 text-white shadow-xl shadow-indigo-600/20">
+                        <p className="text-xs font-black uppercase tracking-widest opacity-80 mb-2">Delivery Note</p>
+                        <p className="text-[11px] font-medium leading-relaxed opacity-90">
+                            Scheduled notifications strictly follow the organization's primary timezone. Instant triggers (like approvals) are dispatched immediately.
                         </p>
                     </div>
                 </div>
-
-                <div className="lg:col-span-3">
-                    <SectionCard title="Event Triggers" subtitle="Specific actions that generate notifications" icon={Mail}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-indigo-200">
-                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Timesheet Submission</span>
-                                <button onClick={() => upd('notifyOnTimesheetSubmission', !notifications.notifyOnTimesheetSubmission)}
-                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetSubmission ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnTimesheetSubmission ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-emerald-200">
-                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Timesheet Approval</span>
-                                <button onClick={() => upd('notifyOnTimesheetApproval', !notifications.notifyOnTimesheetApproval)}
-                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetApproval ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnTimesheetApproval ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-rose-200">
-                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Timesheet Rejection</span>
-                                <button onClick={() => upd('notifyOnTimesheetRejection', !notifications.notifyOnTimesheetRejection)}
-                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnTimesheetRejection ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnTimesheetRejection ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-indigo-200">
-                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Request</span>
-                                <button onClick={() => upd('notifyOnLeaveRequest', !notifications.notifyOnLeaveRequest)}
-                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveRequest ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveRequest ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-emerald-200">
-                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Approval</span>
-                                <button onClick={() => upd('notifyOnLeaveApproval', !notifications.notifyOnLeaveApproval)}
-                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveApproval ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveApproval ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 transition-all hover:border-rose-200">
-                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Leave Rejection</span>
-                                <button onClick={() => upd('notifyOnLeaveRejection', !notifications.notifyOnLeaveRejection)}
-                                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${notifications.notifyOnLeaveRejection ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifications.notifyOnLeaveRejection ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
-                            </div>
-                        </div>
-                    </SectionCard>
-                </div>
-            </div >
+            </div>
 
             <div className="sticky bottom-4 z-20 flex justify-end">
                 <button

@@ -108,8 +108,8 @@ const TimezoneSelect = ({ value, onChange, options }) => {
 export default function OrganizationTab() {
     const qc = useQueryClient()
     const { updateGeneralSettings } = useSettingsStore()
-    const { appVersion } = useSystemStore()
-    const [form, setForm] = useState({
+    const { appVersion, updateVersion } = useSystemStore()
+    const [form, setForm] = React.useState({
         companyName: '',
         timezone: 'Asia/Kolkata',
         dateFormat: 'DD/MM/YYYY',
@@ -131,7 +131,7 @@ export default function OrganizationTab() {
         queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
     })
 
-    useEffect(() => {
+    React.useEffect(() => {
         if (data) {
             setForm({
                 ...form,
@@ -174,6 +174,13 @@ export default function OrganizationTab() {
 
     const upd = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+    const handleToggleTier = async () => {
+        const next = appVersion === 'pro' ? 'basic' : 'pro'
+        const ok = await updateVersion(next)
+        if (ok) toast.success(`Switched to ${next} mode`)
+        else toast.error('Failed to switch mode')
+    }
+
 
     if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
 
@@ -200,116 +207,116 @@ export default function OrganizationTab() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                 {/* Column 1: Identity & Branding */}
-                <div className="lg:col-span-2 space-y-8">
-                    <SectionCard title="Corporate Identity" subtitle="Define your company's core information" icon={Globe}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="md:col-span-2">
-                                <label className="label">Company Name</label>
-                                <input
-                                    className="input w-full h-12"
-                                    placeholder="CALTIMS"
-                                    value={form.companyName}
-                                    onChange={e => upd('companyName', e.target.value)}
-                                />
-                            </div>
 
-                            <div className="md:col-span-2">
-                                <label className="label">Company Address</label>
-                                <textarea
-                                    className="input w-full h-24 py-3 resize-none"
-                                    placeholder="123 Enterprise Way, Tech City..."
-                                    value={form.address}
-                                    onChange={e => upd('address', e.target.value)}
-                                />
-                            </div>
+                <SectionCard title="Corporate Identity" subtitle="Define your company's core information" icon={Globe}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="md:col-span-2">
+                            <label className="label">Company Name</label>
+                            <input
+                                className="input w-full h-12"
+                                placeholder="CALTIMS"
+                                value={form.companyName}
+                                onChange={e => upd('companyName', e.target.value)}
+                            />
+                        </div>
 
-                            <div>
-                                <label className="label">Country</label>
-                                <input
-                                    className="input w-full h-12"
-                                    placeholder="India"
-                                    value={form.country}
-                                    onChange={e => upd('country', e.target.value)}
-                                />
-                            </div>
+                        <div className="md:col-span-2">
+                            <label className="label">Company Address</label>
+                            <textarea
+                                className="input w-full h-24 py-3 resize-none"
+                                placeholder="123 Enterprise Way, Tech City..."
+                                value={form.address}
+                                onChange={e => upd('address', e.target.value)}
+                            />
+                        </div>
 
-                            <div>
-                                <label className="label">Currency</label>
+                        <div>
+                            <label className="label">Country</label>
+                            <input
+                                className="input w-full h-12"
+                                placeholder="India"
+                                value={form.country}
+                                onChange={e => upd('country', e.target.value)}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="label">Currency</label>
+                            <select
+                                className="input w-full h-12 pr-10 appearance-none"
+                                value={form.currency}
+                                onChange={e => upd('currency', e.target.value)}
+                            >
+                                <option value="INR">INR (₹)</option>
+                                <option value="USD">USD ($)</option>
+                                <option value="EUR">EUR (€)</option>
+                                <option value="GBP">GBP (£)</option>
+                                <option value="AED">AED (د.إ)</option>
+                            </select>
+                        </div>
+                    </div>
+                </SectionCard>
+
+                <SectionCard title="System Localization" subtitle="Regional and time-based settings" icon={Settings2}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="label">Timezone</label>
+                            <div className="relative">
                                 <select
-                                    className="input w-full h-12 pr-10 appearance-none"
-                                    value={form.currency}
-                                    onChange={e => upd('currency', e.target.value)}
+                                    className="input w-full h-12 appearance-none pr-9"
+                                    value={form.timezone}
+                                    onChange={e => upd('timezone', e.target.value)}
                                 >
-                                    <option value="INR">INR (₹)</option>
-                                    <option value="USD">USD ($)</option>
-                                    <option value="EUR">EUR (€)</option>
-                                    <option value="GBP">GBP (£)</option>
-                                    <option value="AED">AED (د.إ)</option>
+                                    {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
                                 </select>
+                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                             </div>
                         </div>
-                    </SectionCard>
 
-                    <SectionCard title="System Localization" subtitle="Regional and time-based settings" icon={Settings2}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="label">Timezone</label>
-                                <div className="relative">
-                                    <select
-                                        className="input w-full h-12 appearance-none pr-9"
-                                        value={form.timezone}
-                                        onChange={e => upd('timezone', e.target.value)}
-                                    >
-                                        {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
-                                    </select>
-                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="label">Date Format</label>
-                                <select
-                                    className="input w-full h-12 appearance-none pr-9"
-                                    value={form.dateFormat}
-                                    onChange={e => upd('dateFormat', e.target.value)}
-                                >
-                                    {DATE_FORMATS.map(fmt => <option key={fmt} value={fmt}>{fmt}</option>)}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="label">Fiscal Year Start</label>
-                                <select
-                                    className="input w-full h-12 appearance-none pr-9"
-                                    value={form.fiscalYearStart}
-                                    onChange={e => upd('fiscalYearStart', e.target.value)}
-                                >
-                                    {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(month => (
-                                        <option key={month} value={month}>{month}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="label">Work Week</label>
-                                <select
-                                    className="input w-full h-12 appearance-none pr-9"
-                                    value={form.workWeek}
-                                    onChange={e => upd('workWeek', e.target.value)}
-                                >
-                                    <option value="Mon-Fri">Monday – Friday</option>
-                                    <option value="Sun-Thu">Sunday – Thursday</option>
-                                    <option value="Mon-Sat">Monday – Saturday</option>
-                                </select>
-                            </div>
+                        <div>
+                            <label className="label">Date Format</label>
+                            <select
+                                className="input w-full h-12 appearance-none pr-9"
+                                value={form.dateFormat}
+                                onChange={e => upd('dateFormat', e.target.value)}
+                            >
+                                {DATE_FORMATS.map(fmt => <option key={fmt} value={fmt}>{fmt}</option>)}
+                            </select>
                         </div>
-                    </SectionCard>
-                </div>
+
+                        <div>
+                            <label className="label">Fiscal Year Start</label>
+                            <select
+                                className="input w-full h-12 appearance-none pr-9"
+                                value={form.fiscalYearStart}
+                                onChange={e => upd('fiscalYearStart', e.target.value)}
+                            >
+                                {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(month => (
+                                    <option key={month} value={month}>{month}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="label">Work Week</label>
+                            <select
+                                className="input w-full h-12 appearance-none pr-9"
+                                value={form.workWeek}
+                                onChange={e => upd('workWeek', e.target.value)}
+                            >
+                                <option value="Mon-Fri">Monday – Friday</option>
+                                <option value="Sun-Thu">Sunday – Thursday</option>
+                                <option value="Mon-Sat">Monday – Saturday</option>
+                            </select>
+                        </div>
+                    </div>
+                </SectionCard>
+
 
                 {/* Column 2: Logo & Policy Summaries */}
-                <div className="space-y-8">
+                {/* <div className="space-y-8">
                     <SectionCard title="Company Logo" subtitle="Brand identity for reports" icon={Save}>
                         <div className="flex flex-col items-center gap-6 py-4">
                             <div className="w-40 h-40 rounded-3xl bg-slate-50 dark:bg-white/5 border-2 border-dashed border-slate-200 dark:border-white/10 flex flex-col items-center justify-center text-center p-4 group hover:border-indigo-500/50 transition-colors cursor-pointer relative overflow-hidden">
@@ -361,7 +368,7 @@ export default function OrganizationTab() {
                             </div>
                         </div>
                     </SectionCard>
-                </div>
+                </div> */}
             </div>
 
             <div className="sticky bottom-4 z-20 flex justify-end">

@@ -10,7 +10,8 @@ import {
     Calendar,
     PlusSquare,
     ClipboardCheck,
-    Info
+    Info,
+    AlertTriangle
 } from 'lucide-react'
 import { timesheetAPI, projectAPI, settingsAPI, taskAPI, leaveAPI, calendarAPI } from '@/services/endpoints'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -404,20 +405,36 @@ export default function TimesheetEntryPage() {
                 throw new Error('Please enter some hours before submitting.')
             }
 
-            // Strict Daily Hours Validation
-            if (general?.strictDailyHours) {
+            // Policy-Driven Daily Hours Guardrails (min/max from Timesheet Policy settings)
+            if (tsSettings?.enforceMinHoursOnSubmit && (tsSettings?.minHoursPerDay > 0 || tsSettings?.maxHoursPerDay > 0)) {
                 for (let i = 0; i < 7; i++) {
                     const day = weekDays[i];
                     const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
-
-                    // Skip weekend if not workable
                     if (!general?.isWeekendWorkable && isWeekendDay) continue;
 
-                    const dayTotal = calculateDayTotal(i);
-                    // If they entered some hours, it must be >= workingHoursPerDay
-                    if (dayTotal > 0 && dayTotal < workingHoursPerDay) {
-                        const dayName = format(day, 'EEEE');
-                        throw new Error(`On ${dayName}, total hours (${formatHours(dayTotal)}) are less than the required ${workingHoursPerDay} hours.`);
+                    // Skip fully locked leave days
+                    if (lockedDays[i]) continue;
+
+                    // Compute day total excluding permission rows
+                    const dayTotal = rows.reduce((acc, row) => {
+                        if (isPermissionRow(row.taskType)) return acc; // exclude permission from min check
+                        const time = row.dayHours[i];
+                        if (!time || time === '-8' || time === '00:00') return acc;
+                        const [h, m] = time.split(':').map(Number);
+                        return acc + h + (m / 60);
+                    }, 0);
+
+                    if (dayTotal === 0) continue; // don't block completely empty days
+
+                    const minHrs = tsSettings?.minHoursPerDay || 0;
+                    const maxHrs = tsSettings?.maxHoursPerDay || 24;
+                    const dayName = format(day, 'EEEE, MMM d');
+
+                    if (minHrs > 0 && dayTotal < minHrs) {
+                        throw new Error(`${dayName}: logged ${formatHours(dayTotal)} but minimum is ${minHrs}h. Please add more hours before submitting.`);
+                    }
+                    if (maxHrs > 0 && dayTotal > maxHrs) {
+                        throw new Error(`${dayName}: logged ${formatHours(dayTotal)} exceeds the maximum of ${maxHrs}h.`);
                     }
                 }
             }
@@ -568,6 +585,15 @@ export default function TimesheetEntryPage() {
         return row.dayHours.reduce((acc, time) => {
             if (!time || time === '-8') return acc;
             if (!time) return acc;
+            const [h, m] = time.split(':').map(Number)
+            return acc + h + (m / 60)
+        }, 0)
+    }
+
+    const calculateDayTotal = (dayIndex) => {
+        return rows.reduce((acc, row) => {
+            const time = row.dayHours[dayIndex]
+            if (!time || time === '-8') return acc;
             const [h, m] = time.split(':').map(Number)
             return acc + h + (m / 60)
         }, 0)

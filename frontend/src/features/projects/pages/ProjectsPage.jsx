@@ -113,7 +113,7 @@ function ProjectFormModal({ project, onClose }) {
     })
     const { data: allEmployees } = useQuery({
         queryKey: ['users', 'all'],
-        queryFn: () => userAPI.getAll({ limit: 500 }).then(r => r.data.data)
+        queryFn: () => userAPI.getAll({ limit: 5000 }).then(r => r.data.data)
     })
 
     const mutation = useMutation({
@@ -388,7 +388,7 @@ export default function ProjectsPage() {
     // Fetch all projects for the ID dropdown
     const { data: allProjectsList } = useQuery({
         queryKey: ['all-projects-list'],
-        queryFn: () => projectAPI.getAll({ limit: 1000 }).then(r => r.data.data),
+        queryFn: () => projectAPI.getAll({ limit: 5000 }).then(r => r.data.data),
     })
 
     // Fetch managers for the manager filter

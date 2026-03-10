@@ -26,7 +26,7 @@ const reportScheduleRoutes = require('./modules/reportSchedules/reportSchedule.r
 const taskRoutes = require('./modules/tasks/task.routes');
 const incidentRoutes = require('./modules/incidents/incident.routes');
 const systemRoutes = require('./modules/system/system.routes');
-const supportRoutes = require('./modules/support/support.routes');
+// const supportRoutes = require('./modules/support/support.routes');
 const { router: auditRoutes } = require('./modules/audit/audit.routes');
 const schedulerService = require('./shared/services/scheduler.service');
 
@@ -36,8 +36,20 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
-    credentials: false,
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        process.env.CLIENT_URL,
+        'http://localhost:3000',
+        'http://127.0.0.1:3000'
+      ].filter(Boolean);
+      
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
@@ -49,6 +61,8 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(mongoSanitize()); // NoSQL injection prevention
 app.use(compression());
 
+const path = require('path');
+
 // ─── Logging ─────────────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
   app.use(
@@ -57,6 +71,9 @@ if (process.env.NODE_ENV !== 'test') {
     })
   );
 }
+
+// ─── Static Files ────────────────────────────────────────────────────────────
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
@@ -94,7 +111,7 @@ app.use('/api/v1/report-schedules', reportScheduleRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/incidents', incidentRoutes);
 app.use('/api/v1/system', systemRoutes);
-app.use('/api/v1/support', supportRoutes);
+// app.use('/api/v1/support', supportRoutes);
 app.use('/api/v1/audit', auditRoutes);
 
 // ─── Start Scheduler ────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ export const PrivacyModal = ({ isOpen, onClose }) => (
 
             <section className="space-y-3">
                 <p className="font-medium leading-relaxed">
-                    CALTIMS (Time Information Management System) is developed and maintained by <span className="text-slate-900 dark:text-white font-bold">Caldim Engineering Pvt. Ltd.</span>
+                    CALTIMS (TimeSheet Management System) is developed and maintained by <span className="text-slate-900 dark:text-white font-bold">Caldim Engineering Pvt. Ltd.</span>
                 </p>
                 <p className="leading-relaxed">
                     We value your privacy and are committed to protecting your personal and organizational data.
