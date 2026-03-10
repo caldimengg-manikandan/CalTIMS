@@ -10,7 +10,6 @@ import {
     Calendar,
     PlusSquare,
     ClipboardCheck,
-    AlertTriangle,
     Info
 } from 'lucide-react'
 import { timesheetAPI, projectAPI, settingsAPI, taskAPI, leaveAPI, calendarAPI } from '@/services/endpoints'
@@ -578,14 +577,6 @@ export default function TimesheetEntryPage() {
         return (Number(total) || 0).toFixed(2) + 'h'
     }
 
-    const calculateDayTotal = (dayIndex) => {
-        return rows.reduce((acc, row) => {
-            const time = row.dayHours[dayIndex]
-            if (!time) return acc;
-            const [h, m] = time.split(':').map(Number)
-            return acc + h + (m / 60)
-        }, 0)
-    }
 
     const totalWeekHours = useMemo(() => {
         return rows.reduce((acc, row) => acc + calculateRowTotal(row), 0)
