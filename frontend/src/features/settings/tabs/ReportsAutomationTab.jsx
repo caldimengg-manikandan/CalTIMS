@@ -280,30 +280,61 @@ export default function ReportsAutomationTab() {
     const qc = useQueryClient()
     const [formOpen, setFormOpen] = useState(false)
     const [editTarget, setEditTarget] = useState(null)
-    const [historyTarget, setHistoryTarget] = useState(null)   // { id, name }
+    const [historyTarget, setHistoryTarget] = useState(null)
+    const [globalSettings, setGlobalSettings] = useState({
+        defaultFormat: 'PDF',
+        autoSchedule: false,
+        frequency: 'Weekly'
+    })
+
+    const { data: settingsData } = useQuery({
+        queryKey: ['settings'],
+        queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
+    })
+
+    useEffect(() => {
+        if (settingsData?.report) {
+            setGlobalSettings({
+                defaultFormat: settingsData.report.defaultFormat || 'PDF',
+                autoSchedule: !!settingsData.report.autoSchedule,
+                frequency: settingsData.report.frequency || 'Weekly'
+            })
+        }
+    }, [settingsData])
 
     const { data: schedules = [], isLoading } = useQuery({
         queryKey: ['report-schedules'],
         queryFn: () => reportSchedulesAPI.getAll().then(r => r.data.data),
     })
+
     const { data: employees } = useQuery({
         queryKey: ['settings', 'employees', ''],
         queryFn: () => settingsAPI.getPickerEmployees('').then(r => r.data.data),
     })
+
     const { data: allProjects } = useQuery({
         queryKey: ['projects', 'all-minimal'],
         queryFn: () => projectAPI.getAll({ limit: 200 }).then(r => r.data.data),
     })
 
+    const globalSaveMutation = useMutation({
+        mutationFn: (report) => settingsAPI.updateSettings({ report }),
+        onSuccess: () => {
+            toast.success('Global report settings saved!')
+            qc.invalidateQueries(['settings'])
+        },
+        onError: e => toast.error(e.response?.data?.message || 'Save failed'),
+    })
+
     const deleteMutation = useMutation({
         mutationFn: (id) => reportSchedulesAPI.remove(id),
-        onSuccess: () => { toast.success('Schedule deleted — auto-send stopped.'); qc.invalidateQueries(['report-schedules']) },
+        onSuccess: () => { toast.success('Schedule deleted.'); qc.invalidateQueries(['report-schedules']) },
         onError: e => toast.error(e.response?.data?.message || 'Delete failed'),
     })
 
     const toggleActiveMutation = useMutation({
         mutationFn: ({ id, isActive }) => reportSchedulesAPI.update(id, { isActive }),
-        onSuccess: (_, vars) => { toast.success(vars.isActive ? 'Schedule activated' : 'Schedule paused'); qc.invalidateQueries(['report-schedules']) },
+        onSuccess: (_, vars) => { toast.success(vars.isActive ? 'Activated' : 'Paused'); qc.invalidateQueries(['report-schedules']) },
         onError: e => toast.error(e.response?.data?.message || 'Update failed'),
     })
 
@@ -316,121 +347,137 @@ export default function ReportsAutomationTab() {
     const openCreate = () => { setEditTarget(null); setFormOpen(true) }
     const openEdit = (s) => { setEditTarget(s); setFormOpen(true) }
 
+    const updGlobal = (k, v) => {
+        const next = { ...globalSettings, [k]: v }
+        setGlobalSettings(next)
+        globalSaveMutation.mutate(next)
+    }
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-8 pb-10">
             {/* Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-6">
                 <div>
-                    <h2 className="text-lg font-bold text-slate-800 dark:text-white">Reports & Automation</h2>
-                    <p className="text-sm text-slate-400">Configure automated report generation and delivery</p>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Intelligence & Reporting</h2>
+                    <p className="text-sm text-slate-500 font-medium">Configure institutional data delivery and automated indexing</p>
                 </div>
                 <button onClick={openCreate}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold shadow-md shadow-primary/20 hover:bg-primary/90 transition-all">
-                    <Plus size={15} /> New Schedule
+                    className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">
+                    <Plus size={16} /> New Schedule
                 </button>
             </div>
 
-            {/* Schedule List */}
-            {isLoading ? (
-                <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-            ) : !schedules.length ? (
-                <div className="py-20 text-center border-2 border-dashed border-slate-200 dark:border-white/10 rounded-2xl">
-                    <Mail size={36} className="text-slate-300 mx-auto mb-3" />
-                    <p className="font-semibold text-slate-500">No report schedules yet</p>
-                    <p className="text-sm text-slate-400 mt-1">Create a schedule and emails will send automatically</p>
-                    <button onClick={openCreate} className="mt-4 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-bold shadow-md shadow-primary/20 mx-auto hover:bg-primary/90 transition-all">
-                        <Plus size={14} /> Create First Schedule
-                    </button>
-                </div>
-            ) : (
-                <div className="space-y-3">
-                    {schedules.map(s => {
-                        const c = STATUS_COLORS[s.reportType] || STATUS_COLORS.all
-                        const recipientNames = (s.recipientIds || []).map(r => r.name || r).slice(0, 3).join(', ')
-                        const moreCount = (s.recipientIds || []).length - 3
-                        return (
-                            <div key={s._id} className={`bg-white dark:bg-slate-900 rounded-2xl border shadow-sm overflow-hidden transition-all ${s.isActive ? 'border-slate-100 dark:border-white/10' : 'border-slate-200 dark:border-white/5 opacity-70'}`}>
-                                <div className="flex flex-wrap items-center gap-4 p-4">
-                                    {/* Status indicator */}
-                                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${s.isActive ? c.dot : 'bg-slate-300'}`} />
-
-                                    {/* Main info */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                                            <p className="font-bold text-slate-800 dark:text-white text-sm">{s.name}</p>
-                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${c.badge}`}>
-                                                {s.reportType}
-                                            </span>
-                                            {!s.isActive && (
-                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-white/10 text-slate-500">
-                                                    Paused
-                                                </span>
-                                            )}
-                                        </div>
-                                        <p className="text-xs text-slate-400">
-                                            <span className="capitalize">{s.frequency}</span>
-                                            {' at '}<strong className="text-slate-600 dark:text-slate-300">{s.scheduledTime || '09:00'}</strong>
-                                            {' · '}{recipientNames || 'No recipients'}
-                                            {moreCount > 0 && ` +${moreCount} more`}
-                                            {s.lastSentAt && (
-                                                <span className="ml-2 text-slate-300">
-                                                    · Last sent {new Date(s.lastSentAt).toLocaleDateString('en-IN')}
-                                                </span>
-                                            )}
-                                        </p>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                        {/* Toggle active */}
-                                        <button
-                                            onClick={() => toggleActiveMutation.mutate({ id: s._id, isActive: !s.isActive })}
-                                            title={s.isActive ? 'Pause' : 'Activate'}
-                                            className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${s.isActive ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${s.isActive ? 'translate-x-5' : 'translate-x-0'}`} />
+            {/* Global Defaults */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                    <SectionCard title="Report Defaults" subtitle="Standardized format for all generated outputs" icon={Settings2}>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Standard Format</label>
+                                <div className="flex gap-2">
+                                    {['PDF', 'Excel', 'CSV'].map(fmt => (
+                                        <button key={fmt} onClick={() => updGlobal('defaultFormat', fmt)}
+                                            className={`flex-1 h-11 rounded-xl border text-xs font-black uppercase tracking-widest transition-all ${globalSettings.defaultFormat === fmt ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : 'border-slate-100 dark:border-white/5 text-slate-400 hover:border-slate-200'}`}>
+                                            {fmt}
                                         </button>
-
-                                        <button onClick={() => setHistoryTarget({ id: s._id, name: s.name })} title="View History"
-                                            className="p-2 rounded-xl text-slate-400 hover:text-primary hover:bg-primary/10 transition-all">
-                                            <Clock size={15} />
-                                        </button>
-                                        <button onClick={() => openEdit(s)} title="Edit"
-                                            className="p-2 rounded-xl text-slate-400 hover:text-primary hover:bg-primary/10 transition-all">
-                                            <Settings2 size={15} />
-                                        </button>
-                                        <button onClick={() => { if (window.confirm(`Delete "${s.name}"? Auto-send will stop.`)) deleteMutation.mutate(s._id) }}
-                                            title="Delete" className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all">
-                                            <X size={15} />
-                                        </button>
-                                        <button onClick={() => sendNowMutation.mutate(s._id)} disabled={sendNowMutation.isPending} title="Send Now"
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold transition-all disabled:opacity-50">
-                                            {sendNowMutation.isPending ? <Spinner size="sm" /> : <Send size={12} />} Send
-                                        </button>
-                                    </div>
+                                    ))}
                                 </div>
                             </div>
-                        )
-                    })}
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Global Auto-Send</label>
+                                <button onClick={() => updGlobal('autoSchedule', !globalSettings.autoSchedule)}
+                                    className={`w-full h-11 px-4 rounded-xl border flex items-center justify-between transition-all ${globalSettings.autoSchedule ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black' : 'border-slate-100 dark:border-white/5 text-slate-400 font-bold'}`}>
+                                    <span className="text-[10px] uppercase tracking-widest">{globalSettings.autoSchedule ? 'GLOBAL ACTIVE' : 'GLOBAL PAUSED'}</span>
+                                    <div className={`w-2 h-2 rounded-full ${globalSettings.autoSchedule ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                                </button>
+                            </div>
+                        </div>
+                    </SectionCard>
                 </div>
-            )}
+
+                <div className="p-6 rounded-[2rem] bg-slate-900 border border-white/5 shadow-2xl flex flex-col justify-center">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400">
+                            <Mail size={20} />
+                        </div>
+                        <p className="text-xs font-black uppercase tracking-widest text-white">System Status</p>
+                    </div>
+                    <p className="text-[32px] font-black text-white leading-tight tracking-tighter">
+                        {schedules.filter(s => s.isActive).length} <span className="text-indigo-400 text-sm align-middle ml-1">Active Pipelines</span>
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-medium mt-2">Currently delivering scheduled intelligence to {schedules.reduce((acc, s) => acc + (s.recipientIds?.length || 0), 0)} stakeholders.</p>
+                </div>
+            </div>
+
+            {/* Schedule List */}
+            <SectionCard title="Automation Pipelines" subtitle="Granular delivery schedules and specialized report triggers" icon={Clock}>
+                {isLoading ? (
+                    <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+                ) : !schedules.length ? (
+                    <div className="py-24 text-center">
+                        <div className="w-16 h-16 rounded-3xl bg-slate-50 dark:bg-white/5 flex items-center justify-center mx-auto mb-4 text-slate-300">
+                            <Plus size={32} />
+                        </div>
+                        <p className="font-black text-slate-400 uppercase tracking-widest text-xs">No Pipelines Configured</p>
+                        <p className="text-sm text-slate-500 mt-2 font-medium">Create a schedule to automate your institutional reporting.</p>
+                        <button onClick={openCreate} className="mt-6 px-6 py-3 rounded-2xl bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all">
+                            Initialize Pipeline
+                        </button>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {schedules.map(s => {
+                            const c = STATUS_COLORS[s.reportType] || STATUS_COLORS.all
+                            return (
+                                <div key={s._id} className={`group relative p-1 rounded-[1.5rem] bg-gradient-to-br transition-all ${s.isActive ? 'from-indigo-500/20 to-transparent border border-white/10' : 'from-slate-200/50 to-transparent grayscale'}`}>
+                                    <div className="bg-white dark:bg-slate-900 p-5 rounded-[1.25rem] border border-slate-100 dark:border-white/5 flex flex-wrap items-center gap-6">
+                                        {/* Status Dot */}
+                                        <div className={`w-3 h-3 rounded-full ${s.isActive ? c.dot : 'bg-slate-300'}`} />
+
+                                        {/* Info */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-3 mb-1.5">
+                                                <p className="text-sm font-black text-slate-800 dark:text-white tracking-tight">{s.name}</p>
+                                                <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border ${c.badge} border-current opacity-70`}>
+                                                    {s.reportType}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-4 text-[10px] font-bold text-slate-400">
+                                                <span className="flex items-center gap-1.5 capitalize"><Clock size={12} className="text-indigo-500" /> {s.frequency} @ {s.scheduledTime}</span>
+                                                <span className="flex items-center gap-1.5"><Mail size={12} className="text-indigo-500" /> {s.recipientIds?.length || 0} Recipients</span>
+                                                {s.lastSentAt && <span>Sent: {new Date(s.lastSentAt).toLocaleDateString('en-IN')}</span>}
+                                            </div>
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => sendNowMutation.mutate(s._id)} disabled={sendNowMutation.isPending}
+                                                className="h-10 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2">
+                                                {sendNowMutation.isPending ? <Spinner size="sm" color="white" /> : <Send size={14} />} Send Now
+                                            </button>
+                                            <div className="flex items-center gap-1 bg-slate-50 dark:bg-white/5 p-1 rounded-xl">
+                                                <button onClick={() => setHistoryTarget({ id: s._id, name: s.name })} className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-white transition-all"><Clock size={16} /></button>
+                                                <button onClick={() => openEdit(s)} className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-white transition-all"><Settings2 size={16} /></button>
+                                                <button onClick={() => { if (confirm(`Purge "${s.name}"?`)) deleteMutation.mutate(s._id) }} className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white transition-all"><X size={16} /></button>
+                                            </div>
+                                            <button onClick={() => toggleActiveMutation.mutate({ id: s._id, isActive: !s.isActive })}
+                                                className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${s.isActive ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                                                <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${s.isActive ? 'translate-x-5' : 'translate-x-0'}`} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
+            </SectionCard>
 
             {/* Form Modal */}
-            <ScheduleFormModal
-                open={formOpen}
-                onClose={() => { setFormOpen(false); setEditTarget(null) }}
-                initial={editTarget}
-                employees={employees}
-                allProjects={allProjects}
-            />
+            <ScheduleFormModal open={formOpen} onClose={() => { setFormOpen(false); setEditTarget(null) }} initial={editTarget} employees={employees} allProjects={allProjects} />
 
             {/* History Modal */}
-            {historyTarget && (
-                <HistoryModal
-                    scheduleId={historyTarget.id}
-                    scheduleName={historyTarget.name}
-                    onClose={() => setHistoryTarget(null)}
-                />
-            )}
+            {historyTarget && <HistoryModal scheduleId={historyTarget.id} scheduleName={historyTarget.name} onClose={() => setHistoryTarget(null)} />}
         </div>
     )
 }

@@ -3,9 +3,62 @@ import { Sun, Moon, Monitor, Palette, Check } from 'lucide-react'
 import { useThemeStore, ACCENT_PRESETS } from '@/store/themeStore'
 import { SectionCard } from '../components/SharedUI'
 
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { settingsAPI } from '@/services/endpoints'
+import Spinner from '@/components/ui/Spinner'
+import toast from 'react-hot-toast'
+import { Upload, Image as ImageIcon, Save } from 'lucide-react'
+
 export default function BrandingTab() {
+    const qc = useQueryClient()
     const { mode, accentPreset, customColor, setMode, setAccentPreset, setCustomColor } = useThemeStore()
     const colorInputRef = useRef(null)
+    const logoInputRef = useRef(null)
+
+    const [branding, setBranding] = useState({
+        organizationName: 'CALTIMS',
+        tagline: 'Time Information Management System',
+        logoUrl: '',
+        faviconUrl: '',
+        primaryColor: '#4f46e5',
+        secondaryColor: '#6366f1'
+    })
+
+    const { data, isLoading } = useQuery({
+        queryKey: ['settings'],
+        queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
+    })
+
+    useEffect(() => {
+        if (data?.branding) {
+            setBranding({
+                organizationName: data.branding.organizationName || 'CALTIMS',
+                tagline: data.branding.tagline || 'Time Information Management System',
+                logoUrl: data.branding.logoUrl || '',
+                faviconUrl: data.branding.faviconUrl || '',
+                primaryColor: data.branding.primaryColor || '#4f46e5',
+                secondaryColor: data.branding.secondaryColor || '#6366f1'
+            })
+            // Sync with local theme store if needed
+            if (data.branding.primaryColor) setCustomColor(data.branding.primaryColor)
+        }
+    }, [data])
+
+    const saveMutation = useMutation({
+        mutationFn: () => settingsAPI.updateSettings({
+            branding: {
+                ...branding,
+                primaryColor: customColor || branding.primaryColor
+            }
+        }),
+        onSuccess: () => {
+            toast.success('Branding updated!')
+            qc.invalidateQueries(['settings'])
+        },
+        onError: e => toast.error(e.response?.data?.message || 'Save failed'),
+    })
+
+    const upd = (k, v) => setBranding(f => ({ ...f, [k]: v }))
 
     const modes = [
         { id: 'light', label: 'Light', Icon: Sun },
@@ -13,114 +66,158 @@ export default function BrandingTab() {
         { id: 'system', label: 'System', Icon: Monitor },
     ]
 
+    if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-8 pb-10">
             <div>
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white">Branding & Appearance</h2>
-                <p className="text-sm text-slate-400">Customize the look and feel of the app. Changes apply instantly.</p>
+                <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Institutional Branding</h2>
+                <p className="text-sm text-slate-500 font-medium">Customize your enterprise identity and global interface</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Mode */}
-                <SectionCard title="Display Mode" subtitle="Light, Dark, or follow system preference" icon={Sun}>
-                    <div className="grid grid-cols-3 gap-3">
-                        {modes.map(({ id, label, Icon }) => (
-                            <button
-                                key={id}
-                                onClick={() => setMode(id)}
-                                className={`flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-all text-sm font-semibold ${mode === id
-                                    ? 'border-primary bg-primary/10 text-primary'
-                                    : 'border-slate-200 dark:border-white/10 text-slate-500 hover:border-primary/40 hover:bg-primary/5'
-                                    }`}
-                            >
-                                <Icon size={22} />
-                                {label}
-                                {mode === id && <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Active</span>}
-                            </button>
-                        ))}
-                    </div>
-                </SectionCard>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Visual Identity */}
+                <div className="lg:col-span-2 space-y-8">
+                    <SectionCard title="Identity" subtitle="Core brand assets and naming" icon={ImageIcon}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Organization Name</label>
+                                    <input
+                                        className="input w-full h-11 text-sm font-bold"
+                                        value={branding.organizationName}
+                                        onChange={e => upd('organizationName', e.target.value)}
+                                        placeholder="CALTIMS"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Corporate Tagline</label>
+                                    <input
+                                        className="input w-full h-11 text-sm font-bold"
+                                        value={branding.tagline}
+                                        onChange={e => upd('tagline', e.target.value)}
+                                        placeholder="Time Information Management System"
+                                    />
+                                </div>
+                            </div>
 
-                {/* Accent Color */}
-                <SectionCard title="Accent Color" subtitle="Applied to buttons, links, and active states" icon={Palette}>
-                    <div className="grid grid-cols-6 gap-3 mb-4">
-                        {Object.entries(ACCENT_PRESETS).map(([key, preset]) => (
-                            <button
-                                key={key}
-                                title={preset.name}
-                                onClick={() => setAccentPreset(key)}
-                                style={{ backgroundColor: preset.primary }}
-                                className={`w-full aspect-square rounded-xl transition-all hover:scale-110 ${accentPreset === key && !customColor
-                                    ? 'ring-4 ring-offset-2 ring-current shadow-lg scale-110'
-                                    : ''
-                                    }`}
-                            >
-                                {accentPreset === key && !customColor && (
-                                    <Check size={14} className="text-white mx-auto" />
+                            <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-3xl bg-slate-50/50 dark:bg-white/5">
+                                {branding.logoUrl ? (
+                                    <img src={branding.logoUrl} alt="Logo" className="h-12 w-auto mb-4 object-contain" />
+                                ) : (
+                                    <div className="w-12 h-12 rounded-2xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center mb-4 text-slate-400">
+                                        <Upload size={20} />
+                                    </div>
                                 )}
-                            </button>
-                        ))}
-                    </div>
+                                <button
+                                    onClick={() => logoInputRef.current?.click()}
+                                    className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 hover:text-indigo-700"
+                                >
+                                    Upload Corporate Logo
+                                </button>
+                                <input ref={logoInputRef} type="file" className="hidden" accept="image/*" />
+                                <p className="text-[10px] text-slate-400 mt-2">PNG or SVG, max 500KB</p>
+                            </div>
+                        </div>
+                    </SectionCard>
 
-                    {/* Custom color picker */}
-                    <div className="border-t border-slate-100 dark:border-white/10 pt-4">
-                        <p className="text-xs text-slate-500 font-semibold mb-2">Custom Color</p>
-                        <div className="flex items-center gap-3">
-                            <div
-                                className="w-10 h-10 rounded-xl border-2 border-slate-200 dark:border-white/20 cursor-pointer flex-shrink-0 overflow-hidden"
-                                style={{ backgroundColor: customColor || ACCENT_PRESETS[accentPreset]?.primary }}
-                                onClick={() => colorInputRef.current?.click()}
-                            >
+                    <SectionCard title="Display Mode" subtitle="Client-side interface preference" icon={Sun}>
+                        <div className="grid grid-cols-3 gap-4">
+                            {modes.map(({ id, label, Icon }) => (
+                                <button
+                                    key={id}
+                                    onClick={() => setMode(id)}
+                                    className={`relative flex flex-col items-start p-4 rounded-2xl border-2 transition-all group ${mode === id
+                                        ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 shadow-sm'
+                                        : 'border-slate-100 dark:border-white/5 text-slate-500 hover:border-slate-300'
+                                        }`}
+                                >
+                                    <Icon size={18} className={`mb-3 transition-transform group-hover:scale-110 ${mode === id ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+                                    <p className="text-xs font-black tracking-tight">{label}</p>
+                                    {mode === id && <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />}
+                                </button>
+                            ))}
+                        </div>
+                    </SectionCard>
+                </div>
+
+                {/* Color System */}
+                <div className="space-y-8">
+                    <SectionCard title="Atmosphere" subtitle="Applied accent color system" icon={Palette}>
+                        <div className="grid grid-cols-5 gap-2.5 mb-6">
+                            {Object.entries(ACCENT_PRESETS).map(([key, preset]) => (
+                                <button
+                                    key={key}
+                                    onClick={() => {
+                                        setAccentPreset(key)
+                                        setCustomColor(null)
+                                    }}
+                                    style={{ backgroundColor: preset.primary }}
+                                    className={`w-full aspect-square rounded-full transition-all hover:scale-110 active:scale-95 ${accentPreset === key && !customColor
+                                        ? 'ring-4 ring-offset-4 ring-indigo-600 dark:ring-indigo-400 scale-90'
+                                        : 'opacity-80 hover:opacity-100'
+                                        }`}
+                                />
+                            ))}
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Custom Primary Hex</label>
+                            <div className="flex items-center gap-3">
+                                <div
+                                    className="w-11 h-11 rounded-xl border-2 border-slate-200 dark:border-white/20 cursor-pointer overflow-hidden shadow-inner flex-shrink-0"
+                                    style={{ backgroundColor: customColor || ACCENT_PRESETS[accentPreset]?.primary }}
+                                    onClick={() => colorInputRef.current?.click()}
+                                >
+                                    <input
+                                        ref={colorInputRef}
+                                        type="color"
+                                        className="opacity-0 w-full h-full cursor-pointer"
+                                        value={customColor || ACCENT_PRESETS[accentPreset]?.primary}
+                                        onChange={e => setCustomColor(e.target.value)}
+                                    />
+                                </div>
                                 <input
-                                    ref={colorInputRef}
-                                    type="color"
-                                    className="opacity-0 w-full h-full cursor-pointer"
-                                    value={customColor || ACCENT_PRESETS[accentPreset]?.primary}
-                                    onChange={e => setCustomColor(e.target.value)}
+                                    type="text"
+                                    className="input flex-1 h-11 text-sm font-mono font-bold"
+                                    placeholder="#4F46E5"
+                                    value={customColor || ''}
+                                    onChange={e => {
+                                        const v = e.target.value
+                                        if (/^#[0-9A-Fa-f]{6}$/.test(v)) setCustomColor(v)
+                                        else if (!v) setAccentPreset(accentPreset)
+                                    }}
                                 />
                             </div>
-                            <input
-                                type="text"
-                                className="input flex-1 text-sm font-mono"
-                                placeholder="#6366f1"
-                                value={customColor || ''}
-                                onChange={e => {
-                                    const v = e.target.value
-                                    if (/^#[0-9A-Fa-f]{6}$/.test(v)) setCustomColor(v)
-                                    else if (!v) setAccentPreset(accentPreset)
-                                }}
-                            />
-                            {customColor && (
-                                <button
-                                    onClick={() => setAccentPreset(accentPreset)}
-                                    className="text-xs text-slate-500 hover:text-rose-500 transition-colors"
-                                >
-                                    Reset
-                                </button>
-                            )}
                         </div>
-                    </div>
 
-                    {/* Live preview */}
-                    <div className="mt-4 border-t border-slate-100 dark:border-white/10 pt-4">
-                        <p className="text-xs text-slate-500 font-semibold mb-2">Live Preview</p>
-                        <div className="flex flex-wrap gap-2 items-center">
-                            <button className="px-4 py-2 rounded-lg text-sm font-bold text-white transition-all" style={{ backgroundColor: customColor || ACCENT_PRESETS[accentPreset]?.primary }}>
-                                Primary Button
-                            </button>
-                            <span className="text-sm font-semibold" style={{ color: customColor || ACCENT_PRESETS[accentPreset]?.primary }}>
-                                Accent Text Link
-                            </span>
-                            <span className="px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: (customColor || ACCENT_PRESETS[accentPreset]?.primary) + '20', color: customColor || ACCENT_PRESETS[accentPreset]?.primary }}>
-                                Badge
-                            </span>
+                        {/* Live Preview Sample */}
+                        <div className="mt-8 p-5 rounded-3xl bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-300 mb-4">Live Preview</p>
+                            <div className="space-y-4">
+                                <div className="h-4 w-2/3 rounded-full bg-slate-100 dark:bg-slate-800" />
+                                <div className="flex items-center gap-3">
+                                    <div className="h-8 px-4 rounded-xl flex items-center justify-center text-[10px] font-black text-white" style={{ backgroundColor: customColor || ACCENT_PRESETS[accentPreset]?.primary }}>
+                                        ACTION BTN
+                                    </div>
+                                    <div className="h-8 w-8 rounded-xl opacity-20" style={{ backgroundColor: customColor || ACCENT_PRESETS[accentPreset]?.primary }} />
+                                    <div className="h-2 w-12 rounded-full" style={{ backgroundColor: customColor || ACCENT_PRESETS[accentPreset]?.primary }} />
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </SectionCard>
+                    </SectionCard>
+                </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/30 text-sm text-blue-800 dark:text-blue-300">
-                <strong>✨ Live:</strong> Theme changes apply instantly and are saved to your browser. They persist across page refreshes and sessions.
+            <div className="sticky bottom-4 z-20 flex justify-end">
+                <button
+                    onClick={() => saveMutation.mutate()}
+                    disabled={saveMutation.isPending}
+                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest shadow-xl shadow-indigo-600/25 transition-all active:scale-95 disabled:opacity-70"
+                >
+                    {saveMutation.isPending ? <Spinner size="sm" color="white" /> : <Save size={18} />}
+                    Sync Identity
+                </button>
             </div>
         </div>
     )

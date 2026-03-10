@@ -8,30 +8,41 @@ import { SectionCard } from '../components/SharedUI'
 
 export default function LeavePolicyTab() {
     const qc = useQueryClient()
+    const [leaveTypes, setLeaveTypes] = useState([])
     const [policy, setPolicy] = useState({
-        allowNegativeBalance: false,
-        requireReason: true,
-        autoApproveDays: 0,
-        maxConsecutiveDays: 14,
-        noticePeriodDays: 7
+        annualLeaveDays: 20,
+        sickLeaveDays: 10,
+        maxCarryForward: 5,
+        approvalWorkflow: 'Employee -> Manager'
     })
 
     const { data, isLoading } = useQuery({
-        queryKey: ['settings', 'overall'],
+        queryKey: ['settings'],
         queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
     })
 
     useEffect(() => {
         if (data?.leavePolicy) {
-            setPolicy(data.leavePolicy)
+            setLeaveTypes(data.leavePolicy.leaveTypes || [])
+            setPolicy({
+                annualLeaveDays: data.leavePolicy.annualLeaveDays || 20,
+                sickLeaveDays: data.leavePolicy.sickLeaveDays || 10,
+                maxCarryForward: data.leavePolicy.maxCarryForward || 5,
+                approvalWorkflow: data.leavePolicy.approvalWorkflow || 'Employee -> Manager'
+            })
         }
     }, [data])
 
     const saveMutation = useMutation({
-        mutationFn: () => settingsAPI.updateSettings({ leavePolicy: policy }),
+        mutationFn: () => settingsAPI.updateSettings({
+            leavePolicy: {
+                leaveTypes,
+                ...policy
+            }
+        }),
         onSuccess: () => {
             toast.success('Leave Policy saved!')
-            qc.invalidateQueries(['settings', 'overall'])
+            qc.invalidateQueries(['settings'])
         },
         onError: e => toast.error(e.response?.data?.message || 'Save failed'),
     })
@@ -41,94 +52,123 @@ export default function LeavePolicyTab() {
     if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8 pb-10">
             <div>
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white">Leave Policy</h2>
-                <p className="text-sm text-slate-400">Configure global rules for employee time-off requests</p>
+                <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Leave Policy</h2>
+                <p className="text-sm text-slate-500 font-medium">Configure global rules for employee time-off requests</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <SectionCard title="Request Rules" subtitle="Constraints on when and how leaves are requested" icon={CalendarOff}>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="label mb-1.5 block">Notice Period</label>
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="number"
-                                    min="0"
-                                    className="input flex-1 text-sm font-bold"
-                                    value={policy.noticePeriodDays}
-                                    onChange={e => upd('noticePeriodDays', Number(e.target.value))}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Leave Catalog */}
+                <div className="lg:col-span-2 space-y-8">
+                    <SectionCard title="Leave Types" subtitle="Manage available categories for requests" icon={Briefcase}>
+                        <div className="flex flex-wrap gap-2.5 mb-6">
+                            {leaveTypes.map((cat, i) => (
+                                <Chip
+                                    key={i}
+                                    label={cat}
+                                    onRemove={() => setLeaveTypes(leaveTypes.filter((_, idx) => idx !== i))}
                                 />
-                                <span className="text-xs text-slate-400 font-medium">Days prior</span>
-                            </div>
+                            ))}
                         </div>
-                        <div>
-                            <label className="label mb-1.5 block">Max Consecutive Days</label>
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="number"
-                                    min="1"
-                                    className="input flex-1 text-sm font-bold"
-                                    value={policy.maxConsecutiveDays}
-                                    onChange={e => upd('maxConsecutiveDays', Number(e.target.value))}
-                                />
-                                <span className="text-xs text-slate-400 font-medium">Days</span>
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-black border border-slate-100 dark:border-white/10 mt-4">
-                            <div>
-                                <p className="text-sm font-semibold text-slate-700 dark:text-white">Require Reason</p>
-                                <p className="text-[10px] text-slate-400">Enforce comments on leave requests</p>
-                            </div>
-                            <button onClick={() => upd('requireReason', !policy.requireReason)}
-                                className={`relative w-11 h-6 rounded-full transition-colors ${policy.requireReason ? 'bg-primary' : 'bg-slate-300 dark:bg-white/20'}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${policy.requireReason ? 'translate-x-5' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-                    </div>
-                </SectionCard>
+                        <AddChipInput
+                            placeholder="e.g. Bereavement, Jury Duty..."
+                            onAdd={(val) => {
+                                if (!leaveTypes.includes(val)) setLeaveTypes([...leaveTypes, val])
+                                else toast.error('Category already exists')
+                            }}
+                        />
+                    </SectionCard>
 
-                <SectionCard title="Approval & Balance" subtitle="Automations and deduction rules" icon={Settings2}>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="label mb-1.5 block">Auto-Approve Requests</label>
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="number"
-                                    min="0"
-                                    className="input flex-1 text-sm font-bold"
-                                    value={policy.autoApproveDays}
-                                    onChange={e => upd('autoApproveDays', Number(e.target.value))}
-                                    placeholder="0 to disable"
-                                />
-                                <span className="text-xs text-slate-400 font-medium">Days or less</span>
-                            </div>
-                            <p className="text-[10px] text-slate-400 mt-1 italic">Set to 0 to require manager approval for all leaves.</p>
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-black border border-slate-100 dark:border-white/10 mt-6">
+                    <SectionCard title="Entitlement Workflow" subtitle="Governance for leave processing" icon={Settings2}>
+                        <div className="space-y-6">
                             <div>
-                                <p className="text-sm font-semibold text-rose-600 dark:text-rose-400">Negative Balances</p>
-                                <p className="text-[10px] text-slate-400">Allow users to take unearned leave</p>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 block">Approval Routing</label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {['Employee -> Manager', 'Employee -> Manager -> HR'].map(flow => (
+                                        <button
+                                            key={flow}
+                                            onClick={() => upd('approvalWorkflow', flow)}
+                                            className={`p-4 rounded-2xl border-2 text-left transition-all ${policy.approvalWorkflow === flow
+                                                ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 shadow-sm'
+                                                : 'border-slate-100 dark:border-white/5 text-slate-500 hover:border-slate-300'
+                                                }`}
+                                        >
+                                            <p className="text-xs font-black tracking-tight">{flow}</p>
+                                            <p className="text-[10px] text-slate-400 mt-1">
+                                                {flow.includes('HR') ? 'Three-tier oversight' : 'Direct line manager approval'}
+                                            </p>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <button onClick={() => upd('allowNegativeBalance', !policy.allowNegativeBalance)}
-                                className={`relative w-11 h-6 rounded-full transition-colors ${policy.allowNegativeBalance ? 'bg-rose-500' : 'bg-slate-300 dark:bg-white/20'}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${policy.allowNegativeBalance ? 'translate-x-5' : 'translate-x-0'}`} />
-                            </button>
                         </div>
-                    </div>
-                </SectionCard>
+                    </SectionCard>
+                </div>
+
+                {/* Allowances & Balance */}
+                <div className="space-y-8">
+                    <SectionCard title="Annual Allowances" subtitle="Standard yearly allocations" icon={Save}>
+                        <div className="space-y-5">
+                            <div>
+                                <div className="flex justify-between mb-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Annual Leave</label>
+                                    <span className="text-[11px] font-black text-indigo-600">{policy.annualLeaveDays} Days</span>
+                                </div>
+                                <input
+                                    type="range" min={0} max={40} step={1}
+                                    value={policy.annualLeaveDays}
+                                    onChange={e => upd('annualLeaveDays', parseInt(e.target.value))}
+                                    className="w-full accent-indigo-600"
+                                />
+                            </div>
+                            <div>
+                                <div className="flex justify-between mb-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sick Leave</label>
+                                    <span className="text-[11px] font-black text-indigo-600">{policy.sickLeaveDays} Days</span>
+                                </div>
+                                <input
+                                    type="range" min={0} max={30} step={1}
+                                    value={policy.sickLeaveDays}
+                                    onChange={e => upd('sickLeaveDays', parseInt(e.target.value))}
+                                    className="w-full accent-indigo-600"
+                                />
+                            </div>
+                        </div>
+                    </SectionCard>
+
+                    <SectionCard title="Carry Forward" subtitle="Year-end balance rules" icon={CalendarOff}>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Max Carryover Days</label>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="365"
+                                        className="input h-11 flex-1 text-sm font-bold"
+                                        value={policy.maxCarryForward}
+                                        onChange={e => upd('maxCarryForward', Number(e.target.value))}
+                                    />
+                                    <span className="text-xs text-slate-400 font-medium">Days / Year</span>
+                                </div>
+                            </div>
+                            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/10 text-[10px] text-amber-700 dark:text-amber-400 font-medium leading-relaxed">
+                                Balances exceeding this limit will be reset at the start of the next fiscal year.
+                            </div>
+                        </div>
+                    </SectionCard>
+                </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="sticky bottom-4 z-20 flex justify-end">
                 <button
                     onClick={() => saveMutation.mutate()}
                     disabled={saveMutation.isPending}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold shadow-lg shadow-primary/20 transition-all"
+                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest shadow-xl shadow-indigo-600/25 transition-all active:scale-95 disabled:opacity-70"
                 >
-                    {saveMutation.isPending ? <Spinner size="sm" /> : <Save size={16} />}
-                    Save Changes
+                    {saveMutation.isPending ? <Spinner size="sm" color="white" /> : <Save size={18} />}
+                    Update Policy
                 </button>
             </div>
         </div>

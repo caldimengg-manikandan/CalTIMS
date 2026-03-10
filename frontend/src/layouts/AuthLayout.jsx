@@ -1,13 +1,16 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Outlet, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Timer } from 'lucide-react'
 import { useThemeStore } from '@/store/themeStore'
-import { useEffect } from 'react'
+import { PrivacyModal, TermsModal } from '@/features/auth/components/LegalModals'
+import SupportModal from '@/features/auth/components/SupportModal'
+import SupportFloatingButton from '@/components/support/SupportFloatingButton'
 
 export default function AuthLayout() {
     const { isAuthenticated } = useAuthStore()
     const { applyTheme } = useThemeStore()
+    const [legalType, setLegalType] = useState(null) // 'privacy' | 'terms' | 'support'
 
     useEffect(() => {
         // Auth pages (Login, etc.) should stay fixed on their original theme class
@@ -36,7 +39,7 @@ export default function AuthLayout() {
                         <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-black/20">
                             <Timer size={28} className="text-indigo-600" />
                         </div>
-                        <span className="text-2xl font-bold tracking-tight">CALTIMS - TIME INFORMATION MANAGEMENT SYSTEM </span>
+                        <span className="text-2xl font-bold tracking-tight uppercase">CALTIMS - Time Information Management System </span>
                     </div>
 
                     <div className="space-y-8 max-w-lg">
@@ -48,14 +51,21 @@ export default function AuthLayout() {
                     </div>
 
                     <div className="text-white/60 text-sm font-medium flex items-center gap-6">
-                        <span>© 2026 Caldim Engineering Pvt. Ltd.</span>
-                        <div className="flex gap-4">
-                            <a href="#" className="hover:text-white transition-colors">Privacy</a>
-                            <a href="#" className="hover:text-white transition-colors">Terms</a>
+                        <span className="text-[10px] font-bold uppercase tracking-widest whitespace-nowrap">© 2026 Caldim Engineering Pvt. Ltd.</span>
+                        <div className="flex items-center gap-4 text-[10px] uppercase font-black tracking-widest">
+                            <button onClick={() => setLegalType('privacy')} className="hover:text-white transition-colors">Privacy</button>
+                            <span className="opacity-20">|</span>
+                            <button onClick={() => setLegalType('terms')} className="hover:text-white transition-colors">Terms</button>
+                            <span className="opacity-20">|</span>
+                            <button onClick={() => setLegalType('support')} className="hover:text-white transition-colors">Support</button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <PrivacyModal isOpen={legalType === 'privacy'} onClose={() => setLegalType(null)} />
+            <TermsModal isOpen={legalType === 'terms'} onClose={() => setLegalType(null)} />
+            <SupportModal isOpen={legalType === 'support'} onClose={() => setLegalType(null)} />
 
             {/* Right panel — Refined Auth Form Container */}
             <div className="flex-1 flex flex-col">
@@ -71,6 +81,8 @@ export default function AuthLayout() {
                         <Outlet />
                     </div>
                 </div>
+
+                <SupportFloatingButton />
 
                 {/* Footer */}
                 <div className="py-6 text-center text-sm text-slate-500 dark:text-slate-400 font-medium tracking-wide border-t border-slate-100 dark:border-slate-800">
