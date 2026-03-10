@@ -1,25 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { AlertCircle, Filter, Eye, ChevronLeft, ChevronRight, XCircle, Plus, Search } from 'lucide-react';
+import {
+    AlertCircle, Filter, Eye, XCircle, Plus, Search,
+    LifeBuoy, ShieldAlert, Trash2, CheckCircle2, Clock,
+    MoreVertical
+} from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Spinner from '@/components/ui/Spinner';
 import incidentService from '@/services/incidents/incidentService';
+import supportService from '@/services/support/supportService';
 import CreateIncidentModal from '@/components/incidents/CreateIncidentModal';
+import SupportTicketDetail from '@/components/support/SupportTicketDetail';
 import Pagination from '@/components/ui/Pagination';
 import ProGuard from '@/components/ui/ProGuard';
+import { toast } from 'react-hot-toast';
 
 const PRIORITIES = ['All', 'Low', 'Medium', 'High', 'Urgent'];
 const STATUSES = ['All', 'Open', 'In Progress', 'Pending', 'Resolved', 'Closed', 'Withdrawn'];
+const SUPPORT_STATUSES = ['Open', 'In Progress', 'Resolved', 'Closed'];
 
 export default function IncidentList() {
     const { user } = useAuthStore();
     const navigate = useNavigate();
+    const qc = useQueryClient();
     const isAdmin = user?.role === 'admin';
 
+    const [activeTab, setActiveTab] = useState('incidents'); // 'incidents' | 'support'
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
     const [filters, setFilters] = useState({
@@ -28,22 +38,49 @@ export default function IncidentList() {
         search: '',
     });
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [selectedTicket, setSelectedTicket] = useState(null);
 
-    const { data, isLoading } = useQuery({
+    // Queries
+    const incidentsQuery = useQuery({
         queryKey: ['incidents', page, filters],
         queryFn: () => {
             const apiFilters = {};
             if (filters.status !== 'All') apiFilters.status = filters.status;
             if (filters.priority !== 'All') apiFilters.priority = filters.priority;
             if (filters.search) apiFilters.search = filters.search;
-            return incidentService.getIncidents({
-                page,
-                limit,
-                sortBy: 'createdAt',
-                sortOrder: 'desc',
-                ...apiFilters
-            });
+            return incidentService.getIncidents({ page, limit, ...apiFilters });
         },
+        enabled: activeTab === 'incidents'
+    });
+
+    const supportQuery = useQuery({
+        queryKey: ['support-tickets', page, filters],
+        queryFn: () => {
+            const apiFilters = {};
+            if (filters.status !== 'All') apiFilters.status = filters.status;
+            if (filters.search) apiFilters.search = filters.search;
+            return supportService.getTickets({ page, limit, ...apiFilters });
+        },
+        enabled: activeTab === 'support' && isAdmin
+    });
+
+    // Mutations
+    const updateSupportStatus = useMutation({
+        mutationFn: ({ id, status }) => supportService.updateTicketStatus(id, status),
+        onSuccess: () => {
+            toast.success('Ticket status updated');
+            qc.invalidateQueries(['support-tickets']);
+        },
+        onError: (err) => toast.error(err.message)
+    });
+
+    const deleteSupportTicket = useMutation({
+        mutationFn: (id) => supportService.deleteTicket(id),
+        onSuccess: () => {
+            toast.success('Ticket deleted');
+            qc.invalidateQueries(['support-tickets']);
+        },
+        onError: (err) => toast.error(err.message)
     });
 
     const refreshTickets = () => {
@@ -70,173 +107,262 @@ export default function IncidentList() {
         }
     };
 
+    const data = activeTab === 'incidents' ? incidentsQuery.data : supportQuery.data;
+    const isLoading = activeTab === 'incidents' ? incidentsQuery.isLoading : supportQuery.isLoading;
+
+    const listItems = activeTab === 'incidents' ? data?.data || [] : data?.data?.tickets || [];
+
     return (
         <ProGuard
             title="Help & Support Dashboard"
             subtitle="Centralized incident tracking and support tickets are available in the Enterprise Pro tier. Connect with your team efficiently."
             icon={AlertCircle}
         >
-            <div className="space-y-6 max-w-[1600px] mx-auto animate-fade-in p-4 lg:p-6">
-                <PageHeader title={isAdmin ? "Incidents Dashboard" : "My Incidents"}>
+            <div className="space-y-6 max-w-[1600px] mx-auto animate-fade-in p-4 lg:p-6 pb-20">
+                <PageHeader title={isAdmin ? "Help & Support Center" : "My Incidents"}>
                     {!isAdmin && (
                         <button
                             onClick={() => setIsCreateModalOpen(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all active:scale-95"
+                            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
                         >
-                            <Plus size={16} /> Report an Issue
+                            <Plus size={18} /> Report an Issue
                         </button>
                     )}
                 </PageHeader>
 
-                <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-slate-100 dark:border-white p-6">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
-                        <div className="flex items-center gap-2 text-slate-700 dark:text-white font-semibold">
-                            <Filter size={20} className="text-slate-400" />
-                            <h2>Filter Tickets</h2>
-                        </div>
-                        <button
-                            onClick={clearFilters}
-                            className="text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
-                        >
-                            Clear Filters
-                        </button>
-                    </div>
+                {selectedTicket ? (
+                    <SupportTicketDetail
+                        ticket={selectedTicket}
+                        onBack={() => setSelectedTicket(null)}
+                    />
+                ) : (
+                    <>
+                        {/* Admin Tabs */}
+                        {isAdmin && (
+                            <div className="flex gap-2 p-1.5 bg-slate-100 dark:bg-white/5 rounded-2xl w-fit">
+                                <button
+                                    onClick={() => { setActiveTab('incidents'); clearFilters(); }}
+                                    className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'incidents' ? 'bg-white dark:bg-black text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
+                                >
+                                    <ShieldAlert size={16} /> Internal Incidents
+                                </button>
+                                <button
+                                    onClick={() => { setActiveTab('support'); clearFilters(); }}
+                                    className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'support' ? 'bg-white dark:bg-black text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
+                                >
+                                    <LifeBuoy size={16} /> External Support Requests
+                                </button>
+                            </div>
+                        )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Search ID / Title</label>
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                                <input
-                                    type="text"
-                                    placeholder="Search INC-XXXX..."
-                                    value={filters.search}
-                                    onChange={(e) => handleFilterChange('search', e.target.value)}
-                                    className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
-                                />
+                        {/* Filters */}
+                        <div className="bg-white dark:bg-black rounded-3xl shadow-sm border border-slate-100 dark:border-white p-6">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-slate-50 dark:bg-white/5 rounded-xl text-slate-400">
+                                        <Filter size={18} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Filter Pipeline</h2>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Refine results by parameters</p>
+                                    </div>
+                                </div>
+                                <button onClick={clearFilters} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors">
+                                    Reset Filters
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Search ID / Context</label>
+                                    <div className="relative">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold" size={16} />
+                                        <input
+                                            type="text"
+                                            placeholder={activeTab === 'incidents' ? "Search INC-XXXX" : "Search SUP-XXXX, Name or Email"}
+                                            value={filters.search}
+                                            onChange={(e) => handleFilterChange('search', e.target.value)}
+                                            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-2xl pl-12 pr-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Status Protocol</label>
+                                    <select
+                                        value={filters.status}
+                                        onChange={(e) => handleFilterChange('status', e.target.value)}
+                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-2xl px-5 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all appearance-none cursor-pointer"
+                                    >
+                                        {(activeTab === 'incidents' ? STATUSES : ['All', ...SUPPORT_STATUSES]).map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                                {activeTab === 'incidents' && (
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Severity Level</label>
+                                        <select
+                                            value={filters.priority}
+                                            onChange={(e) => handleFilterChange('priority', e.target.value)}
+                                            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-2xl px-5 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all appearance-none cursor-pointer"
+                                        >
+                                            {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
+                                    </div>
+                                )}
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Status</label>
-                            <select
-                                value={filters.status}
-                                onChange={(e) => handleFilterChange('status', e.target.value)}
-                                className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
-                            >
-                                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Priority</label>
-                            <select
-                                value={filters.priority}
-                                onChange={(e) => handleFilterChange('priority', e.target.value)}
-                                className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
-                            >
-                                {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
-                        </div>
-                    </div>
-                </div>
 
-                <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-slate-100 dark:border-white overflow-hidden">
-                    <div className="p-6 border-b border-slate-100 dark:border-white">
-                        <div className="flex items-center gap-2 text-slate-700 dark:text-white font-semibold">
-                            <AlertCircle size={20} className="text-slate-400" />
-                            <h2>Tickets</h2>
-                        </div>
-                    </div>
+                        {/* List */}
+                        <div className="bg-white dark:bg-black rounded-3xl shadow-sm border border-slate-100 dark:border-white overflow-hidden">
+                            <div className="p-6 border-b border-slate-100 dark:border-white flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl text-indigo-600">
+                                        <AlertCircle size={18} />
+                                    </div>
+                                    <h2 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">
+                                        {activeTab === 'incidents' ? 'Active Incidents' : 'External Support Tickets'}
+                                    </h2>
+                                </div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{data?.pagination?.total || 0} TOTAL RECORDS</p>
+                            </div>
 
-                    <div className="table-wrapper max-h-container rounded-none border-0 shadow-none text-sm">
-                        <table className="w-full text-left border-collapse">
-                            <thead className="bg-slate-50/50 dark:bg-black/50">
-                                <tr>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ID</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Title</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Category</th>
-                                    {isAdmin && <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Employee</th>}
-                                    <th className="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Priority</th>
-                                    <th className="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                                    <th className="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                                    <th className="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-white">
-                                {isLoading ? (
-                                    <tr>
-                                        <td colSpan={8} className="py-12"><Spinner className="mx-auto" /></td>
-                                    </tr>
-                                ) : data?.data?.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={8} className="py-20 text-center">
-                                            <XCircle size={40} className="mx-auto text-slate-300 mb-3" />
-                                            <p className="text-slate-500 font-medium">No tickets found</p>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    data?.data?.map((ticket) => (
-                                        <tr key={ticket._id} className="hover:bg-slate-50/50 dark:hover:bg-white dark:hover:text-black transition-colors group cursor-pointer" onClick={() => navigate(`/incidents/${ticket._id}`)}>
-                                            <td className="px-6 py-5 font-semibold text-indigo-600">
-                                                {ticket.incidentId}
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <div className="font-semibold text-slate-700 dark:text-white truncate max-w-[200px]">
-                                                    {ticket.title}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5 text-slate-600 dark:text-slate-300 capitalize">
-                                                {ticket.category}
-                                            </td>
-                                            {isAdmin && (
-                                                <td className="px-6 py-5 text-slate-600 dark:text-slate-300">
-                                                    {ticket.employee?.name}
-                                                </td>
-                                            )}
-                                            <td className="px-6 py-5 text-center">
-                                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${getPriorityColor(ticket.priority)}`}>
-                                                    {ticket.priority}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-5 text-center">
-                                                <StatusBadge status={ticket.status.toLowerCase()} />
-                                            </td>
-                                            <td className="px-6 py-5 text-center text-slate-500 dark:text-slate-400">
-                                                {format(new Date(ticket.createdAt), 'MMM d, yyyy')}
-                                            </td>
-                                            <td className="px-6 py-5 text-center" onClick={(e) => e.stopPropagation()}>
-                                                <button
-                                                    onClick={() => navigate(`/incidents/${ticket._id}`)}
-                                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all"
-                                                    title="View Details"
-                                                >
-                                                    <Eye size={18} />
-                                                </button>
-                                            </td>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-50/50 dark:bg-white/5">
+                                        <tr>
+                                            <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">ID</th>
+                                            <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">{activeTab === 'incidents' ? 'Context' : 'Stakeholder'}</th>
+                                            <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Classification</th>
+                                            {isAdmin && activeTab === 'incidents' && <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Employee</th>}
+                                            {activeTab === 'incidents' && <th className="px-6 py-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Priority</th>}
+                                            <th className="px-6 py-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Network Status</th>
+                                            <th className="px-6 py-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Timestamp</th>
+                                            <th className="px-6 py-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Actions</th>
                                         </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                                        {isLoading ? (
+                                            <tr><td colSpan={8} className="py-20 text-center"><Spinner className="mx-auto" /></td></tr>
+                                        ) : listItems.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={8} className="py-24 text-center">
+                                                    <XCircle size={40} className="mx-auto text-slate-300 mb-4" />
+                                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">No matching records found</p>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            listItems.map((item) => (
+                                                <tr key={item._id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all group">
+                                                    <td className="px-6 py-5">
+                                                        <span className="text-xs font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-lg">
+                                                            {activeTab === 'incidents' ? item.incidentId : item.ticketId}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-5">
+                                                        <div className="max-w-[200px]">
+                                                            <p className="text-sm font-black text-slate-800 dark:text-white truncate">
+                                                                {activeTab === 'incidents' ? item.title : item.name}
+                                                            </p>
+                                                            <p className="text-[10px] font-bold text-slate-400 truncate tracking-tight uppercase">
+                                                                {activeTab === 'incidents' ? item.description : item.email}
+                                                            </p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-5">
+                                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                                            {activeTab === 'incidents' ? item.category : item.issueType}
+                                                        </span>
+                                                    </td>
+                                                    {isAdmin && activeTab === 'incidents' && (
+                                                        <td className="px-6 py-5">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold">
+                                                                    {item.employee?.name?.charAt(0)}
+                                                                </div>
+                                                                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{item.employee?.name}</span>
+                                                            </div>
+                                                        </td>
+                                                    )}
+                                                    {activeTab === 'incidents' && (
+                                                        <td className="px-6 py-5 text-center">
+                                                            <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${getPriorityColor(item.priority)}`}>
+                                                                {item.priority}
+                                                            </span>
+                                                        </td>
+                                                    )}
+                                                    <td className="px-6 py-5 text-center">
+                                                        <StatusBadge status={item.status.toLowerCase()} />
+                                                    </td>
+                                                    <td className="px-6 py-5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                        {format(new Date(item.createdAt), 'MMM d, yyyy')}
+                                                    </td>
+                                                    <td className="px-6 py-5 text-center">
+                                                        {activeTab === 'incidents' ? (
+                                                            <button onClick={() => navigate(`/incidents/${item._id}`)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-all shadow-sm">
+                                                                <Eye size={18} />
+                                                            </button>
+                                                        ) : (
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                <button
+                                                                    onClick={() => setSelectedTicket(item)}
+                                                                    className="p-2 text-indigo-600 hover:bg-white rounded-xl transition-all shadow-sm"
+                                                                    title="Review Ticket"
+                                                                >
+                                                                    <Eye size={18} />
+                                                                </button>
+                                                                <div className="relative group/menu">
+                                                                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-all">
+                                                                        <MoreVertical size={18} />
+                                                                    </button>
+                                                                    <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-900 border border-slate-100 dark:border-white/10 rounded-2xl shadow-2xl opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all z-50 p-2 space-y-1">
+                                                                        <p className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 border-b border-slate-100 dark:border-white/5">Update Status</p>
+                                                                        {SUPPORT_STATUSES.map(s => (
+                                                                            <button
+                                                                                key={s}
+                                                                                onClick={() => updateSupportStatus.mutate({ id: item._id, status: s })}
+                                                                                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${item.status === s ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' : 'hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                                                                            >
+                                                                                <div className={`w-1.5 h-1.5 rounded-full ${s === 'Resolved' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                                                                {s}
+                                                                            </button>
+                                                                        ))}
+                                                                        <button
+                                                                            onClick={() => { if (confirm('Purge support record?')) deleteSupportTicket.mutate(item._id) }}
+                                                                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all flex items-center gap-2 border-t border-slate-100 dark:border-white/5 mt-1"
+                                                                        >
+                                                                            <Trash2 size={14} /> Purge Ticket
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
 
-                    {/* Pagination */}
-                    {!isLoading && data?.data?.length > 0 && (
-                        <Pagination
-                            currentPage={data.pagination.page}
-                            totalPages={data.pagination.totalPages}
-                            totalResults={data.pagination.total}
-                            limit={limit}
-                            onPageChange={setPage}
-                            onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                            {/* Pagination */}
+                            {!isLoading && data?.pagination?.total > 0 && (
+                                <Pagination
+                                    currentPage={data.pagination.page}
+                                    totalPages={data.pagination.totalPages}
+                                    totalResults={data.pagination.total}
+                                    limit={limit}
+                                    onPageChange={setPage}
+                                    onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                                />
+                            )}
+                        </div>
+
+                        <CreateIncidentModal
+                            isOpen={isCreateModalOpen}
+                            onClose={() => setIsCreateModalOpen(false)}
+                            onSuccess={refreshTickets}
                         />
-                    )}
-                </div>
-
-                <CreateIncidentModal
-                    isOpen={isCreateModalOpen}
-                    onClose={() => setIsCreateModalOpen(false)}
-                    onSuccess={refreshTickets}
-                />
+                    </>
+                )}
             </div>
         </ProGuard>
     );

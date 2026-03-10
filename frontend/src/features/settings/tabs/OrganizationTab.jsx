@@ -112,28 +112,62 @@ export default function OrganizationTab() {
     const [form, setForm] = useState({
         companyName: '',
         timezone: 'Asia/Kolkata',
+        dateFormat: 'DD/MM/YYYY',
+        companyLogo: '',
+        address: '',
+        country: '',
+        currency: 'INR',
+        fiscalYearStart: 'April',
+        workWeek: 'Mon-Fri',
+        // Legacy fields for backwards compatibility with general settings
         workingHoursPerDay: 8,
         strictDailyHours: false,
         isWeekendWorkable: false,
         weekStartDay: 'monday',
-        dateFormat: 'DD/MM/YYYY',
     })
 
     const { data, isLoading } = useQuery({
-        queryKey: ['settings', 'general'],
-        queryFn: () => settingsAPI.getGeneralSettings().then(r => r.data.data),
+        queryKey: ['settings'],
+        queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
     })
 
     useEffect(() => {
-        if (data) setForm({ ...form, ...data })
+        if (data) {
+            setForm({
+                ...form,
+                ...(data.organization || {}),
+                ...(data.general || {})
+            })
+        }
     }, [data])
 
     const saveMutation = useMutation({
-        mutationFn: () => settingsAPI.saveGeneralSettings(form),
+        mutationFn: () => settingsAPI.updateSettings({
+            organization: {
+                companyName: form.companyName,
+                timezone: form.timezone,
+                dateFormat: form.dateFormat,
+                companyLogo: form.companyLogo,
+                address: form.address,
+                country: form.country,
+                currency: form.currency,
+                fiscalYearStart: form.fiscalYearStart,
+                workWeek: form.workWeek,
+            },
+            general: {
+                companyName: form.companyName,
+                timezone: form.timezone,
+                workingHoursPerDay: form.workingHoursPerDay,
+                strictDailyHours: form.strictDailyHours,
+                isWeekendWorkable: form.isWeekendWorkable,
+                weekStartDay: form.weekStartDay,
+                dateFormat: form.dateFormat,
+            }
+        }),
         onSuccess: () => {
             toast.success('Organization settings saved!')
             updateGeneralSettings(form)
-            qc.invalidateQueries(['settings', 'general'])
+            qc.invalidateQueries(['settings'])
         },
         onError: e => toast.error(e.response?.data?.message || 'Save failed'),
     })
@@ -144,12 +178,29 @@ export default function OrganizationTab() {
     if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white">Organization Settings</h2>
-                <p className="text-sm text-slate-400">App-wide configuration affecting all users</p>
+        <div className="space-y-8 pb-10">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Organization Settings</h2>
+                    <p className="text-sm text-slate-500 font-medium">Company-wide configuration and identity</p>
+                </div>
+                <div className="flex items-center gap-3 bg-slate-100 dark:bg-white/5 p-1.5 rounded-2xl border border-slate-200 dark:border-white/10">
+                    <button
+                        onClick={handleToggleTier}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${appVersion === 'pro' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                        Enterprise (Pro)
+                    </button>
+                    <button
+                        onClick={handleToggleTier}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${appVersion === 'basic' ? 'bg-slate-200 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-400'}`}
+                    >
+                        Basic
+                    </button>
+                </div>
             </div>
 
+<<<<<<< HEAD
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                 {/* Organization */}
@@ -173,107 +224,180 @@ export default function OrganizationTab() {
                                     onChange={(val) => upd('timezone', val)}
                                     options={TIMEZONES}
                                 />
+=======
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Column 1: Identity & Branding */}
+                <div className="lg:col-span-2 space-y-8">
+                    <SectionCard title="Corporate Identity" subtitle="Define your company's core information" icon={Globe}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="md:col-span-2">
+                                <label className="label">Company Name</label>
+                                <input
+                                    className="input w-full h-12"
+                                    placeholder="CALTIMS"
+                                    value={form.companyName}
+                                    onChange={e => upd('companyName', e.target.value)}
+                                />
                             </div>
-                        </div>
-                        <div>
-                            <label className="label">Date Format</label>
-                            <div className="grid grid-cols-3 gap-2">
-                                {DATE_FORMATS.map(fmt => (
-                                    <button
-                                        key={fmt}
-                                        onClick={() => upd('dateFormat', fmt)}
-                                        className={`py-2 px-3 rounded-lg border text-xs font-semibold transition-all ${form.dateFormat === fmt
-                                            ? 'border-primary bg-primary/10 text-primary'
-                                            : 'border-slate-200 dark:border-white/10 text-slate-500 hover:border-primary/40'
-                                            }`}
-                                    >
-                                        {fmt}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </SectionCard>
 
-                {/* Working Hours */}
-                <SectionCard title="Working Hours" subtitle="Used for timesheet validation and reporting" icon={Clock}>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="label">Working Hours per Day</label>
-                            <div className="flex items-center gap-4">
+                            <div className="md:col-span-2">
+                                <label className="label">Company Address</label>
+                                <textarea
+                                    className="input w-full h-24 py-3 resize-none"
+                                    placeholder="123 Enterprise Way, Tech City..."
+                                    value={form.address}
+                                    onChange={e => upd('address', e.target.value)}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="label">Country</label>
+                                <input
+                                    className="input w-full h-12"
+                                    placeholder="India"
+                                    value={form.country}
+                                    onChange={e => upd('country', e.target.value)}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="label">Currency</label>
+                                <select
+                                    className="input w-full h-12 pr-10 appearance-none"
+                                    value={form.currency}
+                                    onChange={e => upd('currency', e.target.value)}
+                                >
+                                    <option value="INR">INR (₹)</option>
+                                    <option value="USD">USD ($)</option>
+                                    <option value="EUR">EUR (€)</option>
+                                    <option value="GBP">GBP (£)</option>
+                                    <option value="AED">AED (د.إ)</option>
+                                </select>
+>>>>>>> 8b93e344d44b62b529df386e628143fa80062aa9
+                            </div>
+                        </div>
+                    </SectionCard>
+
+                    <SectionCard title="System Localization" subtitle="Regional and time-based settings" icon={Settings2}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="label">Timezone</label>
+                                <div className="relative">
+                                    <select
+                                        className="input w-full h-12 appearance-none pr-9"
+                                        value={form.timezone}
+                                        onChange={e => upd('timezone', e.target.value)}
+                                    >
+                                        {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                                    </select>
+                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="label">Date Format</label>
+                                <select
+                                    className="input w-full h-12 appearance-none pr-9"
+                                    value={form.dateFormat}
+                                    onChange={e => upd('dateFormat', e.target.value)}
+                                >
+                                    {DATE_FORMATS.map(fmt => <option key={fmt} value={fmt}>{fmt}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="label">Fiscal Year Start</label>
+                                <select
+                                    className="input w-full h-12 appearance-none pr-9"
+                                    value={form.fiscalYearStart}
+                                    onChange={e => upd('fiscalYearStart', e.target.value)}
+                                >
+                                    {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(month => (
+                                        <option key={month} value={month}>{month}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="label">Work Week</label>
+                                <select
+                                    className="input w-full h-12 appearance-none pr-9"
+                                    value={form.workWeek}
+                                    onChange={e => upd('workWeek', e.target.value)}
+                                >
+                                    <option value="Mon-Fri">Monday – Friday</option>
+                                    <option value="Sun-Thu">Sunday – Thursday</option>
+                                    <option value="Mon-Sat">Monday – Saturday</option>
+                                </select>
+                            </div>
+                        </div>
+                    </SectionCard>
+                </div>
+
+                {/* Column 2: Logo & Policy Summaries */}
+                <div className="space-y-8">
+                    <SectionCard title="Company Logo" subtitle="Brand identity for reports" icon={Save}>
+                        <div className="flex flex-col items-center gap-6 py-4">
+                            <div className="w-40 h-40 rounded-3xl bg-slate-50 dark:bg-white/5 border-2 border-dashed border-slate-200 dark:border-white/10 flex flex-col items-center justify-center text-center p-4 group hover:border-indigo-500/50 transition-colors cursor-pointer relative overflow-hidden">
+                                {form.companyLogo ? (
+                                    <img src={form.companyLogo} alt="Logo" className="w-full h-full object-contain p-4" />
+                                ) : (
+                                    <>
+                                        <Globe size={32} className="text-slate-300 group-hover:text-indigo-400 transition-colors mb-2" />
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Upload PNG/JPG</p>
+                                    </>
+                                )}
+                            </div>
+                            <button className="text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors uppercase tracking-widest">
+                                Change Logo
+                            </button>
+                        </div>
+                    </SectionCard>
+
+                    <SectionCard title="Working Hours" subtitle="Default validation rules" icon={Clock}>
+                        <div className="space-y-4">
+                            <div>
+                                <div className="flex justify-between mb-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase">Standard Day</label>
+                                    <span className="text-xs font-black text-indigo-600">{form.workingHoursPerDay} hrs</span>
+                                </div>
                                 <input
                                     type="range"
                                     min={1} max={12} step={0.5}
                                     value={form.workingHoursPerDay}
                                     onChange={e => upd('workingHoursPerDay', parseFloat(e.target.value))}
-                                    className="flex-1 accent-primary"
+                                    className="w-full accent-indigo-600"
                                 />
-                                <div className="w-20 text-center">
-                                    <input
-                                        type="number"
-                                        min={1} max={24} step={0.5}
-                                        className="input text-center font-bold text-primary"
-                                        value={form.workingHoursPerDay}
-                                        onChange={e => upd('workingHoursPerDay', parseFloat(e.target.value))}
-                                    />
-                                </div>
                             </div>
-                            <p className="text-xs text-slate-400 mt-1">Standard: 8 hours</p>
-                        </div>
 
-                        {/* Strict Working Hours Toggle */}
-                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-black border border-slate-100 dark:border-white">
-                            <div>
-                                <p className="text-sm font-semibold text-slate-700 dark:text-white">Strict Daily Hours</p>
-                                <p className="text-[10px] text-slate-400">Require exactly {form.workingHoursPerDay} hrs/day for any entry</p>
+                            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
+                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Strict Daily Hours</span>
+                                <button onClick={() => upd('strictDailyHours', !form.strictDailyHours)}
+                                    className={`relative w-10 h-5 rounded-full transition-colors ${form.strictDailyHours ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.strictDailyHours ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
                             </div>
-                            <button onClick={() => upd('strictDailyHours', !form.strictDailyHours)}
-                                className={`relative w-11 h-6 rounded-full transition-colors ${form.strictDailyHours ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-white/20'}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.strictDailyHours ? 'translate-x-5' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
 
-                        {/* Weekend Entry Toggle */}
-                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-black border border-slate-100 dark:border-white">
-                            <div>
-                                <p className="text-sm font-semibold text-slate-700 dark:text-white">Enable Weekend Entry</p>
-                                <p className="text-[10px] text-slate-400">Allow timesheet entry for Saturday and Sunday</p>
-                            </div>
-                            <button onClick={() => upd('isWeekendWorkable', !form.isWeekendWorkable)}
-                                className={`relative w-11 h-6 rounded-full transition-colors ${form.isWeekendWorkable ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-white/20'}`}>
-                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.isWeekendWorkable ? 'translate-x-5' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-
-                        <div>
-                            <label className="label">Week Start Day</label>
-                            <div className="grid grid-cols-2 gap-3">
-                                {['monday', 'sunday'].map(day => (
-                                    <button
-                                        key={day}
-                                        onClick={() => upd('weekStartDay', day)}
-                                        className={`py-3 rounded-xl border-2 capitalize text-sm font-semibold transition-all ${form.weekStartDay === day
-                                            ? 'border-primary bg-primary/10 text-primary'
-                                            : 'border-slate-200 dark:border-white/10 text-slate-500 hover:border-primary/40'
-                                            }`}
-                                    >
-                                        {day === 'monday' ? 'Monday (Mon–Sun)' : 'Sunday (Sun–Sat)'}
-                                    </button>
-                                ))}
+                            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
+                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Weekend Access</span>
+                                <button onClick={() => upd('isWeekendWorkable', !form.isWeekendWorkable)}
+                                    className={`relative w-10 h-5 rounded-full transition-colors ${form.isWeekendWorkable ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.isWeekendWorkable ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
                             </div>
                         </div>
-                    </div>
-                </SectionCard>
+                    </SectionCard>
+                </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="sticky bottom-4 z-20 flex justify-end">
                 <button
                     onClick={() => saveMutation.mutate()}
                     disabled={saveMutation.isPending}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold shadow-lg shadow-primary/20 transition-all"
+                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest shadow-xl shadow-indigo-600/25 transition-all active:scale-95 disabled:opacity-70"
                 >
-                    {saveMutation.isPending ? <Spinner size="sm" /> : <Save size={16} />}
-                    Save Changes
+                    {saveMutation.isPending ? <Spinner size="sm" color="white" /> : <Save size={18} />}
+                    Apply Settings
                 </button>
             </div>
         </div>

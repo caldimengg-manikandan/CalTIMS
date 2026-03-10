@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
     Settings2, Mail, LayoutGrid, Palette, Globe,
-    Plus, X, Send, Eye, Save, Check, ChevronDown,
+    Plus, X, Send, Eye, Save, Check, ChevronDown, ClipboardCheck,
     Sun, Moon, Monitor, Search, Clock, Users
 } from 'lucide-react'
 import { settingsAPI, projectAPI, reportSchedulesAPI } from '@/services/endpoints'
@@ -18,6 +18,7 @@ import PageHeader from '@/components/ui/PageHeader'
 const TABS = [
     { id: 'report', label: 'Report Settings', icon: Mail },
     { id: 'timesheet', label: 'Timesheet', icon: LayoutGrid },
+    { id: 'attendance', label: 'Attendance Integration', icon: ClipboardCheck },
     { id: 'general', label: 'General', icon: Globe },
 ]
 
@@ -1023,6 +1024,69 @@ function GeneralTab() {
 
 
 // ════════════════════════════════════════════════════════════════════════════
+// TAB 5 — ATTENDANCE INTEGRATION
+// ════════════════════════════════════════════════════════════════════════════
+function AttendanceTab() {
+    return (
+        <div className="space-y-6">
+            <div>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-white uppercase tracking-tight">Attendance Integration</h2>
+                <p className="text-sm text-slate-400">Configure biometric and access control system synchronization</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <SectionCard
+                    title="System Status"
+                    subtitle="Current connection to organization's attendance gateway"
+                    icon={ClipboardCheck}
+                >
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between p-5 rounded-2xl bg-slate-50 dark:bg-black border border-slate-100 dark:border-white transition-all hover:border-amber-200">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 rounded-xl bg-amber-500 text-white shadow-lg shadow-amber-500/20">
+                                    <ClipboardCheck size={20} />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-tight text-slate-700 dark:text-slate-200">Integration Status</p>
+                                    <p className="text-xs font-bold text-amber-500">NOT CONFIGURED</p>
+                                </div>
+                            </div>
+                            <button className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95">
+                                Configure Integration
+                            </button>
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-dashed border-slate-200 dark:border-white/10">
+                            <p className="text-xs text-slate-400 font-medium leading-relaxed">
+                                Connect your ZKTeco, HID, or Suprema biometric devices to automatically sync swipe-in and swipe-out times with employee timesheets.
+                            </p>
+                        </div>
+                    </div>
+                </SectionCard>
+
+                <SectionCard
+                    title="Device Logs"
+                    subtitle="Real-time activity from connected devices"
+                    icon={Clock}
+                >
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-300 mb-3">
+                            <Clock size={24} />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-500">No active streams</p>
+                        <p className="text-[10px] text-slate-400 mt-1">Configure integration to view real-time logs</p>
+                    </div>
+                </SectionCard>
+            </div>
+
+            <div className="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700/30 text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">
+                <strong>💡 Pro Tip:</strong> Integrating with biometric devices allows for automatic "Office Presence" calculation, which can be compared against timesheet hours for accuracy auditing.
+            </div>
+        </div>
+    )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // MAIN SETTINGS PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function SettingsPage() {
@@ -1031,6 +1095,7 @@ export default function SettingsPage() {
     const tabMap = {
         report: <ReportTab />,
         timesheet: <TimesheetTab />,
+        attendance: <AttendanceTab />,
         general: <GeneralTab />,
     }
 

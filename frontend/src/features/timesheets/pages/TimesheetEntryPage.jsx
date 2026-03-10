@@ -10,7 +10,7 @@ import {
     Calendar,
     PlusSquare,
     ClipboardCheck,
-    AlertTriangle
+    Info
 } from 'lucide-react'
 import { timesheetAPI, projectAPI, settingsAPI, taskAPI, leaveAPI, calendarAPI } from '@/services/endpoints'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -577,14 +577,6 @@ export default function TimesheetEntryPage() {
         return (Number(total) || 0).toFixed(2) + 'h'
     }
 
-    const calculateDayTotal = (dayIndex) => {
-        return rows.reduce((acc, row) => {
-            const time = row.dayHours[dayIndex]
-            if (!time) return acc;
-            const [h, m] = time.split(':').map(Number)
-            return acc + h + (m / 60)
-        }, 0)
-    }
 
     const totalWeekHours = useMemo(() => {
         return rows.reduce((acc, row) => acc + calculateRowTotal(row), 0)
@@ -789,7 +781,7 @@ export default function TimesheetEntryPage() {
                                     )
                                 })}
 
-                                <th className="px-4 py-4 text-center font-bold border-r border-slate-200 dark:border-white w-24">Total</th>
+                                <th className="px-4 py-4 text-center font-bold border-r border-slate-200 dark:border-white w-24">Work Hours</th>
                                 <th className="px-4 py-4 text-center font-bold w-20">Action</th>
                             </tr>
                         </thead>
@@ -984,41 +976,47 @@ export default function TimesheetEntryPage() {
                             })}
                         </tbody>
                         <tfoot className="sticky bottom-0 z-10 border-t-2 border-slate-100 dark:border-white">
-                            <tr className="bg-blue-50 dark:bg-black font-bold">
-                                <td colSpan={3} className="px-6 py-4 text-sm font-bold text-slate-700 dark:text-white">
-                                    Total Hours
+                            <tr className="bg-slate-50 dark:bg-black font-medium text-slate-700 dark:text-white border-t border-slate-100 dark:border-white">
+                                <td colSpan={3} className="px-6 py-4 text-sm font-bold flex items-center gap-2">
+                                    Office Presence (Swipe Hours)
+                                    <div className="group relative">
+                                        <Info size={14} className="text-slate-400 cursor-help" />
+                                        <div className="hidden group-hover:block absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 p-3 bg-slate-800 text-white text-[10px] rounded-xl shadow-2xl z-50 font-medium leading-relaxed">
+                                            Office swipe hours will be automatically captured once attendance integration is enabled by your organization.
+                                        </div>
+                                    </div>
                                 </td>
                                 {weekDays.map((day, i) => {
                                     const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
                                     if (!general?.isWeekendWorkable && isWeekendDay) return null;
-
-                                    const dayTotal = calculateDayTotal(i)
-                                    const isLow = dayTotal > 0 && dayTotal < workingHoursPerDay
-                                    const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
                                     return (
-                                        <td key={i} className={clsx(
-                                            "px-2 py-4 text-center text-sm font-bold transition-colors",
-                                            isLow ? "text-rose-500 bg-rose-50/50 dark:bg-rose-950/20" : "text-indigo-700 dark:text-white",
-                                            isHoliday && !isLow ? "bg-blue-100/80 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200" : ""
-                                        )}>
-                                            <div className="flex flex-col items-center gap-0.5">
-                                                <span>{formatHours(dayTotal)}</span>
-                                                {isLow && (
-                                                    <span className="text-[9px] flex items-center gap-0.5 animate-pulse">
-                                                        <AlertTriangle size={8} /> Low
-                                                    </span>
-                                                )}
-                                            </div>
+                                        <td key={i} className="px-2 py-4 text-center text-sm font-bold text-slate-400">
+                                            —
                                         </td>
                                     )
                                 })}
-                                <td className="px-4 py-4 text-center text-sm text-indigo-700 dark:text-white">
-                                    {formatHours(totalWeekHours)}
-                                </td>
+                                <td className="px-4 py-4 text-center text-sm text-slate-400">—</td>
                                 <td className="px-4 py-4"></td>
                             </tr>
                         </tfoot>
                     </table>
+                </div>
+            </div>
+
+            {/* Attendance Integration Status */}
+            <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
+                        <ClipboardCheck size={16} className="text-indigo-600" />
+                        Office Swipe Integration
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        Attendance device integration is not configured for this organization.
+                        Contact your administrator to enable real-time swipe tracking.
+                    </p>
+                </div>
+                <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900 text-[10px] font-bold text-amber-700 dark:text-amber-400 rounded-lg uppercase tracking-widest">
+                    Status: Not Configured
                 </div>
             </div>
 

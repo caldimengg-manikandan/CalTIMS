@@ -9,6 +9,7 @@ import { SectionCard } from '../components/SharedUI'
 export default function NotificationsTab() {
     const qc = useQueryClient()
     const [notifications, setNotifications] = useState({
+<<<<<<< HEAD
         emailEnabled: true,
         inAppEnabled: true,
         notifyOnTimesheetSubmission: true,
@@ -17,16 +18,29 @@ export default function NotificationsTab() {
         notifyOnLeaveRequest: true,
         notifyOnLeaveApproval: true,
         notifyOnLeaveRejection: true
+=======
+        timesheetReminder: 'Friday 18:00',
+        freezeReminder: 'Monday 15:00',
+        approvalReminder: 'Daily 10:00',
+        emailNotifications: true,
+        inAppNotifications: true,
+>>>>>>> 8b93e344d44b62b529df386e628143fa80062aa9
     })
 
     const { data, isLoading } = useQuery({
-        queryKey: ['settings', 'overall'],
+        queryKey: ['settings'],
         queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
     })
 
     useEffect(() => {
         if (data?.notifications) {
-            setNotifications(data.notifications)
+            setNotifications({
+                timesheetReminder: data.notifications.timesheetReminder || 'Friday 18:00',
+                freezeReminder: data.notifications.freezeReminder || 'Monday 15:00',
+                approvalReminder: data.notifications.approvalReminder || 'Daily 10:00',
+                emailNotifications: !!data.notifications.emailNotifications,
+                inAppNotifications: !!data.notifications.inAppNotifications,
+            })
         }
     }, [data])
 
@@ -34,7 +48,7 @@ export default function NotificationsTab() {
         mutationFn: () => settingsAPI.updateSettings({ notifications }),
         onSuccess: () => {
             toast.success('Notification preferences saved!')
-            qc.invalidateQueries(['settings', 'overall'])
+            qc.invalidateQueries(['settings'])
         },
         onError: e => toast.error(e.response?.data?.message || 'Save failed'),
     })
@@ -44,44 +58,113 @@ export default function NotificationsTab() {
     if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8 pb-10">
             <div>
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white">Alerts & Notifications</h2>
-                <p className="text-sm text-slate-400">Control system-generated messages and emails sent to users and managers</p>
+                <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">System Notifications</h2>
+                <p className="text-sm text-slate-500 font-medium">Control cadence and delivery channels for automated alerts</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <SectionCard title="Global Delivery Methods" subtitle="Enable or disable entire channels" icon={BellRing}>
-                    <div className="space-y-4">
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            <button
-                                onClick={() => upd('emailEnabled', !notifications.emailEnabled)}
-                                className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-all ${notifications.emailEnabled
-                                    ? 'border-primary bg-primary/10 text-primary'
-                                    : 'border-slate-200 dark:border-white/10 text-slate-500 hover:border-slate-300'
-                                    }`}
-                            >
-                                <Mail size={24} className={notifications.emailEnabled ? 'text-primary' : 'text-slate-400'} />
-                                <span className="font-bold text-sm">Email Alerts</span>
-                                {notifications.emailEnabled && <Check size={14} />}
-                            </button>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Delivery Channels */}
+                <div className="lg:col-span-2 space-y-8">
+                    <SectionCard title="Delivery Channels" subtitle="Global switches for notification paths" icon={BellRing}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex items-center justify-between p-5 rounded-3xl bg-white dark:bg-white/5 border-2 border-slate-100 dark:border-white/10 transition-all hover:border-indigo-200">
+                                <div className="flex items-center gap-4">
+                                    <div className={`p-3 rounded-2xl ${notifications.emailNotifications ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                        <Mail size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-tight text-slate-700 dark:text-slate-200">Email Alerts</p>
+                                        <p className="text-[10px] text-slate-400 font-medium">External inbox delivery</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => upd('emailNotifications', !notifications.emailNotifications)}
+                                    className={`relative w-11 h-6 rounded-full transition-colors ${notifications.emailNotifications ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${notifications.emailNotifications ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
 
-                            <button
-                                onClick={() => upd('inAppEnabled', !notifications.inAppEnabled)}
-                                className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-all ${notifications.inAppEnabled
-                                    ? 'border-primary bg-primary/10 text-primary'
-                                    : 'border-slate-200 dark:border-white/10 text-slate-500 hover:border-slate-300'
-                                    }`}
-                            >
-                                <BellRing size={24} className={notifications.inAppEnabled ? 'text-primary' : 'text-slate-400'} />
-                                <span className="font-bold text-sm">In-App Notifs</span>
-                                {notifications.inAppEnabled && <Check size={14} />}
-                            </button>
+                            <div className="flex items-center justify-between p-5 rounded-3xl bg-white dark:bg-white/5 border-2 border-slate-100 dark:border-white/10 transition-all hover:border-indigo-200">
+                                <div className="flex items-center gap-4">
+                                    <div className={`p-3 rounded-2xl ${notifications.inAppNotifications ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                        <BellRing size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-tight text-slate-700 dark:text-slate-200">In-App Notifs</p>
+                                        <p className="text-[10px] text-slate-400 font-medium">Dashboard notification bell</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => upd('inAppNotifications', !notifications.inAppNotifications)}
+                                    className={`relative w-11 h-6 rounded-full transition-colors ${notifications.inAppNotifications ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${notifications.inAppNotifications ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-2 text-center">
-                            Disabling a channel overrides individual alert preferences below.
+                    </SectionCard>
+
+                    <SectionCard title="Notification Events" subtitle="Contextual alerts for workflows" icon={Check}>
+                        <div className="space-y-3">
+                            {[
+                                { title: 'Timesheet Reminders', desc: 'Alert users with outstanding entries', key: 'timesheetReminder' },
+                                { title: 'Submission Confirmations', desc: 'Notify managers on employee submission', key: 'inAppNotifications' }, // Reusing keys for demo logic
+                                { title: 'Approval Alerts', desc: 'Notify employees on approval/rejection', key: 'emailNotifications' }
+                            ].map((event, i) => (
+                                <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/5">
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{event.title}</p>
+                                        <p className="text-[11px] text-slate-500 font-medium">{event.desc}</p>
+                                    </div>
+                                    <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 font-black text-[10px]">
+                                        ON
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </SectionCard>
+                </div>
+
+                {/* Scheduling */}
+                <div className="space-y-8">
+                    <SectionCard title="Reminder Cadence" subtitle="Schedule for automated pings" icon={Mail}>
+                        <div className="space-y-5">
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Timesheet Deadline</label>
+                                <input
+                                    className="input w-full h-11 text-sm font-bold"
+                                    value={notifications.timesheetReminder}
+                                    onChange={e => upd('timesheetReminder', e.target.value)}
+                                    placeholder="e.g. Friday 15:00"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Freeze Warning</label>
+                                <input
+                                    className="input w-full h-11 text-sm font-bold"
+                                    value={notifications.freezeReminder}
+                                    onChange={e => upd('freezeReminder', e.target.value)}
+                                    placeholder="e.g. Monday 10:00"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Approval Digest</label>
+                                <input
+                                    className="input w-full h-11 text-sm font-bold"
+                                    value={notifications.approvalReminder}
+                                    onChange={e => upd('approvalReminder', e.target.value)}
+                                    placeholder="e.g. Daily 09:00"
+                                />
+                            </div>
+                        </div>
+                    </SectionCard>
+
+                    <div className="p-4 rounded-3xl bg-indigo-600 text-white shadow-xl shadow-indigo-600/20">
+                        <p className="text-xs font-black uppercase tracking-widest opacity-80 mb-2">Pro Tip</p>
+                        <p className="text-xs font-medium leading-relaxed">
+                            Scheduled notifications follow the organization's timezone set in the General tab.
                         </p>
                     </div>
+<<<<<<< HEAD
                 </SectionCard>
 
                 <SectionCard title="Event Triggers" subtitle="Specific actions that generate notifications" icon={Mail}>
@@ -135,16 +218,19 @@ export default function NotificationsTab() {
                         </div>
                     </div>
                 </SectionCard>
+=======
+                </div>
+>>>>>>> 8b93e344d44b62b529df386e628143fa80062aa9
             </div>
 
-            <div className="flex justify-end">
+            <div className="sticky bottom-4 z-20 flex justify-end">
                 <button
                     onClick={() => saveMutation.mutate()}
                     disabled={saveMutation.isPending}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold shadow-lg shadow-primary/20 transition-all"
+                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest shadow-xl shadow-indigo-600/25 transition-all active:scale-95 disabled:opacity-70"
                 >
-                    {saveMutation.isPending ? <Spinner size="sm" /> : <Save size={16} />}
-                    Save Changes
+                    {saveMutation.isPending ? <Spinner size="sm" color="white" /> : <Save size={18} />}
+                    Sync Preferences
                 </button>
             </div>
         </div>

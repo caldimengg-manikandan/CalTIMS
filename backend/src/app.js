@@ -26,6 +26,7 @@ const reportScheduleRoutes = require('./modules/reportSchedules/reportSchedule.r
 const taskRoutes = require('./modules/tasks/task.routes');
 const incidentRoutes = require('./modules/incidents/incident.routes');
 const systemRoutes = require('./modules/system/system.routes');
+const supportRoutes = require('./modules/support/support.routes');
 const { router: auditRoutes } = require('./modules/audit/audit.routes');
 const schedulerService = require('./shared/services/scheduler.service');
 
@@ -93,6 +94,7 @@ app.use('/api/v1/report-schedules', reportScheduleRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/incidents', incidentRoutes);
 app.use('/api/v1/system', systemRoutes);
+app.use('/api/v1/support', supportRoutes);
 app.use('/api/v1/audit', auditRoutes);
 
 // ─── Start Scheduler ────────────────────────────────────────────────────────

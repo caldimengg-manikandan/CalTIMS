@@ -416,8 +416,8 @@ router.get('/smart-insights', requireProTier, asyncHandler(async (req, res) => {
 
 // ─── NEW: PDF Export ────────────────────────────────────────────────────────
 router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
-  const PDFDocument = require('pdfkit');
   const mongoose = require('mongoose');
+  const pdfGeneratorService = require('./pdfGenerator.service');
 
   const from = req.query.from ? new Date(req.query.from) : null;
   const to = req.query.to ? new Date(req.query.to) : null;
@@ -428,8 +428,8 @@ router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
   if (req.query.userId) match.userId = mongoose.Types.ObjectId.createFromHexString(req.query.userId);
 
   // Fetch all needed data in parallel
-  const [timesheetStats, projectData, leaveData, weeklyTrend, employeeData] = await Promise.all([
-    // Overall stats
+  const [timesheetStats, projectData, leaveData, weeklyTrend, employeeData, deptStats, complianceRes] = await Promise.all([
+    // 1. Overall stats
     Timesheet.aggregate([
       { $match: match },
       {
@@ -441,7 +441,7 @@ router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
         },
       },
     ]),
-    // Project hours
+    // 2. Project hours
     Timesheet.aggregate([
       { $match: match },
       { $unwind: '$rows' },
@@ -451,13 +451,13 @@ router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
       { $sort: { totalHours: -1 } },
       { $limit: 15 },
     ]),
-    // Leave summary
+    // 3. Leave summary
     Leave.aggregate([
       { $match: { status: LEAVE_STATUS.APPROVED, ...(from ? { startDate: { $gte: from } } : {}), ...(to ? { endDate: { $lte: to } } : {}) } },
       { $group: { _id: '$leaveType', count: { $sum: 1 }, totalDays: { $sum: '$totalDays' } } },
       { $sort: { totalDays: -1 } },
     ]),
-    // Weekly trend
+    // 4. Weekly trend
     Timesheet.aggregate([
       { $match: match },
       { $group: { _id: '$weekStartDate', totalHours: { $sum: '$totalHours' }, employeeCount: { $addToSet: '$userId' } } },
@@ -465,7 +465,7 @@ router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
       { $sort: { week: 1 } },
       { $limit: 20 },
     ]),
-    // Top employees
+    // 5. Top employees
     Timesheet.aggregate([
       { $match: match },
       { $group: { _id: '$userId', totalHours: { $sum: '$totalHours' }, timesheetCount: { $sum: 1 } } },
@@ -474,153 +474,40 @@ router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
       { $sort: { totalHours: -1 } },
       { $limit: 15 },
     ]),
+    // 6. Department stats
+    Timesheet.aggregate([
+      { $match: match },
+      { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
+      { $unwind: '$user' },
+      { $group: { _id: '$user.department', totalHours: { $sum: '$totalHours' }, employeeCount: { $addToSet: '$userId' } } },
+      { $sort: { totalHours: -1 } }
+    ]),
+    // 7. Compliance Stats (simple overall group)
+    Timesheet.aggregate([
+      { $match: { ...(from ? { weekStartDate: { $gte: from } } : {}), ...(to ? { weekStartDate: { $lte: to } } : {}) } },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ])
   ]);
 
   const stats = timesheetStats[0] || { totalHours: 0, totalTimesheets: 0, uniqueEmployees: [] };
-  const now = new Date();
-
-  // Build PDF
-  const doc = new PDFDocument({ margin: 50, size: 'A4' });
-
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="timesheet-report-${now.toISOString().split('T')[0]}.pdf"`);
-  doc.pipe(res);
-
-  // ── Colors & helpers ────────────────────────────────────────────────────
-  const PRIMARY = '#6366f1';
-  const DARK = '#1e293b';
-  const GRAY = '#64748b';
-  const LIGHT_GRAY = '#f1f5f9';
-  const WHITE = '#ffffff';
-
-  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
-  const pageWidth = doc.page.width - 100;
-
-  // ── Cover / Header ──────────────────────────────────────────────────────
-  doc.rect(0, 0, doc.page.width, 120).fill(PRIMARY);
-  doc.fillColor(WHITE).fontSize(28).font('Helvetica-Bold').text('Timesheet Report', 50, 35, { align: 'left' });
-  doc.fontSize(13).font('Helvetica').text('Reports & Analytics', 50, 70, { align: 'left' });
-
-  const dateLabel = (from || to)
-    ? `Period: ${from ? formatDate(from) : 'All time'} — ${to ? formatDate(to) : 'Present'}`
-    : 'Period: All Time';
-  doc.fontSize(10).fillColor('rgba(255,255,255,0.8)').text(dateLabel, 50, 92, { align: 'left' });
-  doc.fontSize(10).fillColor('rgba(255,255,255,0.8)').text(`Generated: ${formatDate(now)}`, 0, 92, { align: 'right' });
-
-  doc.moveDown(4);
-
-  // ── KPI Summary Cards ───────────────────────────────────────────────────
-  doc.fillColor(DARK).fontSize(16).font('Helvetica-Bold').text('Summary Overview', 50, 145);
-  doc.moveTo(50, 165).lineTo(50 + pageWidth, 165).strokeColor(PRIMARY).lineWidth(2).stroke();
-
-  const kpis = [
-    { label: 'Total Approved Hours', value: `${(stats.totalHours || 0).toFixed(1)}h` },
-    { label: 'Active Employees', value: (stats.uniqueEmployees?.length || 0).toString() },
-    { label: 'Total Timesheets', value: (stats.totalTimesheets || 0).toString() },
-    { label: 'Projects Covered', value: (projectData?.length || 0).toString() },
-  ];
-
-  const cardW = pageWidth / 4 - 8;
-  kpis.forEach((kpi, i) => {
-    const x = 50 + i * (cardW + 10);
-    const y = 175;
-    doc.rect(x, y, cardW, 70).fill(LIGHT_GRAY);
-    doc.fillColor(PRIMARY).fontSize(22).font('Helvetica-Bold').text(kpi.value, x + 8, y + 10, { width: cardW - 16, align: 'center' });
-    doc.fillColor(GRAY).fontSize(9).font('Helvetica').text(kpi.label, x + 8, y + 42, { width: cardW - 16, align: 'center' });
+  const complianceStats = { total: 0, approved: 0, submitted: 0, rejected: 0, draft: 0 };
+  complianceRes.forEach(r => {
+    complianceStats[r._id] = r.count;
+    complianceStats.total += r.count;
   });
 
-  doc.moveDown(1);
-
-  // ── Helper: draw a simple table ─────────────────────────────────────────
-  const drawTable = (headers, rows, startY, colWidths) => {
-    let y = startY;
-    const rowH = 22;
-
-    // Header row
-    doc.rect(50, y, pageWidth, rowH).fill(PRIMARY);
-    let x = 50;
-    headers.forEach((h, i) => {
-      doc.fillColor(WHITE).fontSize(9).font('Helvetica-Bold').text(h, x + 6, y + 7, { width: colWidths[i] - 12 });
-      x += colWidths[i];
-    });
-    y += rowH;
-
-    rows.forEach((row, ri) => {
-      doc.rect(50, y, pageWidth, rowH).fill(ri % 2 === 0 ? WHITE : LIGHT_GRAY);
-      let cx = 50;
-      row.forEach((cell, ci) => {
-        doc.fillColor(DARK).fontSize(8.5).font('Helvetica').text(String(cell ?? '—'), cx + 6, y + 7, { width: colWidths[ci] - 12 });
-        cx += colWidths[ci];
-      });
-      y += rowH;
-      // Page break
-      if (y > doc.page.height - 100) {
-        doc.addPage();
-        y = 50;
-      }
-    });
-
-    return y;
+  const data = {
+    stats,
+    projectData,
+    leaveData,
+    weeklyTrend,
+    employeeData,
+    deptStats,
+    complianceStats
   };
 
-  // ── Hours by Project ────────────────────────────────────────────────────
-  let curY = 270;
-  doc.fillColor(DARK).fontSize(14).font('Helvetica-Bold').text('Hours by Project', 50, curY);
-  curY += 20;
-  const projRows = projectData.map(p => [
-    p.project?.name || 'Unknown',
-    p.project?.code || '—',
-    `${(p.totalHours || 0).toFixed(1)}h`,
-  ]);
-  const projColW = [pageWidth * 0.5, pageWidth * 0.25, pageWidth * 0.25];
-  curY = drawTable(['Project Name', 'Code', 'Total Hours'], projRows, curY, projColW);
-  curY += 20;
-
-  // ── Top Employees ───────────────────────────────────────────────────────
-  if (curY > doc.page.height - 150) { doc.addPage(); curY = 50; }
-  doc.fillColor(DARK).fontSize(14).font('Helvetica-Bold').text('Top Employees by Hours', 50, curY);
-  curY += 20;
-  const empRows = employeeData.map(e => [
-    e.user?.name || 'Unknown',
-    e.user?.employeeId || '—',
-    e.user?.department || '—',
-    `${(e.totalHours || 0).toFixed(1)}h`,
-    e.timesheetCount,
-  ]);
-  const empColW = [pageWidth * 0.3, pageWidth * 0.15, pageWidth * 0.2, pageWidth * 0.2, pageWidth * 0.15];
-  curY = drawTable(['Employee', 'ID', 'Department', 'Total Hours', 'Sheets'], empRows, curY, empColW);
-  curY += 20;
-
-  // ── Leave Summary ───────────────────────────────────────────────────────
-  if (curY > doc.page.height - 150) { doc.addPage(); curY = 50; }
-  doc.fillColor(DARK).fontSize(14).font('Helvetica-Bold').text('Leave Summary (Approved)', 50, curY);
-  curY += 20;
-  const leaveRows = leaveData.map(l => [l._id || '—', l.count, `${l.totalDays}d`]);
-  const leaveColW = [pageWidth * 0.5, pageWidth * 0.25, pageWidth * 0.25];
-  curY = drawTable(['Leave Type', 'Requests', 'Total Days'], leaveRows, curY, leaveColW);
-  curY += 20;
-
-  // ── Weekly Trend ────────────────────────────────────────────────────────
-  if (curY > doc.page.height - 150) { doc.addPage(); curY = 50; }
-  doc.fillColor(DARK).fontSize(14).font('Helvetica-Bold').text('Weekly Hours Trend', 50, curY);
-  curY += 20;
-  const trendRows = weeklyTrend.map(w => [
-    formatDate(w.week),
-    `${(w.totalHours || 0).toFixed(1)}h`,
-    w.employeeCount,
-    w.employeeCount ? `${(w.totalHours / w.employeeCount).toFixed(1)}h` : '—',
-  ]);
-  const trendColW = [pageWidth * 0.3, pageWidth * 0.25, pageWidth * 0.2, pageWidth * 0.25];
-  curY = drawTable(['Week Starting', 'Total Hours', 'Employees', 'Avg/Employee'], trendRows, curY, trendColW);
-
-  // ─── Footer on last page ─────────────────────────────────────────────────
-  const pages = doc.bufferedPageRange ? doc.bufferedPageRange() : { count: 1 };
-  doc.fontSize(8).fillColor(GRAY).text(
-    `Timesheet Management System — Confidential — Generated ${now.toLocaleString()}`,
-    doc.page.margins.left, doc.page.margins.top, { align: 'center' }
-  );
-
-  doc.end();
+  const now = new Date();
+  await pdfGeneratorService.generateEnterpriseWorkforceReport(res, data, { from, to, now });
 }));
 
 // ─── NEW: CSV Export ─────────────────────────────────────────────────────────
