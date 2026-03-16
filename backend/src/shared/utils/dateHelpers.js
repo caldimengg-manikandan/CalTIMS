@@ -78,4 +78,35 @@ const formatDate = (date) => {
   return d.toISOString().split('T')[0];
 };
 
-module.exports = { getWeekStart, getWeekEnd, getWeekDates, getWorkingDays, formatDate };
+/**
+ * Get date range for a period type
+ * @param {string} period 'weekly', 'monthly', or 'yearly'
+ * @param {Date|string} date Reference date
+ */
+const getPeriodRange = (period, date = new Date()) => {
+  const d = new Date(date);
+  let from, to;
+
+  switch (period?.toLowerCase()) {
+    case 'weekly':
+      from = getWeekStart(d);
+      to = getWeekEnd(d);
+      break;
+    case 'monthly':
+      from = new Date(d.getFullYear(), d.getMonth(), 1);
+      to = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+      break;
+    case 'yearly':
+      from = new Date(d.getFullYear(), 0, 1);
+      to = new Date(d.getFullYear(), 11, 31, 23, 59, 59, 999);
+      break;
+    default:
+      // Default to current week if unknown
+      from = getWeekStart(d);
+      to = getWeekEnd(d);
+  }
+
+  return { from, to };
+};
+
+module.exports = { getWeekStart, getWeekEnd, getWeekDates, getWorkingDays, formatDate, getPeriodRange };

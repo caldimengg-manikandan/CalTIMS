@@ -26,11 +26,13 @@ const reportScheduleRoutes = require('./modules/reportSchedules/reportSchedule.r
 const taskRoutes = require('./modules/tasks/task.routes');
 const incidentRoutes = require('./modules/incidents/incident.routes');
 const systemRoutes = require('./modules/system/system.routes');
-// const supportRoutes = require('./modules/support/support.routes');
+const supportRoutes = require('./modules/support/support.routes');
 const { router: auditRoutes } = require('./modules/audit/audit.routes');
+const attendanceRoutes = require('./modules/attendance/attendance.routes');
 const schedulerService = require('./shared/services/scheduler.service');
 
 const app = express();
+app.set('etag', false);
 
 // ─── Security Middleware ─────────────────────────────────────────────────────
 app.use(helmet());
@@ -111,14 +113,23 @@ app.use('/api/v1/report-schedules', reportScheduleRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/incidents', incidentRoutes);
 app.use('/api/v1/system', systemRoutes);
-// app.use('/api/v1/support', supportRoutes);
+app.use('/api/v1/support', supportRoutes);
 app.use('/api/v1/audit', auditRoutes);
+app.use('/api/v1/attendance', attendanceRoutes);
 
 // ─── Start Scheduler ────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
   schedulerService.start();
   const complianceService = require('./shared/services/compliance.service');
   complianceService.startCronJobs();
+  
+  // Hikvision Integration Cron
+  const hikvisionCron = require('./modules/attendance/hikvision.cron');
+  hikvisionCron.start();
+
+  // HikCentral Integration Cron
+  const hikcentralCron = require('./modules/attendance/hikcentral.cron');
+  hikcentralCron.start();
 }
 
 // ─── Error Handling ──────────────────────────────────────────────────────────

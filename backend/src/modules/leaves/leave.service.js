@@ -11,6 +11,7 @@ const { parsePagination, buildPaginationMeta, buildSort } = require('../../share
 const { getWeekStart, getWeekEnd, formatDate } = require('../../shared/utils/dateHelpers');
 const notificationService = require('../notifications/notification.service');
 const notifier = require('../../shared/services/notifier');
+const { logAction } = require('../audit/audit.routes');
 
 // ─── Helper: get or create the system "Leave" project ────────────────────────
 async function getOrCreateLeaveProject(managerId) {
@@ -30,16 +31,31 @@ async function getOrCreateLeaveProject(managerId) {
   return leaveProject;
 }
 
-// ─── Helper: get all working days (Mon-Fri) between two dates ─────────────────
-function getWorkingDaysBetween(startDate, endDate) {
+// ─── Helper: get all working days between two dates respecting organization settings ─
+async function getWorkingDaysBetween(startDate, endDate) {
+  const Settings = mongoose.model('Settings');
+  const settings = await Settings.findOne().select('organization.workWeek').lean();
+  const workWeek = settings?.organization?.workWeek || 'Mon-Fri';
+
   const days = [];
   const cur = new Date(startDate);
   cur.setUTCHours(0, 0, 0, 0);
   const end = new Date(endDate);
   end.setUTCHours(23, 59, 59, 999);
+
   while (cur <= end) {
     const day = cur.getUTCDay();
-    if (day !== 0 && day !== 6) {
+    let isWorkingDay = true;
+    
+    if (workWeek === 'Mon-Fri') {
+      // 0 = Sunday, 6 = Saturday
+      if (day === 0 || day === 6) isWorkingDay = false;
+    } else if (workWeek === 'Sun-Thu') {
+      // 5 = Friday, 6 = Saturday
+      if (day === 5 || day === 6) isWorkingDay = false;
+    }
+
+    if (isWorkingDay) {
       days.push(new Date(cur));
     }
     cur.setUTCDate(cur.getUTCDate() + 1);
@@ -70,10 +86,11 @@ async function removeLeaveTimesheets(leave) {
   const leaveProject = await Project.findOne({ code: 'LEAVE-SYS' });
   if (!leaveProject) return; // No leave project means no timesheets to clean up
 
-  const workingDays = getWorkingDaysBetween(leave.startDate, leave.endDate);
+  const workingDays = await getWorkingDaysBetween(leave.startDate, leave.endDate);
   if (!workingDays.length) return;
 
-  const weeks = groupByWeek(workingDays, await getWeekStartDay());
+  const wsd = await getWeekStartDay();
+  const weeks = groupByWeek(workingDays, wsd);
   const category = leave.leaveType.charAt(0).toUpperCase() + leave.leaveType.slice(1);
 
   for (const { weekStart, dates } of weeks) {
@@ -106,10 +123,11 @@ async function removeLeaveTimesheets(leave) {
 // ─── Helper: create / upsert leave rows into weekly timesheet ─────────────────
 async function createLeaveTimesheets(leave, approverId) {
   const leaveProject = await getOrCreateLeaveProject(approverId);
-  const workingDays = getWorkingDaysBetween(leave.startDate, leave.endDate);
+  const workingDays = await getWorkingDaysBetween(leave.startDate, leave.endDate);
   if (!workingDays.length) return;
 
-  const weeks = groupByWeek(workingDays, await getWeekStartDay());
+  const wsd = await getWeekStartDay();
+  const weeks = groupByWeek(workingDays, wsd);
   const category = leave.leaveType.charAt(0).toUpperCase() + leave.leaveType.slice(1);
   let hoursPerDay = 8;
   if (leave.isHalfDay) hoursPerDay = 4;
@@ -190,13 +208,31 @@ const leaveService = {
     const user = await User.findById(userId);
     if (!user) throw new AppError('User not found', 404);
 
-    let { startDate, endDate, leaveType, totalDays } = data;
+    let { startDate, endDate, leaveType } = data;
+    leaveType = leaveType.toLowerCase();
+    data.leaveType = leaveType;
     const sd = new Date(startDate);
     const ed = new Date(endDate);
 
+    // 0. Recalculate totalDays based on actual working days (respecting work week settings)
+    const workingDays = await getWorkingDaysBetween(sd, ed);
+    let totalDays = workingDays.length;
+
+    if (data.isHalfDay) {
+      if (totalDays === 0) {
+        throw new AppError('The selected day is not a working day.', 400);
+      }
+      totalDays = 0.5;
+    } else if (totalDays === 0) {
+      throw new AppError('The selected date range does not contain any working days.', 400);
+    }
+    
+    data.totalDays = totalDays;
+
     // 1. Check leave types and balance
-    if (user.leaveBalance && user.leaveBalance.has(leaveType)) {
-      const currentBalance = user.leaveBalance.get(leaveType);
+    const balanceKey = leaveType.toLowerCase();
+    if (user.leaveBalance && user.leaveBalance.has(balanceKey)) {
+      const currentBalance = user.leaveBalance.get(balanceKey);
       if (currentBalance === 0) {
         leaveType = LEAVE_TYPES.LOP;
         data.leaveType = leaveType;
@@ -221,9 +257,17 @@ const leaveService = {
 
     const leave = await Leave.create({ ...data, userId });
 
-    // Notify Admins and Managers
-    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
-    const notificationPromises = approvers.map(approver => 
+    // Notify Admins, Managers, and Direct Manager
+    const systemApprovers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
+    const directManager = user.managerId ? await User.findById(user.managerId).select('_id email') : null;
+
+    const approverMap = new Map();
+    systemApprovers.forEach(a => approverMap.set(a._id.toString(), a));
+    if (directManager) approverMap.set(directManager._id.toString(), directManager);
+
+    const uniqueApprovers = Array.from(approverMap.values());
+
+    const notificationPromises = uniqueApprovers.map(approver => 
       notifier.send(approver._id, {
         userEmail: approver.email,
         type: 'leave_applied',
@@ -234,6 +278,14 @@ const leaveService = {
       })
     );
     await Promise.all(notificationPromises);
+
+    logAction({
+        userId,
+        action: 'APPLY_LEAVE',
+        entityType: 'Leave',
+        entityId: leave._id,
+        details: { leaveId: leave.leaveId, leaveType: leave.leaveType, startDate: leave.startDate, endDate: leave.endDate }
+    });
 
     return leave;
   },
@@ -338,10 +390,11 @@ const leaveService = {
 
     const user = leave.userId;
     // Deduct balance
-    if (user.leaveBalance && user.leaveBalance.has(leave.leaveType)) {
-      let currentBalance = user.leaveBalance.get(leave.leaveType) || 0;
+    const balanceKey = leave.leaveType.toLowerCase();
+    if (user.leaveBalance && user.leaveBalance.has(balanceKey)) {
+      let currentBalance = user.leaveBalance.get(balanceKey) || 0;
       currentBalance -= leave.totalDays;
-      user.leaveBalance.set(leave.leaveType, Math.max(0, currentBalance));
+      user.leaveBalance.set(balanceKey, Math.max(0, currentBalance));
       await user.save();
     }
 
@@ -349,6 +402,18 @@ const leaveService = {
     leave.approvedBy = approverId;
     leave.approvedAt = new Date();
     await leave.save();
+
+    logAction({
+        userId: approverId,
+        action: 'APPROVE_LEAVE',
+        entityType: 'Leave',
+        entityId: id,
+        details: { 
+            leaveId: leave.leaveId, 
+            ownerId: leave.userId?._id || leave.userId,
+            ownerName: leave.userId?.name || 'Unknown'
+        }
+    });
 
     // Auto-create/update the weekly timesheet
     await createLeaveTimesheets(leave, approverId);
@@ -374,6 +439,19 @@ const leaveService = {
     leave.approvedBy = approverId;
     leave.approvedAt = new Date();
     await leave.save();
+
+    logAction({
+        userId: approverId,
+        action: 'REJECT_LEAVE',
+        entityType: 'Leave',
+        entityId: id,
+        details: { 
+            leaveId: leave.leaveId, 
+            ownerId: leave.userId?._id || leave.userId,
+            ownerName: leave.userId?.name || 'Unknown',
+            reason 
+        }
+    });
 
     // Notify employee
     await notifier.send(leave.userId._id, {
@@ -411,9 +489,10 @@ const leaveService = {
     // ── Restore leave balance ONLY if the leave was approved (balance was deducted on approval) ──
     if (wasApproved) {
       const user = leave.userId;
-      if (user.leaveBalance && user.leaveBalance.has(leave.leaveType)) {
-        const currentBalance = user.leaveBalance.get(leave.leaveType) || 0;
-        user.leaveBalance.set(leave.leaveType, currentBalance + leave.totalDays);
+      const balanceKey = leave.leaveType.toLowerCase();
+      if (user.leaveBalance && user.leaveBalance.has(balanceKey)) {
+        const currentBalance = user.leaveBalance.get(balanceKey) || 0;
+        user.leaveBalance.set(balanceKey, currentBalance + leave.totalDays);
         await user.save();
       }
       // Remove timesheet entries created for this approved leave
@@ -424,6 +503,19 @@ const leaveService = {
     leave.status = LEAVE_STATUS.CANCELLED;
     leave.cancellationReason = reason;
     await leave.save();
+
+    logAction({
+        userId: requestorId,
+        action: 'CANCEL_LEAVE',
+        entityType: 'Leave',
+        entityId: id,
+        details: { 
+            leaveId: leave.leaveId, 
+            ownerId: leave.userId?._id || leave.userId,
+            ownerName: leave.userId?.name || 'Unknown',
+            reason 
+        }
+    });
 
     // Notify Admins and Managers (if cancelled by the employee themselves)
     const user = leave.userId;

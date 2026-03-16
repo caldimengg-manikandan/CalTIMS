@@ -22,7 +22,7 @@ const userController = {
   }),
 
   create: asyncHandler(async (req, res) => {
-    const user = await userService.create(req.body);
+    const user = await userService.create(req.body, req.user?._id, req.ip);
     ApiResponse.created(res, { message: 'Employee created successfully', data: user });
   }),
 
@@ -40,12 +40,12 @@ const userController = {
   }),
 
   deactivate: asyncHandler(async (req, res) => {
-    const user = await userService.deactivate(req.params.id);
+    const user = await userService.deactivate(req.params.id, req.user?._id, req.ip);
     ApiResponse.success(res, { message: 'Employee deactivated', data: user });
   }),
 
   activate: asyncHandler(async (req, res) => {
-    const user = await userService.activate(req.params.id);
+    const user = await userService.activate(req.params.id, req.user?._id, req.ip);
     ApiResponse.success(res, { message: 'Employee activated', data: user });
   }),
 
@@ -55,7 +55,7 @@ const userController = {
   }),
 
   delete: asyncHandler(async (req, res) => {
-    await userService.deleteUser(req.params.id);
+    await userService.deleteUser(req.params.id, req.user?._id, req.ip);
     ApiResponse.success(res, { message: 'Employee deleted successfully' });
   }),
 

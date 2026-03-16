@@ -91,18 +91,29 @@ const EmptyChart = ({ message = 'No data for selected period' }) => (
 )
 
 // ─── Progress Bar Component ────────────────────────────────────────────────────
-const ProgressBar = ({ label, value, max, color }) => {
+const ProgressBar = ({ label, value, max, color, isBudget = false }) => {
     const percentage = Math.min(100, Math.max(0, (value / (max || 1)) * 100))
+    const isOver = value > max && max > 0
     return (
         <div className="mb-4">
-            <div className="flex justify-between text-xs font-semibold mb-1.5">
-                <span className="text-slate-600 dark:text-slate-300 truncate pr-2">{label}</span>
-                <span className="text-slate-800 dark:text-white">{value.toFixed(2)}h <span className="text-slate-400 font-normal">/ {max.toFixed(2)}h</span></span>
+            <div className="flex justify-between items-center mb-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-slate-700 dark:text-slate-200 font-bold text-sm truncate">{label}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tight ${isOver ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/10' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10'}`}>
+                        {isOver ? 'Over' : 'Healthy'}
+                    </span>
+                </div>
+                <div className="text-right shrink-0">
+                    <span className={isOver ? 'text-rose-500 font-black' : 'text-slate-800 dark:text-white font-black'}>
+                        {value.toFixed(1)}h 
+                        <span className="text-slate-400 font-medium text-[11px] ml-1">/ {max.toFixed(1)}h {isBudget ? '(Budget)' : '(Cap)'}</span>
+                    </span>
+                </div>
             </div>
-            <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
                 <div
-                    className="h-full rounded-full transition-all duration-1000"
-                    style={{ width: `${percentage}%`, backgroundColor: color }}
+                    className={`h-full rounded-full transition-all duration-1000 ${isOver ? 'bg-gradient-to-r from-rose-500 to-rose-400' : ''}`}
+                    style={{ width: `${percentage}%`, backgroundColor: isOver ? undefined : color }}
                 />
             </div>
         </div>
@@ -116,6 +127,7 @@ export default function ReportsPage() {
     const [selectedProjectId, setSelectedProjectId] = useState('all')
     const [selectedUserId, setSelectedUserId] = useState('all')
     const [selectedDepartment, setSelectedDepartment] = useState('all')
+    const [period, setPeriod] = useState('monthly')
     const [detailParams, setDetailParams] = useState(null)
     const [exportLoading, setExportLoading] = useState(null) // 'pdf' or 'csv'
     const [exportMenuOpen, setExportMenuOpen] = useState(false)
@@ -123,6 +135,7 @@ export default function ReportsPage() {
     const filterParams = {
         ...(range.from && { from: range.from }),
         ...(range.to && { to: range.to }),
+        ...(!range.from && !range.to && period && { period }),
         ...(selectedUserId !== 'all' && { userId: selectedUserId }),
         ...(selectedProjectId !== 'all' && { projectId: selectedProjectId }),
     }
@@ -150,13 +163,13 @@ export default function ReportsPage() {
     })
 
     const { data: projData } = useQuery({
-        queryKey: ['reports', 'project-utilization', range],
-        queryFn: () => reportAPI.getProjectUtilization({ from: range.from, to: range.to }).then(r => r.data.data),
+        queryKey: ['reports', 'project-utilization', filterParams],
+        queryFn: () => reportAPI.getProjectUtilization(filterParams).then(r => r.data.data),
     })
 
     const { data: leaveData } = useQuery({
-        queryKey: ['reports', 'leave-summary', range],
-        queryFn: () => reportAPI.getLeaveSummary({ from: range.from, to: range.to }).then(r => r.data.data),
+        queryKey: ['reports', 'leave-summary', filterParams],
+        queryFn: () => reportAPI.getLeaveSummary(filterParams).then(r => r.data.data),
     })
 
     const { data: weeklyTrend } = useQuery({
@@ -165,18 +178,18 @@ export default function ReportsPage() {
     })
 
     const { data: deptData } = useQuery({
-        queryKey: ['reports', 'department-summary', range],
-        queryFn: () => reportAPI.getDepartmentSummary({ from: range.from, to: range.to }).then(r => r.data.data),
+        queryKey: ['reports', 'department-summary', filterParams],
+        queryFn: () => reportAPI.getDepartmentSummary(filterParams).then(r => r.data.data),
     })
 
     const { data: complianceData } = useQuery({
-        queryKey: ['reports', 'compliance-summary', range],
-        queryFn: () => reportAPI.getComplianceSummary({ from: range.from, to: range.to }).then(r => r.data.data),
+        queryKey: ['reports', 'compliance-summary', filterParams],
+        queryFn: () => reportAPI.getComplianceSummary(filterParams).then(r => r.data.data),
     })
 
     const { data: insightsData } = useQuery({
-        queryKey: ['reports', 'smart-insights', range],
-        queryFn: () => reportAPI.getSmartInsights({ from: range.from, to: range.to }).then(r => r.data.data),
+        queryKey: ['reports', 'smart-insights', filterParams],
+        queryFn: () => reportAPI.getSmartInsights(filterParams).then(r => r.data.data),
     })
 
     const { data: taskDetails, isLoading: tasksLoading } = useQuery({
@@ -289,7 +302,7 @@ export default function ReportsPage() {
             subtitle="Advanced reporting, compliance tracking, AI-powered insights, and department utilization metrics are available in the Enterprise Pro tier."
             icon={Zap}
         >
-            <div className="space-y-6 animate-fade-in pb-12">
+            <div className="space-y-6 fluid-container animate-fade-in pb-12">
                 {/* ── Page Header & Export ── */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
@@ -334,7 +347,7 @@ export default function ReportsPage() {
                 {/* ── 1. Top Filter Bar (Global Controls) ── */}
                 <div className="card p-4 border border-slate-100 dark:border-white/5 shadow-sm sticky top-0 z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
                     <div className="flex flex-wrap items-center gap-4">
-                        <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-sm bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-lg">
+                        <div className="flex items-center gap-2 text-primary dark:text-indigo-400 font-bold text-sm bg-indigo-50 dark:bg-primary-500/10 px-3 py-1.5 rounded-lg">
                             <Filter size={16} /> Filters
                         </div>
 
@@ -358,6 +371,13 @@ export default function ReportsPage() {
                             value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)}>
                             <option value="all">All Employees</option>
                             {employees?.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+                        </select>
+
+                        <select className="input py-2 text-sm w-44 bg-slate-50 dark:bg-slate-800 font-medium border-primary-200 dark:border-primary-500/20"
+                            value={period} onChange={e => { setPeriod(e.target.value); setRange({ from: '', to: '' }) }}>
+                            <option value="weekly">This Week</option>
+                            <option value="monthly">This Month</option>
+                            <option value="yearly">This Year</option>
                         </select>
 
                         <select className="input py-2 text-sm w-44 bg-slate-50 dark:bg-slate-800 font-medium"
@@ -397,7 +417,7 @@ export default function ReportsPage() {
                         {insightsData?.length > 0 && (
                             <div className="rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 p-1 shadow-lg">
                                 <div className="bg-white dark:bg-slate-900 rounded-xl p-5 relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-10 -mt-20 pointer-events-none"></div>
+                                    <div className="absolute top-0 right-0 w-64 h-64 bg-primary-500/10 rounded-full blur-3xl -mr-10 -mt-20 pointer-events-none"></div>
                                     <div className="flex items-start gap-4 relative z-10">
                                         <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-md flex-shrink-0">
                                             <Zap size={24} fill="currentColor" className="opacity-80" />
@@ -417,7 +437,7 @@ export default function ReportsPage() {
                             </div>
                         )}
 
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 ultrawide:ultrawide-grid-4 gap-6">
 
                             {/* ── Compliance Analytics (Donut) ── */}
                             <div className="card lg:col-span-1">
@@ -453,15 +473,44 @@ export default function ReportsPage() {
                             {/* ── Project Utilization (Progress Bars) ── */}
                             <div className="card lg:col-span-2 flex flex-col">
                                 <SectionHeader icon={Briefcase} title="Project Utilization" color="#3b82f6" subtitle="Actual hours vs Estimated Capacity" />
-                                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
-                                    {projData?.length ? projData.slice(0, 8).map((proj, idx) => (
-                                        <ProgressBar
-                                            key={proj._id}
-                                            label={proj.project?.name || 'Unknown Project'}
-                                            value={proj.totalHours}
-                                            max={proj.capacity || (proj.totalHours + Math.max(10, proj.totalHours * 0.2))}
-                                            color={PALETTE[idx % PALETTE.length]}
-                                        />
+                                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
+                                    {projData?.length ? projData.slice(0, 10).map((proj, idx) => (
+                                        <div key={proj._id} className="group/proj p-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-2xl transition-all">
+                                            <ProgressBar
+                                                label={proj.project?.name || 'Unknown Project'}
+                                                value={proj.totalHours}
+                                                max={proj.capacity || (proj.totalHours + Math.max(10, proj.totalHours * 0.2))}
+                                                color={PALETTE[idx % PALETTE.length]}
+                                                isBudget={!!proj.project?.budgetHours}
+                                            />
+                                            
+                                            {/* Enterprise-style employee-level budget tracker breakdown */}
+                                            {proj.employeeDetails?.length > 0 && (
+                                                <div className="ml-5 pl-4 border-l-2 border-slate-100 dark:border-white/5 space-y-3 mt-3 animate-fade-in">
+                                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Member Utilization Breakdown</p>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                                                        {proj.employeeDetails.filter(ed => ed.loggedHours > 0 || ed.budgetHours > 0).map((ed, eIdx) => (
+                                                            <div key={eIdx} className="flex flex-col gap-1.5">
+                                                                <div className="flex justify-between items-center text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                                                    <span className="truncate max-w-[120px]">{ed.userId?.name || 'Member'}</span>
+                                                                    <span className={ed.loggedHours > ed.budgetHours && ed.budgetHours > 0 ? 'text-rose-500 bg-rose-50 dark:bg-rose-500/10 px-1.5 py-0.5 rounded' : 'text-slate-500'}>
+                                                                        {ed.loggedHours.toFixed(1)} <span className="text-[9px] font-medium opacity-60">/</span> {ed.budgetHours || '∞'}h
+                                                                    </span>
+                                                                </div>
+                                                                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
+                                                                    <div 
+                                                                        className={`h-full rounded-full transition-all duration-1000 ${ed.loggedHours > ed.budgetHours && ed.budgetHours > 0 ? 'bg-gradient-to-r from-rose-500 to-rose-400' : 'bg-gradient-to-r from-indigo-400 to-blue-400 dark:from-indigo-500 dark:to-blue-500 shadow-sm'}`}
+                                                                        style={{ 
+                                                                            width: `${Math.min(100, (ed.loggedHours / (ed.budgetHours || Math.max(ed.loggedHours, 1))) * 100)}%`
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     )) : <EmptyChart message="No active projects" />}
                                 </div>
                             </div>
@@ -652,7 +701,7 @@ export default function ReportsPage() {
                                     <FileText size={16} className="text-slate-400" />
                                     <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Detailed Entries</span>
                                 </div>
-                                <div className="max-h-[400px] overflow-y-auto custom-scrollbar p-2 space-y-2">
+                                <div className="modal-scroll-adaptive p-2 space-y-2 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10 scrollbar-track-transparent">
                                     {taskDetails?.map((task, idx) => (
                                         <div key={idx} className="p-4 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border border-transparent hover:border-slate-100 dark:hover:border-slate-700 flex flex-col sm:flex-row gap-4">
                                             <div className="flex items-start justify-between sm:w-48 flex-shrink-0">

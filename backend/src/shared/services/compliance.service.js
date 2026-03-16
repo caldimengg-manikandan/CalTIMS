@@ -134,6 +134,61 @@ async function handleMondayFreeze() {
     }
 }
 
+async function handleAuditPurge() {
+    console.log('[Compliance] Running Audit Log Purge');
+    try {
+        const Settings = require('../../modules/settings/settings.model');
+        const AuditLog = require('../../modules/audit/audit.model');
+
+        const settings = await Settings.findOne().select('compliance.auditLogRetentionDays').lean();
+        const days = settings?.compliance?.auditLogRetentionDays || 365;
+
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+
+        const result = await AuditLog.deleteMany({ createdAt: { $lt: cutoff } });
+        if (result.deletedCount > 0) {
+            console.log(`[Compliance] Purged ${result.deletedCount} audit logs older than ${days} days.`);
+        }
+    } catch (err) {
+        console.error('[Compliance] Audit purge error:', err.message);
+    }
+}
+
+async function handleMonthlyFreeze() {
+    const Settings = require('../../modules/settings/settings.model');
+    const settings = await Settings.findOne().select('compliance.timesheetFreezeDay general.weekStartDay').lean();
+    const freezeDay = settings?.compliance?.timesheetFreezeDay || 28;
+    const wsd = settings?.general?.weekStartDay || 'monday';
+
+    const today = new Date();
+    if (today.getDate() !== freezeDay) return;
+
+    console.log(`[Compliance] Running Monthly Freeze (Day ${freezeDay})`);
+
+    // Target: Previous month's weeks
+    const firstDayOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    // Find timesheets before this month that are not frozen
+    const overdueTimesheets = await Timesheet.find({
+        weekStartDate: { $lt: firstDayOfCurrentMonth },
+        status: { $ne: TIMESHEET_STATUS.FROZEN }
+    });
+
+    for (const ts of overdueTimesheets) {
+        ts.status = TIMESHEET_STATUS.FROZEN;
+        ts.frozenAt = today;
+        await ts.save();
+    }
+
+    if (overdueTimesheets.length > 0) {
+        console.log(`[Compliance] Automatically frozen ${overdueTimesheets.length} historical timesheets.`);
+    }
+}
+
+let auditJob = null;
+let monthlyFreezeJob = null;
+
 const complianceService = {
     startCronJobs() {
         // Friday at 6:00 PM
@@ -157,13 +212,22 @@ const complianceService = {
             });
         }
 
-        console.log('[Compliance] ✅ Timesheet compliance scheduler started.');
+        // Daily at Midnight: Audit Purge & Monthly Freeze Check
+        if (!auditJob) {
+            auditJob = cron.schedule('0 0 * * *', () => {
+                handleAuditPurge().catch(err => console.error('[Compliance] Audit purge error:', err));
+                handleMonthlyFreeze().catch(err => console.error('[Compliance] Monthly freeze error:', err));
+            });
+        }
+
+        console.log('[Compliance] ✅ Timesheet compliance scheduler started (Weekly + Monthly).');
     },
 
     stopCronJobs() {
         if (fridayJob) { fridayJob.stop(); fridayJob = null; }
         if (mondayWarnJob) { mondayWarnJob.stop(); mondayWarnJob = null; }
         if (mondayFreezeJob) { mondayFreezeJob.stop(); mondayFreezeJob = null; }
+        if (auditJob) { auditJob.stop(); auditJob = null; }
     }
 };
 

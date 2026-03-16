@@ -28,6 +28,7 @@ const notifier = {
       'leave_applied': 'notifyOnLeaveRequest',
       'leave_approved': 'notifyOnLeaveApproval',
       'leave_rejected': 'notifyOnLeaveRejection', // Added for completeness
+      'support_ticket_created': 'notifyOnSupportTicket',
     };
 
     const settingKey = triggerMap[type];
@@ -64,6 +65,25 @@ const notifier = {
       } catch (err) {
         console.error(`Failed to send email notification to ${userEmail}:`, err.message);
         results.emailError = err.message;
+      }
+    }
+
+    // 4. Slack Notification
+    const slackSettings = settings.integrations?.slackNotifications || {};
+    if (slackSettings.enabled && slackSettings.webhookUrl) {
+      try {
+        await fetch(slackSettings.webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: `*${title}*\n${message}${actionLink ? `\n<${actionLink}|${actionLabel || 'View Details'}>` : ''}`,
+            username: companyName,
+          }),
+        });
+        results.slack = true;
+      } catch (err) {
+        console.error('Failed to send Slack notification:', err.message);
+        results.slackError = err.message;
       }
     }
 

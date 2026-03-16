@@ -36,6 +36,7 @@ export default function SupportModal({ isOpen, onClose }) {
     const [otp, setOtp] = useState('')
     const [myTickets, setMyTickets] = useState([])
     const [trackEmail, setTrackEmail] = useState('')
+    const [submittedTicket, setSubmittedTicket] = useState(null)
 
     const filteredFAQs = FAQ_ITEMS.filter(item =>
         item.q.toLowerCase().includes(searchQuery.toLowerCase())
@@ -98,7 +99,8 @@ export default function SupportModal({ isOpen, onClose }) {
 
         setIsSubmitting(true)
         try {
-            await supportService.submitTicket(formData)
+            const res = await supportService.submitTicket(formData)
+            setSubmittedTicket(res.data)
             setView('success')
             resetState()
         } catch (err) {
@@ -144,7 +146,7 @@ export default function SupportModal({ isOpen, onClose }) {
                         )}
                         <div>
                             <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                                <LifeBuoy className="text-indigo-600" size={24} />
+                                <LifeBuoy className="text-primary" size={24} />
                                 CALTIMS Support Center
                             </h2>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enterprise Helpdesk System</p>
@@ -157,31 +159,31 @@ export default function SupportModal({ isOpen, onClose }) {
                     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {/* Search */}
                         <div className="relative group">
-                            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={20} />
+                            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={20} />
                             <input
                                 type="text"
                                 placeholder="Search help articles or common issues..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full h-16 bg-slate-50 dark:bg-white/5 border-2 border-transparent focus:border-indigo-600/20 rounded-[2rem] pl-16 pr-6 text-sm font-bold outline-none transition-all shadow-sm"
+                                className="w-full h-16 bg-slate-50 dark:bg-white/5 border-2 border-transparent focus:border-primary/20 rounded-[2rem] pl-16 pr-6 text-sm font-bold outline-none transition-all shadow-sm"
                             />
                         </div>
 
                         {/* Common Issues */}
                         <div>
                             <div className="flex items-center gap-2 mb-4 px-2">
-                                <BookOpen size={16} className="text-indigo-600" />
+                                <BookOpen size={16} className="text-primary" />
                                 <h3 className="text-[11px] font-black uppercase text-slate-400 tracking-widest">Common Solutions</h3>
                             </div>
                             <div className="grid gap-3">
                                 {filteredFAQs.length > 0 ? filteredFAQs.map((faq, i) => (
-                                    <div key={i} className="group p-5 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-3xl hover:border-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/5 transition-all cursor-pointer">
+                                    <div key={i} className="group p-5 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-3xl hover:border-primary/30 hover:shadow-xl hover:shadow-indigo-600/5 transition-all cursor-pointer">
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
                                                 <p className="text-sm font-black text-slate-800 dark:text-white mb-1">{faq.q}</p>
                                                 <p className="text-xs text-slate-500 font-medium leading-relaxed">{faq.a}</p>
                                             </div>
-                                            <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                            <ChevronRight size={16} className="text-slate-300 group-hover:text-primary group-hover:translate-x-1 transition-all" />
                                         </div>
                                     </div>
                                 )) : (
@@ -194,7 +196,7 @@ export default function SupportModal({ isOpen, onClose }) {
                         <div className="grid grid-cols-2 gap-4">
                             <button
                                 onClick={() => setView('ticket')}
-                                className="group p-6 bg-indigo-600 text-white rounded-[2.5rem] hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 flex flex-col items-center text-center gap-3"
+                                className="group p-6 btn-primary text-white rounded-[2.5rem] hover:bg-primary-700 transition-all shadow-xl shadow-primary/20 flex flex-col items-center text-center gap-3"
                             >
                                 <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
                                     <MessageSquare size={24} />
@@ -228,7 +230,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Stakeholder Name *</label>
                                 <input
                                     required
-                                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-600 transition-all"
+                                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-primary transition-all"
                                     placeholder="Enter your full name"
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -241,7 +243,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                         required
                                         type="email"
                                         disabled={emailVerified}
-                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-600 transition-all pr-32 disabled:opacity-50"
+                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-primary transition-all pr-32 disabled:opacity-50"
                                         placeholder="user@organization.com"
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -251,7 +253,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                             type="button"
                                             disabled={isActionLoading || !formData.email}
                                             onClick={() => handleSendOTP(formData.email)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 px-4 py-2 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-indigo-700 transition-colors"
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 px-4 py-2 btn-primary text-white text-[10px] font-black uppercase rounded-xl hover:bg-primary-700 transition-colors"
                                         >
                                             {isActionLoading ? <Loader2 size={12} className="animate-spin" /> : emailSent ? 'Resend' : 'Get OTP'}
                                         </button>
@@ -266,9 +268,9 @@ export default function SupportModal({ isOpen, onClose }) {
                         </div>
 
                         {emailSent && !emailVerified && (
-                            <div className="p-6 bg-indigo-50 dark:bg-indigo-500/5 rounded-[2rem] border border-indigo-100 dark:border-indigo-500/10 space-y-4 animate-in zoom-in-95">
+                            <div className="p-6 bg-indigo-50 dark:bg-primary-500/5 rounded-[2rem] border border-indigo-100 dark:border-indigo-500/10 space-y-4 animate-in zoom-in-95">
                                 <div className="flex items-center gap-3">
-                                    <AlertCircle className="text-indigo-600" size={18} />
+                                    <AlertCircle className="text-primary" size={18} />
                                     <h4 className="text-xs font-black uppercase tracking-wider text-indigo-900 dark:text-indigo-200">Security Challenge</h4>
                                 </div>
                                 <div className="flex gap-3">
@@ -276,7 +278,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                         type="text"
                                         maxLength={6}
                                         placeholder="6-digit code"
-                                        className="flex-1 bg-white dark:bg-black/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl px-4 py-3 text-center text-lg font-black tracking-widest outline-none focus:ring-2 focus:ring-indigo-600"
+                                        className="flex-1 bg-white dark:bg-black/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl px-4 py-3 text-center text-lg font-black tracking-widest outline-none focus:ring-2 focus:ring-primary"
                                         value={otp}
                                         onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                                     />
@@ -303,7 +305,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                                 key={cat}
                                                 type="button"
                                                 onClick={() => setFormData({ ...formData, issueType: cat })}
-                                                className={`px-4 py-3 rounded-2xl text-[11px] font-black transition-all border-2 ${formData.issueType === cat ? 'bg-indigo-50 border-indigo-600 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100'}`}
+                                                className={`px-4 py-3 rounded-2xl text-[11px] font-black transition-all border-2 ${formData.issueType === cat ? 'bg-indigo-50 border-primary text-primary' : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100'}`}
                                             >
                                                 {cat}
                                             </button>
@@ -315,7 +317,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                     <textarea
                                         required
                                         rows={4}
-                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-600 transition-all resize-none"
+                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-primary transition-all resize-none"
                                         placeholder="Please provide specifics for a faster resolution..."
                                         value={formData.message}
                                         onChange={(e) => setFormData({ ...formData, message: e.target.value })}
@@ -323,7 +325,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                 </div>
                                 <button
                                     disabled={isSubmitting}
-                                    className="w-full h-16 bg-indigo-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] shadow-2xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:grayscale"
+                                    className="w-full h-16 btn-primary text-white rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] shadow-2xl shadow-primary/20 hover:bg-primary-700 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:grayscale"
                                 >
                                     {isSubmitting ? <Loader2 className="animate-spin" /> : <>Initialize Request <Send size={18} /></>}
                                 </button>
@@ -348,7 +350,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                         required
                                         type="email"
                                         disabled={emailVerified}
-                                        className="w-full h-14 bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl px-5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-600 transition-all pr-32 disabled:opacity-50"
+                                        className="w-full h-14 bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl px-5 text-sm font-bold outline-none focus:ring-2 focus:ring-primary transition-all pr-32 disabled:opacity-50"
                                         placeholder="Enter your email"
                                         value={trackEmail}
                                         onChange={(e) => setTrackEmail(e.target.value)}
@@ -358,7 +360,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                             type="button"
                                             disabled={isActionLoading || !trackEmail}
                                             onClick={() => handleSendOTP(trackEmail)}
-                                            className="absolute right-2.5 top-2.5 bottom-2.5 px-4 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-indigo-700 transition-colors"
+                                            className="absolute right-2.5 top-2.5 bottom-2.5 px-4 btn-primary text-white text-[10px] font-black uppercase rounded-xl hover:bg-primary-700 transition-colors"
                                         >
                                             {isActionLoading ? <Loader2 size={12} className="animate-spin" /> : emailSent ? 'Resend' : 'Send Code'}
                                         </button>
@@ -372,7 +374,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                         type="text"
                                         maxLength={6}
                                         placeholder="000000"
-                                        className="w-full h-16 bg-white border-2 border-indigo-600/20 rounded-2xl text-center text-2xl font-black tracking-[1em] outline-none focus:border-indigo-600"
+                                        className="w-full h-16 bg-white border-2 border-primary/20 rounded-2xl text-center text-2xl font-black tracking-[1em] outline-none focus:border-primary"
                                         value={otp}
                                         onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                                     />
@@ -394,14 +396,14 @@ export default function SupportModal({ isOpen, onClose }) {
                     <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                             <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Total Tickets: {myTickets.length}</h4>
-                            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">{trackEmail}</span>
+                            <span className="text-[10px] font-bold text-primary bg-indigo-50 px-3 py-1 rounded-full uppercase">{trackEmail}</span>
                         </div>
 
                         <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 scrollbar-thin">
                             {myTickets.length > 0 ? myTickets.map(ticket => (
                                 <div key={ticket._id} className="p-5 bg-white border border-slate-100 rounded-3xl space-y-3 hover:border-indigo-200 transition-all">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">{ticket.ticketId}</span>
+                                        <span className="text-[11px] font-black text-primary uppercase tracking-widest">{ticket.ticketId}</span>
                                         <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${getStatusColor(ticket.status)}`}>
                                             {ticket.status}
                                         </span>
@@ -410,7 +412,7 @@ export default function SupportModal({ isOpen, onClose }) {
                                     <p className="text-xs text-slate-500 font-medium line-clamp-2 leading-relaxed">{ticket.message}</p>
                                     <div className="flex items-center justify-between pt-2 border-t border-slate-50 mt-2">
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{format(new Date(ticket.createdAt), 'MMM d, yyyy HH:mm')}</span>
-                                        <button className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-1 hover:underline">
+                                        <button className="text-[10px] font-black text-primary uppercase flex items-center gap-1 hover:underline">
                                             View Details <ExternalLink size={10} />
                                         </button>
                                     </div>
@@ -435,7 +437,7 @@ export default function SupportModal({ isOpen, onClose }) {
                             <h3 className="text-2xl font-black text-slate-900">Request Dispatched!</h3>
                             <p className="text-sm text-slate-500 font-medium max-w-[280px] mx-auto leading-relaxed">
                                 Your support request has been logged successfully.
-                                <span className="block mt-1 text-xs text-indigo-600">Ticket ID: {formData.ticketId}</span>
+                                <span className="block mt-1 text-xs text-primary">Ticket ID: {submittedTicket?.ticketId}</span>
                             </p>
                         </div>
                         <div className="pt-6">

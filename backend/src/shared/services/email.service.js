@@ -2,6 +2,7 @@
 
 const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
+const { Parser } = require('json2csv');
 const Timesheet = require('../../modules/timesheets/timesheet.model');
 const { TIMESHEET_STATUS } = require('../../constants');
 
@@ -172,6 +173,47 @@ function buildResetPasswordHTML({ resetLink, name, companyName }) {
 </html>`;
 }
 
+// ── Welcome Email Builder ──────────────────────────────────────────────────
+function buildWelcomeEmailHTML({ name, email, password, portalLink, companyName }) {
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Welcome to ${companyName}</title></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:550px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+    <div style="background:linear-gradient(135deg,#22c55e,#16a34a);padding:32px 40px;text-align:center">
+      <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800">${companyName}</h1>
+      <p style="margin:6px 0 0;color:#dcfce7;font-size:14px">Welcome to the Team!</p>
+    </div>
+    <div style="padding:40px">
+      <h2 style="margin:0 0 16px;color:#1e293b;font-size:20px;font-weight:700">Hello ${name},</h2>
+      <p style="margin:0 0 24px;color:#64748b;font-size:15px;line-height:1.6">
+        Your account has been created successfully. You can now log in to the employee portal using the credentials below:
+      </p>
+      
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;margin-bottom:24px">
+        <p style="margin:0 0 12px;font-size:14px;color:#64748b"><strong>Email:</strong> ${email}</p>
+        <p style="margin:0;font-size:14px;color:#64748b"><strong>Password:</strong> <code style="background:#fff;padding:2px 6px;border-radius:4px;border:1px solid #e2e8f0;color:#1e293b;font-weight:700">${password}</code></p>
+      </div>
+
+      <div style="text-align:center">
+        <a href="${portalLink}" style="display:inline-block;background:#22c55e;color:#fff;padding:14px 40px;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none;box-shadow:0 4px 12px rgba(34,197,94,0.3)">
+          Login to Portal
+        </a>
+      </div>
+
+      <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;text-align:center">
+        We recommend changing your password after your first login.
+      </p>
+    </div>
+    <div style="padding:20px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center">
+      <p style="margin:0;font-size:11px;color:#94a3b8">${companyName} &mdash; Employee Onboarding</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 // ── Notification Email Builder ──────────────────────────────────────────────
 function buildNotificationHTML({ title, message, companyName, actionLink, actionLabel }) {
   return `
@@ -208,17 +250,32 @@ const emailService = {
    * @param {string[]} recipientEmails
    * @param {string} reportType
    * @param {string} companyName
+   * @param {string[]} projectIds
+   * @param {string} format
    */
-  async sendReportEmail(recipientEmails, reportType, companyName, projectIds = []) {
+  async sendReportEmail(recipientEmails, reportType, companyName, projectIds = [], format = 'HTML') {
     const transporter = createTransporter(); // throws if not configured
     const data = await buildReportData(reportType, companyName, projectIds);
     const html = buildEmailHTML(data);
+    const dateStr = new Date().toLocaleDateString('en-IN').replace(/\//g, '-');
+    const filenameBase = `${data.reportTitle.replace(/[^a-z0-9]/gi, '_')}_${dateStr}`;
+    
+    let attachments = [];
+
+    if (format === 'PDF') {
+        const { buffer } = await emailService.buildReportPdf(reportType, companyName, projectIds);
+        attachments.push({ filename: `${filenameBase}.pdf`, content: buffer, contentType: 'application/pdf' });
+    } else if (format === 'CSV' || format === 'Excel') {
+        const { buffer, ext, mime } = await emailService.buildReportCsv(reportType, companyName, projectIds, format);
+        attachments.push({ filename: `${filenameBase}.${ext}`, content: buffer, contentType: mime });
+    }
 
     await transporter.sendMail({
       from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
       to: recipientEmails.join(','),
       subject: `[${companyName}] ${data.reportTitle} — ${new Date().toLocaleDateString('en-IN')}`,
       html,
+      attachments
     });
 
     return { sent: recipientEmails.length, reportTitle: data.reportTitle };
@@ -403,6 +460,40 @@ const emailService = {
   },
 
   /**
+   * Build a CSV/Excel buffer from report data.
+   */
+  async buildReportCsv(reportType, companyName, projectIds = [], format = 'CSV') {
+    const data = await buildReportData(reportType, companyName, projectIds);
+    const { timesheets, reportTitle } = data;
+
+    const csvData = timesheets.map(ts => ({
+        Employee: ts.userId?.name || 'Unknown',
+        EmployeeID: ts.userId?.employeeId || '',
+        Department: ts.userId?.department || '',
+        WeekStatus: ts.weekStartDate ? new Date(ts.weekStartDate).toLocaleDateString('en-IN') : '',
+        Hours: ts.totalHours ?? 0,
+        Status: ts.status ? ts.status.toUpperCase() : ''
+    }));
+
+    const fields = ['Employee', 'EmployeeID', 'Department', 'WeekStatus', 'Hours', 'Status'];
+    let csvString = '';
+    
+    if (csvData.length > 0) {
+        const json2csvParser = new Parser({ fields });
+        csvString = json2csvParser.parse(csvData);
+    } else {
+        csvString = fields.join(',') + '\n'; // empty headers
+    }
+
+    // if format is Excel, it is often useful to prepend BOM so excel opens UTF-8 properly
+    const buffer = Buffer.from('\uFEFF' + csvString, 'utf8');
+    const ext = format === 'Excel' ? 'csv' : 'csv'; // Using csv for both, Excel opens it
+    const mime = format === 'Excel' ? 'application/vnd.ms-excel' : 'text/csv';
+
+    return { buffer, reportTitle, recordCount: timesheets.length, ext, mime };
+  },
+
+  /**
    * Build PDF and send it as an email attachment.
    */
   async sendReportPdfEmail(recipientEmails, reportType, companyName, projectIds = []) {
@@ -433,6 +524,29 @@ const emailService = {
       from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
       to: recipientEmail,
       subject: `[${companyName}] ${title}`,
+      html,
+    });
+
+    return true;
+  },
+
+  /**
+   * Send welcome email to new employee
+   */
+  async sendWelcomeEmail(recipientEmail, { name, password, portalLink, companyName = 'CALTIMS' }) {
+    const transporter = createTransporter();
+    const html = buildWelcomeEmailHTML({ 
+      name, 
+      email: recipientEmail, 
+      password, 
+      portalLink, 
+      companyName 
+    });
+
+    await transporter.sendMail({
+      from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+      to: recipientEmail,
+      subject: `Welcome to ${companyName} - Your Account Credentials`,
       html,
     });
 

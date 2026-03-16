@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
     AlertCircle, Filter, Eye, XCircle, Plus, Search,
@@ -39,6 +39,23 @@ export default function IncidentList() {
     });
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [selectedTicket, setSelectedTicket] = useState(null);
+    const [modalInitialData, setModalInitialData] = useState(null);
+    const location = useLocation();
+
+    useEffect(() => {
+        if (location.state?.autoOpen) {
+            if (location.state.type === 'frozen') {
+                setModalInitialData({
+                    title: 'FROZEN TIMESHEET',
+                    category: 'timesheet error',
+                    priority: 'High'
+                });
+            }
+            setIsCreateModalOpen(true);
+            // Clear the state so it doesn't reopen on refresh
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location.state, location.pathname, navigate]);
 
     // Queries
     const incidentsQuery = useQuery({
@@ -110,7 +127,7 @@ export default function IncidentList() {
     const data = activeTab === 'incidents' ? incidentsQuery.data : supportQuery.data;
     const isLoading = activeTab === 'incidents' ? incidentsQuery.isLoading : supportQuery.isLoading;
 
-    const listItems = activeTab === 'incidents' ? data?.data || [] : data?.data?.tickets || [];
+    const listItems = data?.data || [];
 
     return (
         <ProGuard
@@ -118,12 +135,12 @@ export default function IncidentList() {
             subtitle="Centralized incident tracking and support tickets are available in the Enterprise Pro tier. Connect with your team efficiently."
             icon={AlertCircle}
         >
-            <div className="space-y-6 max-w-[1600px] mx-auto animate-fade-in p-4 lg:p-6 pb-20">
+            <div className="h-[calc(100vh-160px)] flex flex-col gap-4 animate-fade-in overflow-hidden">
                 <PageHeader title={isAdmin ? "Help & Support Center" : "My Incidents"}>
                     {!isAdmin && (
                         <button
                             onClick={() => setIsCreateModalOpen(true)}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
+                            className="flex items-center gap-2 px-6 py-2.5 btn-primary hover:bg-primary-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
                         >
                             <Plus size={18} /> Report an Issue
                         </button>
@@ -142,13 +159,13 @@ export default function IncidentList() {
                             <div className="flex gap-2 p-1.5 bg-slate-100 dark:bg-white/5 rounded-2xl w-fit">
                                 <button
                                     onClick={() => { setActiveTab('incidents'); clearFilters(); }}
-                                    className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'incidents' ? 'bg-white dark:bg-black text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
+                                    className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'incidents' ? 'bg-white dark:bg-black text-primary shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
                                 >
                                     <ShieldAlert size={16} /> Internal Incidents
                                 </button>
                                 <button
                                     onClick={() => { setActiveTab('support'); clearFilters(); }}
-                                    className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'support' ? 'bg-white dark:bg-black text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
+                                    className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'support' ? 'bg-white dark:bg-black text-primary shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
                                 >
                                     <LifeBuoy size={16} /> External Support Requests
                                 </button>
@@ -156,7 +173,7 @@ export default function IncidentList() {
                         )}
 
                         {/* Filters */}
-                        <div className="bg-white dark:bg-black rounded-3xl shadow-sm border border-slate-100 dark:border-white p-6">
+                        <div className="bg-white dark:bg-black rounded-3xl shadow-sm border border-slate-100 dark:border-white p-6 shrink-0">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-slate-50 dark:bg-white/5 rounded-xl text-slate-400">
@@ -167,7 +184,7 @@ export default function IncidentList() {
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Refine results by parameters</p>
                                     </div>
                                 </div>
-                                <button onClick={clearFilters} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors">
+                                <button onClick={clearFilters} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary transition-colors">
                                     Reset Filters
                                 </button>
                             </div>
@@ -187,7 +204,7 @@ export default function IncidentList() {
                                         {filters.search && (
                                             <button
                                                 onClick={() => handleFilterChange('search', '')}
-                                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
+                                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary transition-colors"
                                             >
                                                 <XCircle size={16} />
                                             </button>
@@ -220,10 +237,10 @@ export default function IncidentList() {
                         </div>
 
                         {/* List */}
-                        <div className="bg-white dark:bg-black rounded-3xl shadow-sm border border-slate-100 dark:border-white overflow-hidden">
+                        <div className="bg-white dark:bg-black rounded-3xl shadow-sm border border-slate-100 dark:border-white overflow-hidden flex flex-col min-h-0 flex-1">
                             <div className="p-6 border-b border-slate-100 dark:border-white flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl text-indigo-600">
+                                    <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl text-primary">
                                         <AlertCircle size={18} />
                                     </div>
                                     <h2 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">
@@ -233,7 +250,7 @@ export default function IncidentList() {
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{data?.pagination?.total || 0} TOTAL RECORDS</p>
                             </div>
 
-                            <div className="overflow-x-auto max-h-[calc(100vh-450px)] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10 scrollbar-track-transparent">
+                            <div className="overflow-y-auto flex-1 scroll-v-adaptive scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10 scrollbar-track-transparent">
                                 <table className="w-full text-left border-collapse">
                                     <thead className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-white/5">
                                         <tr>
@@ -261,7 +278,7 @@ export default function IncidentList() {
                                             listItems.map((item) => (
                                                 <tr key={item._id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all group">
                                                     <td className="px-6 py-5">
-                                                        <span className="text-xs font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-lg">
+                                                        <span className="text-xs font-black text-primary bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-lg">
                                                             {activeTab === 'incidents' ? item.incidentId : item.ticketId}
                                                         </span>
                                                     </td>
@@ -305,20 +322,20 @@ export default function IncidentList() {
                                                     </td>
                                                     <td className="px-6 py-5 text-center">
                                                         {activeTab === 'incidents' ? (
-                                                            <button onClick={() => navigate(`/incidents/${item._id}`)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-all shadow-sm">
+                                                            <button onClick={() => navigate(`/incidents/${item._id}`)} className="p-2 text-slate-400 hover:text-primary hover:bg-white rounded-xl transition-all shadow-sm">
                                                                 <Eye size={18} />
                                                             </button>
                                                         ) : (
                                                             <div className="flex items-center justify-center gap-1">
                                                                 <button
                                                                     onClick={() => setSelectedTicket(item)}
-                                                                    className="p-2 text-indigo-600 hover:bg-white rounded-xl transition-all shadow-sm"
+                                                                    className="p-2 text-primary hover:bg-white rounded-xl transition-all shadow-sm"
                                                                     title="Review Ticket"
                                                                 >
                                                                     <Eye size={18} />
                                                                 </button>
                                                                 <div className="relative group/menu">
-                                                                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-all">
+                                                                    <button className="p-2 text-slate-400 hover:text-primary hover:bg-white rounded-xl transition-all">
                                                                         <MoreVertical size={18} />
                                                                     </button>
                                                                     <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-900 border border-slate-100 dark:border-white/10 rounded-2xl shadow-2xl opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all z-50 p-2 space-y-1">
@@ -327,7 +344,7 @@ export default function IncidentList() {
                                                                             <button
                                                                                 key={s}
                                                                                 onClick={() => updateSupportStatus.mutate({ id: item._id, status: s })}
-                                                                                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${item.status === s ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' : 'hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                                                                                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${item.status === s ? 'bg-indigo-50 dark:bg-indigo-900/30 text-primary' : 'hover:bg-slate-50 dark:hover:bg-white/5'}`}
                                                                             >
                                                                                 <div className={`w-1.5 h-1.5 rounded-full ${s === 'Resolved' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                                                                                 {s}
@@ -366,8 +383,12 @@ export default function IncidentList() {
 
                         <CreateIncidentModal
                             isOpen={isCreateModalOpen}
-                            onClose={() => setIsCreateModalOpen(false)}
+                            onClose={() => {
+                                setIsCreateModalOpen(false);
+                                setModalInitialData(null);
+                            }}
                             onSuccess={refreshTickets}
+                            initialData={modalInitialData}
                         />
                     </>
                 )}

@@ -64,7 +64,7 @@ export default function TimesheetHistoryPage() {
     const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''
 
     const { data, isLoading } = useQuery({
-        queryKey: ['timesheets', 'history', page, filters, effectiveSearch],
+        queryKey: ['timesheets', 'history', page, limit, filters, effectiveSearch],
         queryFn: () => timesheetAPI.getHistory({
             page,
             limit,
@@ -196,13 +196,13 @@ export default function TimesheetHistoryPage() {
     }
 
     // Colors for dots
-    const COLORS = ['bg-blue-500', 'bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-slate-500']
+    const COLORS = ['bg-blue-500', 'bg-primary-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-slate-500']
 
     return (
-        <div className="space-y-6 max-w-[1600px] mx-auto animate-fade-in p-4 lg:p-6 flex flex-col min-h-0">
+        <div className="h-[calc(100vh-160px)] flex flex-col gap-4 animate-fade-in overflow-hidden">
             <PageHeader title="History" />
             {/* Filter Section */}
-            <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-slate-100 dark:border-white p-6">
+            <div className="card p-4 shrink-0">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
                     <div className="flex items-center gap-2 text-slate-700 dark:text-white font-semibold">
                         <Filter size={20} className="text-slate-400" />
@@ -226,79 +226,65 @@ export default function TimesheetHistoryPage() {
                         </button>
                         <button
                             onClick={handleExportCSV}
-                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold transition-all active:scale-95"
+                            className="flex items-center gap-2 px-3 h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold transition-all active:scale-95"
                         >
-                            <Download size={16} /> Export CSV
+                            <Download size={15} /> Export CSV
                         </button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Search</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Search</label>
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                             <input
                                 type="text"
-                                placeholder="Search (min. 2 char)..."
-                                className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl pl-9 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+                                placeholder="Search..."
+                                className="input pl-9 h-9 text-sm w-full"
                                 value={search}
                                 onChange={(e) => { setSearch(e.target.value); setPage(1) }}
                             />
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Year</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Year</label>
                         <select
                             value={tempFilters.year}
                             onChange={(e) => handleFilterChange('year', e.target.value)}
-                            className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+                            className="input h-9 text-sm w-full"
                         >
                             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Month</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Month</label>
                         <select
                             value={tempFilters.month}
                             onChange={(e) => handleFilterChange('month', e.target.value)}
-                            className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+                            className="input h-9 text-sm w-full"
                         >
                             {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Status</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Status</label>
                         <select
                             value={tempFilters.status}
                             onChange={(e) => handleFilterChange('status', e.target.value)}
-                            className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm capitalize"
+                            className="input h-9 text-sm w-full capitalize"
                         >
                             {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                     </div>
-
                 </div>
-
-                {data?.data && (
-                    <div className="mt-4 text-xs font-medium text-slate-400">
-                        Showing {data.data.length} of {data.pagination?.total || 0} timesheets
-                    </div>
-                )}
             </div>
 
             {/* Table Section */}
-            <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-slate-100 dark:border-white overflow-hidden flex flex-col">
-                <div className="p-6 border-b border-slate-100 dark:border-white shrink-0">
-                    <div className="flex items-center gap-2 text-slate-700 dark:text-white font-semibold">
-                        <Calendar size={20} className="text-slate-400" />
-                        <h2>Timesheets & Drafts</h2>
-                    </div>
-                </div>
-
-                <div className="table-wrapper max-h-[calc(100vh-30rem)] overflow-y-auto rounded-none border-0 shadow-none text-sm">
+            <div className="card p-0 flex flex-col overflow-hidden min-h-0">
+                <div className="table-wrapper lg:max-h-[calc(100vh-480px)] overflow-y-auto rounded-none border-0 shadow-none text-sm flex-1">
                     <table className="w-full text-left border-collapse">
-                        <thead className="bg-slate-50/50 dark:bg-black/50">
+                        <thead className="sticky top-0 z-20 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10">
                             <tr>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Week</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Projects</th>
@@ -312,14 +298,14 @@ export default function TimesheetHistoryPage() {
                         <tbody className="divide-y divide-slate-100 dark:divide-white">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={6} className="py-12"><Spinner className="mx-auto" /></td>
+                                    <td colSpan={7} className="py-12"><Spinner className="mx-auto" /></td>
                                 </tr>
                             ) : data?.data?.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="py-20 text-center">
+                                    <td colSpan={7} className="py-20 text-center">
                                         <XCircle size={40} className="mx-auto text-slate-300 mb-3" />
                                         <p className="text-slate-500 font-medium">No results found for current filters</p>
-                                        <button onClick={clearFilters} className="mt-2 text-indigo-600 font-semibold text-sm">Reset all filters</button>
+                                        <button onClick={clearFilters} className="mt-2 text-primary font-semibold text-sm">Reset all filters</button>
                                     </td>
                                 </tr>
                             ) : (
@@ -372,7 +358,7 @@ export default function TimesheetHistoryPage() {
                                             <div className="flex items-center justify-center gap-1">
                                                 <button
                                                     onClick={() => handleViewDetails(row.weekStartDate, row.userId?._id || row.userId)}
-                                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
+                                                    className="p-2 text-slate-400 hover:text-primary hover:bg-indigo-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
                                                     title="View Details"
                                                 >
                                                     <Eye size={18} />

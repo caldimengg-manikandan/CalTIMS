@@ -149,12 +149,12 @@ function TaskForm({ formId, formData, onChange, onSubmit, projects = [] }) {
                         <input
                             type="checkbox"
                             name="onlyProjectTasks"
-                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
+                            className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-indigo-500 transition-all cursor-pointer"
                             checked={formData.onlyProjectTasks}
                             onChange={(e) => onChange({ target: { name: 'onlyProjectTasks', value: e.target.checked } })}
                         />
                         <div className="flex flex-col">
-                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 transition-colors">Only show project-specific tasks</span>
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-primary transition-colors">Only show project-specific tasks</span>
                             <span className="text-[10px] text-slate-400 font-normal leading-tight italic">Combined global categories will be hidden.</span>
                         </div>
                     </label>
@@ -463,7 +463,7 @@ export default function TasksPage() {
                         {/* Bulk Add */}
                         <button
                             onClick={() => { setBulkNames(''); setBulkProjectId(''); setBulkAddOpen(true) }}
-                            className="flex items-center gap-2 px-3 h-9 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800 dark:text-indigo-400 text-sm font-medium transition-colors"
+                            className="flex items-center gap-2 px-3 h-9 rounded-lg border border-indigo-200 bg-indigo-50 text-primary hover:bg-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800 dark:text-indigo-400 text-sm font-medium transition-colors"
                         >
                             <Plus size={15} /> Bulk Add
                         </button>
@@ -690,12 +690,12 @@ export default function TasksPage() {
                         <label className="flex items-center gap-2 cursor-pointer group">
                             <input
                                 type="checkbox"
-                                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
+                                className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-indigo-500 transition-all cursor-pointer"
                                 checked={bulkIsolate}
                                 onChange={(e) => setBulkIsolate(e.target.checked)}
                             />
                             <div className="flex flex-col">
-                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 transition-colors">Only show these tasks for this project</span>
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-primary transition-colors">Only show these tasks for this project</span>
                                 <span className="text-[10px] text-slate-400 font-normal leading-tight italic">Combined global categories will be hidden.</span>
                             </div>
                         </label>

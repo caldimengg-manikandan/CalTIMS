@@ -10,6 +10,7 @@ const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/rbac.middleware');
 const { parsePagination, buildPaginationMeta } = require('../../shared/utils/pagination');
 const notificationService = require('../notifications/notification.service');
+const { logAction } = require('../audit/audit.routes');
 
 router.use(authenticate);
 
@@ -80,18 +81,42 @@ router.post('/', authorize('admin'), asyncHandler(async (req, res) => {
   await Promise.allSettled(notifPromises); // don't fail if one notification fails
 
   ApiResponse.created(res, { message: 'Announcement created', data: ann });
+
+  logAction({
+    userId: req.user._id,
+    action: 'CREATE_ANNOUNCEMENT',
+    entityType: 'Announcement',
+    entityId: ann._id,
+    details: { title: ann.title, type: ann.type }
+  });
 }));
 
 router.put('/:id', authorize('admin'), asyncHandler(async (req, res) => {
   const ann = await Announcement.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
   if (!ann) return ApiResponse.notFound(res);
   ApiResponse.success(res, { message: 'Announcement updated', data: ann });
+
+  logAction({
+    userId: req.user._id,
+    action: 'UPDATE_ANNOUNCEMENT',
+    entityType: 'Announcement',
+    entityId: req.params.id,
+    details: { title: ann.title, type: ann.type }
+  });
 }));
 
 router.delete('/:id', authorize('admin'), asyncHandler(async (req, res) => {
   const ann = await Announcement.findByIdAndDelete(req.params.id);
   if (!ann) return ApiResponse.notFound(res);
   ApiResponse.success(res, { message: 'Announcement deleted' });
+
+  logAction({
+    userId: req.user._id,
+    action: 'DELETE_ANNOUNCEMENT',
+    entityType: 'Announcement',
+    entityId: req.params.id,
+    details: { title: ann.title }
+  });
 }));
 
 module.exports = router;

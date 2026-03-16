@@ -12,19 +12,10 @@ const { getWeekStart, getWeekEnd } = require('../../shared/utils/dateHelpers');
 const notificationService = require('../notifications/notification.service');
 const emailService = require('../../shared/services/email.service');
 const notifier = require('../../shared/services/notifier');
+const Settings = require('../settings/settings.model');
+const { logAction } = require('../audit/audit.routes');
+const PERMISSION_MARKER = '__PERMISSION__';
 
-// ─── Leave-aware weekly hours calculator ─────────────────────────────────────
-// This is the canonical implementation of the timesheet hour calculation rules:
-//
-//   IF entry.isLeave AND leaveType in [annual, sick, casual]
-//       → hours = 8 (full paid day) or 4 (half-day, when hoursWorked === 4)
-//   IF entry.isLeave AND leaveType === 'lop'
-//       → hours = 0  (Loss of Pay: not counted)
-//   ELSE (normal work entry)
-//       → hours = entry.hoursWorked
-//
-// Weekly total < 40  →  isIncomplete = true
-//
 function calculateWeeklyHours(rows) {
   const PAID_LEAVE_TYPES = ['annual', 'sick', 'casual'];
   let totalHours = 0;
@@ -61,9 +52,32 @@ function calculateWeeklyHours(rows) {
  * Internal helper to fetch weekStartDay from settings
  */
 async function getWeekStartDay() {
-  const Settings = mongoose.model('Settings');
   const settings = await Settings.findOne().select('general.weekStartDay').lean();
   return settings?.general?.weekStartDay || 'monday';
+}
+
+/**
+ * Internal helper to check if a week should be frozen
+ */
+async function getFreezeInfo(weekStartDate) {
+  const settings = await Settings.findOne().select('compliance.timesheetFreezeDay').lean();
+  const freezeDay = settings?.compliance?.timesheetFreezeDay || 28;
+  
+  const today = new Date();
+  const currentDay = today.getDate();
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
+
+  const ws = new Date(weekStartDate);
+  const wsMonth = ws.getMonth();
+  const wsYear = ws.getFullYear();
+
+  // A week is frozen if it belongs to a month prior to the current month 
+  // AND the current day of the month is >= freezeDay.
+  const isPreviousMonth = (wsYear < currentYear) || (wsYear === currentYear && wsMonth < currentMonth);
+  const isFrozen = isPreviousMonth && (currentDay >= freezeDay);
+
+  return { isFrozen, freezeDay, currentDay };
 }
 
 const timesheetService = {
@@ -84,6 +98,15 @@ const timesheetService = {
       status: TIMESHEET_STATUS.DRAFT,
       rows: []
     });
+
+    logAction({
+        userId,
+        action: 'CREATE_TIMESHEET',
+        entityType: 'Timesheet',
+        entityId: ts._id,
+        details: { weekStartDate: weekStart }
+    });
+
     return ts;
   },
 
@@ -91,7 +114,14 @@ const timesheetService = {
     const ts = await Timesheet.findById(id);
     if (!ts) throw new AppError('Timesheet not found', 404);
     if (ts.userId.toString() !== userId.toString()) throw new AppError('Unauthorized', 403);
-    if (ts.status === TIMESHEET_STATUS.FROZEN) {
+    
+    const { isFrozen } = await getFreezeInfo(ts.weekStartDate);
+    if (ts.status === TIMESHEET_STATUS.FROZEN || isFrozen) {
+      if (ts.status !== TIMESHEET_STATUS.FROZEN) {
+        ts.status = TIMESHEET_STATUS.FROZEN;
+        ts.frozenAt = new Date();
+        await ts.save();
+      }
       throw new AppError('Timesheet is frozen and cannot be edited. Please raise a Help & Support ticket.', 400);
     }
     if (![TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.REJECTED].includes(ts.status)) {
@@ -104,6 +134,15 @@ const timesheetService = {
 
     await this.validateLimits(ts);
     await ts.save();
+
+    logAction({
+        userId,
+        action: 'UPDATE_TIMESHEET',
+        entityType: 'Timesheet',
+        entityId: id,
+        details: { weekStartDate: ts.weekStartDate }
+    });
+
     return ts;
   },
 
@@ -205,17 +244,25 @@ const timesheetService = {
 
       let timesheet = await Timesheet.findOne({ userId, weekStartDate: weekStart });
 
+      const { isFrozen } = await getFreezeInfo(weekStart);
+
       if (!timesheet) {
         timesheet = new Timesheet({
           userId,
           weekStartDate: weekStart,
           weekEndDate: weekEnd,
-          status: TIMESHEET_STATUS.DRAFT,
-          rows: []
+          status: isFrozen ? TIMESHEET_STATUS.FROZEN : TIMESHEET_STATUS.DRAFT,
+          rows: [],
+          frozenAt: isFrozen ? new Date() : null
         });
       }
 
-      if (timesheet.status === TIMESHEET_STATUS.FROZEN) {
+      if (timesheet.status === TIMESHEET_STATUS.FROZEN || isFrozen) {
+        if (timesheet.status !== TIMESHEET_STATUS.FROZEN) {
+          timesheet.status = TIMESHEET_STATUS.FROZEN;
+          timesheet.frozenAt = new Date();
+          await timesheet.save();
+        }
         throw new AppError(`Cannot update a frozen timesheet for week ${weekStart.toDateString()}. Please raise a Help & Support ticket.`, 400);
       }
       if (![TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.REJECTED].includes(timesheet.status)) {
@@ -243,6 +290,15 @@ const timesheetService = {
 
       await this.validateLimits(timesheet);
       await timesheet.save();
+
+      logAction({
+          userId,
+          action: 'UPDATE_TIMESHEET',
+          entityType: 'Timesheet',
+          entityId: timesheet._id,
+          details: { weekStartDate: timesheet.weekStartDate, bulk: true }
+      });
+
       results.push(timesheet);
     }
     return results;
@@ -297,23 +353,52 @@ const timesheetService = {
 
       await this.validateLimits(timesheet);
       await timesheet.save();
+
+      const targetUser = await User.findById(targetUserId).select('name');
+
+      logAction({
+          userId: adminId,
+          action: 'ADMIN_FILLED_TIMESHEET',
+          entityType: 'Timesheet',
+          entityId: timesheet._id,
+          details: { 
+              weekStartDate: timesheet.weekStartDate, 
+              ownerId: targetUserId,
+              ownerName: targetUser?.name || 'Unknown'
+          }
+      });
+
       results.push(timesheet);
     }
     return results;
   },
 
   async validateLimits(timesheet) {
-    const Settings = mongoose.model('Settings');
     const settingsDoc = await Settings.findOne().lean();
     const limits = settingsDoc?.timesheet || {};
+    const compliance = settingsDoc?.compliance || {};
 
-    const entriesByDay = {}; // YYYY-MM-DD -> count
+    // ── Compliance Check: Backdated Entries ──────────────────────────────────
+    // Restriction: Cannot fill timesheets for weeks prior to the current week
+    if (compliance.allowBackdatedEntries === false) {
+      const wsd = settingsDoc?.general?.weekStartDay || 'monday';
+      const currentWeekStart = getWeekStart(new Date(), wsd);
+      
+      if (new Date(timesheet.weekStartDate) < currentWeekStart) {
+        // Only enforce for non-admin fills (if filledByAdmin is false)
+        if (!timesheet.filledByAdmin) {
+          throw new AppError('Timesheet entry restricted. Backdated entries are only allowed if enabled in system compliance settings.', 400);
+        }
+      }
+    }
+
+    const entriesByDay = {}; 
     let totalEntries = 0;
     const permissionDays = new Set();
-    const permissionHoursByDay = {}; // YYYY-MM-DD -> total hours
+    const permissionHoursByDay = {};
 
     timesheet.rows.forEach(row => {
-      const isPermission = row.category?.toLowerCase() === 'permission';
+      const isPermission = row.category?.toLowerCase() === 'permission' || row.category === PERMISSION_MARKER;
       row.entries.forEach(e => {
         if (e.hoursWorked > 0) {
           try {
@@ -392,7 +477,7 @@ const timesheetService = {
       
       otherTimesheets.forEach(ts => {
         ts.rows.forEach(row => {
-          if (row.category?.toLowerCase() === 'permission') {
+          if (row.category?.toLowerCase() === 'permission' || row.category === PERMISSION_MARKER) {
             row.entries.forEach(e => {
               if (e.hoursWorked > 0) {
                 try {
@@ -420,7 +505,6 @@ const timesheetService = {
     const savedTimesheets = await this.bulkUpsert(dataArray, userId);
 
     // ── Daily Hours Guardrail Enforcement on Submit ────────────────────────────
-    const Settings = mongoose.model('Settings');
     const settingsDoc = await Settings.findOne().lean();
     const tsPolicy = settingsDoc?.timesheet || {};
     const { minHoursPerDay = 0, maxHoursPerDay = 24, enforceMinHoursOnSubmit = false } = tsPolicy;
@@ -432,7 +516,7 @@ const timesheetService = {
         const hoursPerDay = {};
         ts.rows.forEach(row => {
           // Skip permission rows from min-hours check
-          if (row.category?.toLowerCase() === 'permission') return;
+          if (row.category?.toLowerCase() === 'permission' || row.category === PERMISSION_MARKER) return;
           row.entries.forEach(e => {
             try {
               const d = new Date(e.date);
@@ -462,19 +546,36 @@ const timesheetService = {
       }
     }
 
-    const user = await User.findById(userId).select('name employeeId');
-    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
+    const user = await User.findById(userId).select('name employeeId managerId');
+    const systemApprovers = await User.find({ role: ROLES.ADMIN, isActive: true }).select('_id email');
+    const directManager = user.managerId ? await User.findById(user.managerId).select('_id email') : null;
 
     for (const ts of savedTimesheets) {
       ts.status = TIMESHEET_STATUS.SUBMITTED;
       ts.submittedAt = new Date();
       await ts.save();
 
-      // Notify Admins and Managers for each week submitted
+      // Gather Project Managers for this specific week
+      const projectIds = [...new Set(ts.rows.map(r => r.projectId?.toString()))].filter(Boolean);
+      const projectManagers = await Project.find({ _id: { $in: projectIds } }).select('managerId').populate('managerId', '_id email');
+      
+      const approverMap = new Map();
+      // Add system admins
+      systemApprovers.forEach(a => approverMap.set(a._id.toString(), a));
+      // Add direct manager
+      if (directManager) approverMap.set(directManager._id.toString(), directManager);
+      // Add project managers
+      projectManagers.forEach(p => {
+        if (p.managerId && p.managerId._id) {
+          approverMap.set(p.managerId._id.toString(), p.managerId);
+        }
+      });
+
+      const uniqueApprovers = Array.from(approverMap.values());
       const weekStr = ts.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       const year = ts.weekStartDate.getFullYear();
 
-      const notificationPromises = approvers.map(approver =>
+      const notificationPromises = uniqueApprovers.map(approver =>
         notifier.send(approver._id, {
           userEmail: approver.email,
           type: 'timesheet_submitted',
@@ -506,13 +607,28 @@ const timesheetService = {
     ts.submittedAt = new Date();
     await ts.save();
 
-    // Notify Admins and Managers
-    const user = await User.findById(ts.userId).select('name employeeId');
-    const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
+    // Notify Admins, Direct Manager, and Project Managers
+    const user = await User.findById(ts.userId).select('name employeeId managerId');
+    const systemApprovers = await User.find({ role: ROLES.ADMIN, isActive: true }).select('_id email');
+    const directManager = user.managerId ? await User.findById(user.managerId).select('_id email') : null;
+    
+    const projectIds = [...new Set(ts.rows.map(r => r.projectId?.toString()))].filter(Boolean);
+    const projectManagers = await Project.find({ _id: { $in: projectIds } }).select('managerId').populate('managerId', '_id email');
+    
+    const approverMap = new Map();
+    systemApprovers.forEach(a => approverMap.set(a._id.toString(), a));
+    if (directManager) approverMap.set(directManager._id.toString(), directManager);
+    projectManagers.forEach(p => {
+      if (p.managerId && p.managerId._id) {
+        approverMap.set(p.managerId._id.toString(), p.managerId);
+      }
+    });
+
+    const uniqueApprovers = Array.from(approverMap.values());
     const weekStr = ts.weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const year = ts.weekStartDate.getFullYear();
 
-    const notificationPromises = approvers.map(approver =>
+    const notificationPromises = uniqueApprovers.map(approver =>
       notifier.send(approver._id, {
         userEmail: approver.email,
         type: 'timesheet_submitted',
@@ -530,7 +646,7 @@ const timesheetService = {
   // ─── Workflow ──────────────────────────────────────────────────────────────
 
   async approve(id, approverId) {
-    const timesheet = await Timesheet.findById(id);
+    const timesheet = await Timesheet.findById(id).populate('userId', 'name');
     if (!timesheet) throw new AppError('Timesheet not found', 404);
     if (timesheet.status !== TIMESHEET_STATUS.SUBMITTED) {
       throw new AppError('Only submitted timesheets can be approved', 400);
@@ -540,6 +656,18 @@ const timesheetService = {
     timesheet.approvedBy = approverId;
     timesheet.approvedAt = new Date();
     await timesheet.save();
+
+    logAction({
+        userId: approverId,
+        action: 'APPROVE_TIMESHEET',
+        entityType: 'Timesheet',
+        entityId: id,
+        details: { 
+            weekStartDate: timesheet.weekStartDate, 
+            ownerId: timesheet.userId?._id || timesheet.userId,
+            ownerName: timesheet.userId?.name || 'Unknown'
+        }
+    });
 
     // Check budget for each project in the timesheet
     const projectIds = [...new Set(timesheet.rows.map(r => r.projectId?.toString()))].filter(Boolean);
@@ -567,12 +695,25 @@ const timesheetService = {
 
   async reject(id, approverId, reason) {
     if (!reason) throw new AppError('Rejection reason is required', 400);
-    const timesheet = await Timesheet.findById(id);
+    const timesheet = await Timesheet.findById(id).populate('userId', 'name');
     if (!timesheet) throw new AppError('Timesheet not found', 404);
 
     timesheet.status = TIMESHEET_STATUS.REJECTED;
     timesheet.rejectionReason = reason;
     await timesheet.save();
+
+    logAction({
+        userId: approverId,
+        action: 'REJECT_TIMESHEET',
+        entityType: 'Timesheet',
+        entityId: id,
+        details: { 
+            weekStartDate: timesheet.weekStartDate, 
+            ownerId: timesheet.userId?._id || timesheet.userId,
+            ownerName: timesheet.userId?.name || 'Unknown',
+            reason 
+        }
+    });
 
     const approver = await User.findById(approverId).select('name');
     const employee = await User.findById(timesheet.userId).select('email');
@@ -592,12 +733,25 @@ const timesheetService = {
   },
 
   async delete(id, requestor) {
-    const timesheet = await Timesheet.findById(id);
+    const timesheet = await Timesheet.findById(id).populate('userId', 'name');
     if (!timesheet) throw new AppError('Timesheet not found', 404);
-    if (requestor.role !== ROLES.ADMIN && timesheet.userId.toString() !== requestor._id.toString()) {
+    if (requestor.role !== ROLES.ADMIN && timesheet.userId?._id.toString() !== requestor._id.toString()) {
       throw new AppError('Unauthorized', 403);
     }
     await timesheet.deleteOne();
+
+    logAction({
+        userId: requestor._id || requestor,
+        action: 'DELETE_TIMESHEET',
+        entityType: 'Timesheet',
+        entityId: id,
+        details: { 
+            weekStartDate: timesheet.weekStartDate, 
+            ownerId: timesheet.userId?._id || timesheet.userId,
+            ownerName: timesheet.userId?.name || 'Unknown' 
+        }
+    });
+
     return true;
   },
 
@@ -636,15 +790,22 @@ const timesheetService = {
     }).lean();
     
     const tsMap = new Map(timesheets.map(ts => [ts.userId.toString(), ts]));
+    const { isFrozen } = await getFreezeInfo(weekStart);
 
     const complianceData = employees.map(emp => {
       const ts = tsMap.get(emp._id.toString());
+      let status = ts ? ts.status : 'missing';
+      
+      if (isFrozen && (status === 'missing' || status === TIMESHEET_STATUS.DRAFT)) {
+        status = TIMESHEET_STATUS.FROZEN;
+      }
+
       return {
         user: emp,
-        status: ts ? ts.status : 'missing',
+        status,
         timesheetId: ts ? ts._id : null,
         totalHours: ts ? ts.totalHours : 0,
-        frozenAt: ts ? ts.frozenAt : null
+        frozenAt: ts ? ts.frozenAt : (isFrozen ? new Date(weekStart) : null)
       };
     });
 
@@ -1065,20 +1226,25 @@ const timesheetService = {
       const rejectedCount = relevantTimesheets.filter(ts => ts.status === TIMESHEET_STATUS.REJECTED).length;
 
       const ProjectModel = mongoose.model('Project');
-      const allActiveProjects = await ProjectModel.find({ status: 'active' }).lean();
+      const allActiveProjects = await ProjectModel.find({ status: 'active' }).select('name code budgetHours').lean();
       
       const mergedProjectTotals = allActiveProjects.reduce((acc, p) => {
         if (p.name === 'Leave' || p.code === 'LEAVE-SYS') return acc;
         const existing = projectTotalsTemp.find(pt => pt.projectCode === p.code || pt.projectName === p.name);
         if (existing) {
-          acc.push({ ...existing, projectId: existing.projectId || p._id.toString() });
+          acc.push({ 
+            ...existing, 
+            projectId: existing.projectId || p._id.toString(),
+            budgetHours: p.budgetHours || 0 
+          });
         } else {
           acc.push({
             projectId: p._id.toString(),
             projectName: p.name,
             projectCode: p.code,
             totalHours: 0,
-            timesheetCount: 0
+            timesheetCount: 0,
+            budgetHours: p.budgetHours || 0
           });
         }
         return acc;
@@ -1198,13 +1364,13 @@ const timesheetService = {
       ]);
 
       const ProjectModel = mongoose.model('Project');
-      const allActiveProjects = await ProjectModel.find({ status: 'active' }).lean();
+      const allActiveProjects = await ProjectModel.find({ status: 'active' }).select('name code budgetHours').lean();
       
       const mergedData = allActiveProjects.reduce((acc, p) => {
         if (p.name === 'Leave' || p.code === 'LEAVE-SYS') return acc;
         const existing = data.find(d => d.code === p.code || d.label === p.name);
         if (existing) {
-          acc.push(existing);
+          acc.push({ ...existing, budgetHours: p.budgetHours || 0 });
         } else {
           acc.push({
             label: p.name,
@@ -1212,7 +1378,8 @@ const timesheetService = {
             totalHours: 0,
             submittedCount: 0,
             approvedCount: 0,
-            rejectedCount: 0
+            rejectedCount: 0,
+            budgetHours: p.budgetHours || 0
           });
         }
         return acc;

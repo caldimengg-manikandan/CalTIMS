@@ -6,7 +6,7 @@ const asyncHandler = require('../../shared/utils/asyncHandler');
 const ApiResponse = require('../../shared/utils/apiResponse');
 const leaveService = require('./leave.service');
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorize } = require('../../middleware/rbac.middleware');
+const { authorize, checkPermission } = require('../../middleware/rbac.middleware');
 
 router.use(authenticate);
 
@@ -67,7 +67,7 @@ router.get('/calendar', asyncHandler(async (req, res) => {
 }));
 
 // ── Backfill route MUST be before /:id routes to avoid param conflict ──────────
-router.post('/backfill-timesheets', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+router.post('/backfill-timesheets', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
   const result = await leaveService.backfillTimesheets(req.user._id);
   ApiResponse.success(res, {
     message: `Synced ${result.synced}/${result.total} approved leaves to timesheets`,
@@ -75,7 +75,7 @@ router.post('/backfill-timesheets', authorize('admin', 'manager'), asyncHandler(
   });
 }));
 
-router.get('/filter-options', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+router.get('/filter-options', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
   const options = await leaveService.getFilterOptions();
   ApiResponse.success(res, { data: options });
 }));
@@ -90,18 +90,18 @@ router.get('/:id', asyncHandler(async (req, res) => {
   ApiResponse.success(res, { data: leave });
 }));
 
-router.patch('/:id/approve', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+router.patch('/:id/approve', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
   const leave = await leaveService.approve(req.params.id, req.user._id);
   ApiResponse.success(res, { message: 'Leave approved', data: leave });
 }));
 
-router.patch('/:id/reject', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+router.patch('/:id/reject', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
   const leave = await leaveService.reject(req.params.id, req.user._id, req.body.reason);
   ApiResponse.success(res, { message: 'Leave rejected', data: leave });
 }));
 
 // Sync timesheets for a single already-approved leave
-router.patch('/:id/sync-timesheet', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+router.patch('/:id/sync-timesheet', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
   const result = await leaveService.syncTimesheet(req.params.id, req.user._id);
   ApiResponse.success(res, { message: result.message });
 }));

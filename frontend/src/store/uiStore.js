@@ -20,18 +20,14 @@ export const useUIStore = create((set) => {
 
     toggleDarkMode: () =>
       set((s) => {
-        let nextTheme = 'light';
-        if (s.theme === 'light') nextTheme = 'dark';
-        else if (s.theme === 'dark') nextTheme = 'midnight';
-        else if (s.theme === 'midnight') nextTheme = 'light';
+        const nextTheme = s.theme === 'light' ? 'dark' : 'light';
 
         localStorage.setItem('theme', nextTheme);
         
-        const isDark = nextTheme === 'dark' || nextTheme === 'midnight';
-        const isMidnight = nextTheme === 'midnight';
+        const isDark = nextTheme === 'dark';
         
         document.documentElement.classList.toggle('dark', isDark);
-        document.documentElement.classList.toggle('midnight', isMidnight);
+        document.documentElement.classList.remove('midnight'); // clean up if left over
         
         return { theme: nextTheme, darkMode: isDark };
       }),

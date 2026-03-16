@@ -11,6 +11,8 @@ const roleSchema = new mongoose.Schema({
     manageProjects: { type: Boolean, default: false },
     manageEmployees: { type: Boolean, default: false },
     manageSettings: { type: Boolean, default: false },
+    viewAuditLogs: { type: Boolean, default: false },
+    manageLeaves: { type: Boolean, default: false },
   },
   isSystem: { type: Boolean, default: false } // Admin, Manager, Employee, HR can be system default roles
 });
@@ -34,11 +36,11 @@ const settingsSchema = new mongoose.Schema(
     roles: {
       type: [roleSchema],
       default: [
-        { name: 'Admin', isSystem: true, permissions: { approveTimesheets: true, viewReports: true, manageProjects: true, manageEmployees: true, manageSettings: true } },
-        { name: 'Manager', isSystem: true, permissions: { approveTimesheets: true, viewReports: true, manageProjects: true, manageEmployees: false, manageSettings: false } },
-        { name: 'Employee', isSystem: true, permissions: { approveTimesheets: false, viewReports: false, manageProjects: false, manageEmployees: false, manageSettings: false } },
-        { name: 'HR', isSystem: true, permissions: { approveTimesheets: false, viewReports: true, manageProjects: false, manageEmployees: true, manageSettings: false } },
-        { name: 'Finance', isSystem: true, permissions: { approveTimesheets: false, viewReports: true, manageProjects: false, manageEmployees: false, manageSettings: false } },
+        { name: 'Admin', isSystem: true, permissions: { approveTimesheets: true, viewReports: true, manageProjects: true, manageEmployees: true, manageSettings: true, viewAuditLogs: true, manageLeaves: true } },
+        { name: 'Manager', isSystem: true, permissions: { approveTimesheets: true, viewReports: true, manageProjects: true, manageEmployees: false, manageSettings: false, viewAuditLogs: true, manageLeaves: true } },
+        { name: 'Employee', isSystem: true, permissions: { approveTimesheets: false, viewReports: false, manageProjects: false, manageEmployees: false, manageSettings: false, viewAuditLogs: false, manageLeaves: false } },
+        { name: 'HR', isSystem: true, permissions: { approveTimesheets: false, viewReports: true, manageProjects: false, manageEmployees: true, manageSettings: false, viewAuditLogs: true, manageLeaves: true } },
+        { name: 'Finance', isSystem: true, permissions: { approveTimesheets: false, viewReports: true, manageProjects: false, manageEmployees: false, manageSettings: false, viewAuditLogs: true, manageLeaves: false } },
       ]
     },
 
@@ -73,6 +75,7 @@ const settingsSchema = new mongoose.Schema(
       },
       annualLeaveDays: { type: Number, default: 20 },
       sickLeaveDays: { type: Number, default: 10 },
+      casualLeaveDays: { type: Number, default: 6 },
       maxCarryForward: { type: Number, default: 5 },
       approvalWorkflow: { type: String, enum: ['Employee -> Manager', 'Employee -> Manager -> HR'], default: 'Employee -> Manager' }
     },
@@ -87,6 +90,7 @@ const settingsSchema = new mongoose.Schema(
       notifyOnLeaveRequest: { type: Boolean, default: true },
       notifyOnLeaveApproval: { type: Boolean, default: true },
       notifyOnLeaveRejection: { type: Boolean, default: true },
+      notifyOnSupportTicket: { type: Boolean, default: true },
       // Legacy or background tasks
       timesheetReminder: { type: String, default: 'Friday 18:00' },
       freezeReminder: { type: String, default: 'Monday 15:00' },
@@ -120,6 +124,9 @@ const settingsSchema = new mongoose.Schema(
     // 7. Compliance & Lock Rules
     compliance: {
       autoFreezeTimesheets: { type: String, default: 'Monday 18:00' },
+      timesheetFreezeDay: { type: Number, default: 28 },
+      allowBackdatedEntries: { type: Boolean, default: false },
+      auditLogRetentionDays: { type: Number, default: 365 },
       allowAdminOverride: { type: Boolean, default: true },
       requireReasonForLate: { type: Boolean, default: true },
     },
@@ -134,13 +141,39 @@ const settingsSchema = new mongoose.Schema(
       faviconUrl: { type: String, default: '' },
     },
 
-    // 9. Integrations (mocked)
+    // 9. Integrations
     integrations: {
-      slack: { enabled: { type: Boolean, default: false } },
-      teams: { enabled: { type: Boolean, default: false } },
-      googleCalendar: { enabled: { type: Boolean, default: false } },
-      outlook: { enabled: { type: Boolean, default: false } },
-      jira: { enabled: { type: Boolean, default: false } },
+      googleCalendar: { 
+        enabled: { type: Boolean, default: false },
+        apiKey: { type: String, default: '' }
+      },
+      microsoftOutlook: { 
+        enabled: { type: Boolean, default: false },
+        apiKey: { type: String, default: '' }
+      },
+      slackNotifications: { 
+        enabled: { type: Boolean, default: false },
+        webhookUrl: { type: String, default: '' }
+      }
+    },
+
+    // 10. Hardware Gateways
+    hardwareGateways: {
+      hikvision: {
+        enabled: { type: Boolean, default: false },
+        ipAddress: { type: String, default: '' },
+        host: { type: String, default: '' },
+        port: { type: String, default: '8000' },
+        appKey: { type: String, default: '' },
+        appSecret: { type: String, default: '' },
+        username: { type: String, default: '' },
+        password: { type: String, default: '' }
+      },
+      zkTeco: {
+        enabled: { type: Boolean, default: false },
+        ipAddress: { type: String, default: '' },
+        port: { type: String, default: '4370' }
+      }
     },
 
     // (Kept for backwards compatibility with previous endpoints if any components still rely on it directly)

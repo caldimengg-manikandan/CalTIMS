@@ -93,7 +93,7 @@ export default function AdminTimesheetCompliancePage() {
             subtitle="Timesheet compliance monitoring, automated locks, and advanced audit logs are part of the Enterprise Pro tier."
             icon={ShieldCheck}
         >
-            <div className="h-[calc(100vh-160px)] flex flex-col gap-4 animate-fade-in overflow-hidden">
+            <div className="flex flex-col gap-4 fluid-container animate-fade-in overflow-hidden min-h-[calc(100vh-200px)]">
                 <PageHeader title="Timesheet Compliance" />
 
                 {/* Controls */}
@@ -103,10 +103,14 @@ export default function AdminTimesheetCompliancePage() {
                             <ChevronLeft size={20} className="text-slate-600" />
                         </button>
                         <div className="flex items-center gap-2">
-                            <Calendar size={18} className="text-indigo-600" />
+                            <Calendar size={18} className="text-primary" />
                             <span className="font-semibold">{format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')}</span>
                         </div>
-                        <button onClick={() => setCurrentDate(addDays(currentDate, 7))} className="p-1.5 hover:bg-slate-50 rounded-lg">
+                        <button
+                            onClick={() => setCurrentDate(addDays(currentDate, 7))}
+                            disabled={startOfWeek(addDays(currentDate, 7), { weekStartsOn }) > startOfWeek(new Date(), { weekStartsOn })}
+                            className={`p-1.5 rounded-lg ${startOfWeek(addDays(currentDate, 7), { weekStartsOn }) > startOfWeek(new Date(), { weekStartsOn }) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50'}`}
+                        >
                             <ChevronRight size={20} className="text-slate-600" />
                         </button>
                     </div>
@@ -130,12 +134,12 @@ export default function AdminTimesheetCompliancePage() {
                     {isLoading ? (
                         <div className="p-10 flex justify-center"><Spinner /></div>
                     ) : (
-                        <div className="table-wrapper max-h-[calc(100vh-450px)] overflow-y-auto rounded-none border-0 shadow-none">
+                        <div className="table-wrapper scroll-v-adaptive rounded-none border-0 shadow-none">
                             <table className="w-full text-left border-collapse">
                                 <thead className="sticky top-0 z-20 bg-white dark:bg-black border-b border-slate-200 dark:border-white text-xs uppercase text-slate-500 font-semibold tracking-wider">
                                     <tr>
-                                        <th className="px-6 py-4">Employee Name</th>
                                         <th className="px-6 py-4">Employee ID</th>
+                                        <th className="px-6 py-4">Employee Name</th>
                                         <th className="px-6 py-4">Department</th>
                                         <th className="px-6 py-4">Status</th>
                                         <th className="px-6 py-4">Total Hours</th>
@@ -145,13 +149,13 @@ export default function AdminTimesheetCompliancePage() {
                                 <tbody className="divide-y divide-slate-100 dark:divide-white text-sm">
                                     {complianceData?.map((item) => (
                                         <tr key={item.user._id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
+                                            <td className="px-6 py-4 text-slate-500 font-mono text-xs">{item.user.employeeId}</td>
                                             <td className="px-6 py-4 font-medium">{item.user.name}</td>
-                                            <td className="px-6 py-4 text-slate-500 font-mono text-xs">#{item.user.employeeId}</td>
                                             <td className="px-6 py-4 text-slate-600">{item.user.department || '-'}</td>
                                             <td className="px-6 py-4">
                                                 {item.status === 'missing' && <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs font-bold uppercase">Missing</span>}
                                                 {item.status === 'frozen' && <span className="bg-rose-100 text-rose-700 px-2 py-1 rounded-md text-xs font-bold uppercase flex items-center gap-1 w-max"><AlertTriangle size={12} />Frozen</span>}
-                                                {item.status === 'admin_filled' && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md text-xs font-bold uppercase">Admin Filled</span>}
+                                                {item.status === 'admin_filled' && <span className="bg-indigo-100 text-primary-700 px-2 py-1 rounded-md text-xs font-bold uppercase">Admin Filled</span>}
                                                 {['draft', 'submitted', 'approved', 'rejected'].includes(item.status) && (
                                                     <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md text-xs font-bold uppercase">{item.status}</span>
                                                 )}
@@ -161,7 +165,7 @@ export default function AdminTimesheetCompliancePage() {
                                                 {['missing', 'frozen'].includes(item.status) && (
                                                     <button
                                                         onClick={() => handleOpenModal(item)}
-                                                        className="flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-semibold text-xs bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+                                                        className="flex items-center gap-1.5 text-primary hover:text-indigo-800 font-semibold text-xs bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
                                                     >
                                                         <Edit3 size={14} /> Fill Timesheet
                                                     </button>
@@ -198,7 +202,7 @@ export default function AdminTimesheetCompliancePage() {
                             <div className="px-6 py-4 border-b border-slate-100 dark:border-white flex justify-between items-center bg-slate-50 dark:bg-black">
                                 <div>
                                     <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                        Fill Timesheet For: <span className="text-indigo-600">{selectedUser?.name}</span>
+                                        Fill Timesheet For: <span className="text-primary">{selectedUser?.name}</span>
                                     </h3>
                                     <p className="text-xs text-slate-500 mt-1">Week: {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')}</p>
                                 </div>
@@ -272,7 +276,7 @@ export default function AdminTimesheetCompliancePage() {
                                 </table>
                                 <button
                                     onClick={() => setRows([...rows, { projectId: '', taskType: 'Development', dayHours: Array(7).fill('00:00') }])}
-                                    className="mt-4 text-sm text-indigo-600 font-semibold hover:text-indigo-800"
+                                    className="mt-4 text-sm text-primary font-semibold hover:text-indigo-800"
                                 >
                                     + Add Another Row
                                 </button>
@@ -283,9 +287,9 @@ export default function AdminTimesheetCompliancePage() {
                                 <button
                                     onClick={handleSaveAdminFill}
                                     disabled={fillMutation.isPending}
-                                    className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-colors flex items-center gap-2"
+                                    className="px-6 py-2 btn-primary hover:bg-primary-700 text-white font-bold rounded-xl shadow-md transition-colors flex items-center gap-2"
                                 >
-                                    {fillMutation.isPending ? <Spinner size="sm" /> : <Save size={16} />} Save as Admin Filter
+                                    {fillMutation.isPending ? <Spinner size="sm" /> : <Save size={16} />} Save as Admin Fill
                                 </button>
                             </div>
                         </div>

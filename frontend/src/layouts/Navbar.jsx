@@ -198,9 +198,9 @@ export default function Navbar() {
                     <button
                         onClick={toggleDarkMode}
                         className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white rounded-lg transition-all duration-200"
-                        title={theme === 'light' ? 'Switch to dark mode' : theme === 'dark' ? 'Switch to midnight mode' : 'Switch to light mode'}
+                        title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
                     >
-                        {theme === 'light' ? <Moon size={17} className="pointer-events-none" /> : theme === 'dark' ? <Moon size={17} className="text-primary-400 pointer-events-none" /> : <Sun size={17} className="pointer-events-none" />}
+                        {theme === 'light' ? <Moon size={17} className="pointer-events-none" /> : <Sun size={17} className="pointer-events-none" />}
                     </button>
 
                     {/* Notifications Bell */}

@@ -57,7 +57,7 @@ export default function SupportTicketDetail({ ticket, onBack }) {
                 {/* Ticket Header */}
                 <div className="bg-white dark:bg-white/5 p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 space-y-4 shadow-sm">
                     <div className="flex items-center justify-between">
-                        <span className="text-sm font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-xl uppercase tracking-widest">{ticket.ticketId}</span>
+                        <span className="text-sm font-black text-primary bg-indigo-50 px-3 py-1 rounded-xl uppercase tracking-widest">{ticket.ticketId}</span>
                         <div className="flex items-center gap-2 text-slate-400">
                             <Clock size={14} />
                             <span className="text-[10px] font-bold uppercase">{format(new Date(ticket.createdAt), 'MMM d, yyyy HH:mm')}</span>
@@ -81,7 +81,7 @@ export default function SupportTicketDetail({ ticket, onBack }) {
                     <div className="space-y-4">
                         {ticket.responses && ticket.responses.map((resp, i) => (
                             <div key={i} className={`flex ${resp.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[80%] p-5 rounded-3xl ${resp.sender === 'admin' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 text-slate-800 dark:text-slate-200 rounded-tl-none'}`}>
+                                <div className={`max-w-[80%] p-5 rounded-3xl ${resp.sender === 'admin' ? 'btn-primary text-white rounded-tr-none' : 'bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 text-slate-800 dark:text-slate-200 rounded-tl-none'}`}>
                                     <div className="flex items-center gap-2 mb-2">
                                         {resp.sender === 'admin' ? <Shield size={12} className="text-indigo-200" /> : <User size={12} className="text-slate-400" />}
                                         <span className="text-[9px] font-black uppercase tracking-widest opacity-70">
@@ -101,7 +101,7 @@ export default function SupportTicketDetail({ ticket, onBack }) {
                     {ticket.status !== 'Closed' && (
                         <form onSubmit={handleReply} className="relative group">
                             <textarea
-                                className="w-full bg-white dark:bg-white/5 border-2 border-slate-100 focus:border-indigo-600 outline-none rounded-[2rem] px-8 py-6 text-sm font-medium transition-all shadow-sm pr-20 resize-none"
+                                className="w-full bg-white dark:bg-white/5 border-2 border-slate-100 focus:border-primary outline-none rounded-[2rem] px-8 py-6 text-sm font-medium transition-all shadow-sm pr-20 resize-none"
                                 placeholder="Type your professional response..."
                                 rows={3}
                                 value={replyMessage}
@@ -110,7 +110,7 @@ export default function SupportTicketDetail({ ticket, onBack }) {
                             <button
                                 type="submit"
                                 disabled={addMessageMutation.isPending || !replyMessage.trim()}
-                                className="absolute right-4 bottom-4 p-4 bg-indigo-600 text-white rounded-2xl hover:scale-110 active:scale-95 transition-all shadow-lg shadow-indigo-600/20 disabled:grayscale"
+                                className="absolute right-4 bottom-4 p-4 btn-primary text-white rounded-2xl hover:scale-110 active:scale-95 transition-all shadow-lg shadow-primary/20 disabled:grayscale"
                             >
                                 {addMessageMutation.isPending ? <Clock className="animate-spin" size={20} /> : <Send size={20} />}
                             </button>
@@ -125,7 +125,7 @@ export default function SupportTicketDetail({ ticket, onBack }) {
                         <div className="pb-4">
                             <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Stakeholder Details</h4>
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black">
+                                <div className="w-10 h-10 bg-indigo-50 text-primary rounded-xl flex items-center justify-center font-black">
                                     {ticket.name.charAt(0)}
                                 </div>
                                 <div>

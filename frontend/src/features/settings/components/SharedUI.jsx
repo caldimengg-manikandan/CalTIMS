@@ -12,7 +12,7 @@ export function SectionCard({ title, subtitle, icon: Icon, children }) {
                 )}
                 <div>
                     <h3 className="font-bold text-slate-800 dark:text-white text-sm">{title}</h3>
-                    {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+                    {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
                 </div>
             </div>
             <div className="p-5 flex-1">{children}</div>

@@ -62,6 +62,15 @@ export default {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-mesh': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       },
+      screens: {
+        'short': { 'raw': '(max-height: 700px)' },
+        'tall': { 'raw': '(min-height: 900px)' },
+        'ultrawide': { 'raw': '(min-aspect-ratio: 21/9)' },
+      },
+      transitionDuration: {
+        'fast': '150ms',
+        'slow': '400ms',
+      }
     },
   },
   plugins: [

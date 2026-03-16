@@ -11,9 +11,10 @@ import {
     PlusSquare,
     ClipboardCheck,
     Info,
-    AlertTriangle
+    AlertTriangle,
+    Clock
 } from 'lucide-react'
-import { timesheetAPI, projectAPI, settingsAPI, taskAPI, leaveAPI, calendarAPI } from '@/services/endpoints'
+import { timesheetAPI, projectAPI, settingsAPI, taskAPI, leaveAPI, calendarAPI, attendanceAPI } from '@/services/endpoints'
 import { useSettingsStore } from '@/store/settingsStore'
 import Spinner from '@/components/ui/Spinner'
 import {
@@ -53,6 +54,7 @@ import PageHeader from '@/components/ui/PageHeader'
 
 export default function TimesheetEntryPage() {
     const queryClient = useQueryClient()
+    const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const editId = searchParams.get('id')           // direct timesheet _id for edit
     const initialDateStr = searchParams.get('date') || searchParams.get('weekStart')
@@ -109,6 +111,28 @@ export default function TimesheetEntryPage() {
         queryKey: ['tasks', 'active-list'],
         queryFn: () => taskAPI.getAll({ isActive: true }).then(r => r.data.data),
     })
+
+    // Fetch full settings for integration status
+    const { data: fullSettings } = useQuery({
+        queryKey: ['settings', 'full'],
+        queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
+        staleTime: 5 * 60 * 1000,
+    })
+
+    // Fetch attendance for the week
+    const { data: attendanceLogs } = useQuery({
+        queryKey: ['attendance', format(weekStart, 'yyyy-MM-dd')],
+        queryFn: () => attendanceAPI.getAll({
+            from: format(weekStart, 'yyyy-MM-dd'),
+            to: format(addDays(weekStart, 6), 'yyyy-MM-dd')
+        }).then(r => r.data.data),
+    })
+
+    // Determine if any biometric integration is enabled
+    const isAttendanceEnabled = useMemo(() => {
+        if (!fullSettings?.hardwareGateways) return false;
+        return Object.values(fullSettings.hardwareGateways).some(gw => gw.enabled);
+    }, [fullSettings])
     const TASK_TYPES = tsSettings?.taskCategories
         ? ['Select Task', ...tsSettings.taskCategories, 'Leave', 'Holiday']
         : DEFAULT_TASK_TYPES
@@ -361,6 +385,19 @@ export default function TimesheetEntryPage() {
 
     const bulkSaveMutation = useMutation({
         mutationFn: async (rowsToSave) => {
+            const today = new Date();
+            today.setHours(23, 59, 59, 999);
+            const hasFutureEntry = rowsToSave.some(r => r.dayHours.some((h, idx) => {
+                if (h !== '00:00' && h !== '-8') {
+                    return weekDays[idx].getTime() > today.getTime();
+                }
+                return false;
+            }));
+
+            if (hasFutureEntry) {
+                throw new Error('Cannot save draft with entries for future dates.');
+            }
+
             const payloads = rowsToSave.filter(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS').map(row => ({
                 projectId: row.projectId,
                 category: row.taskType,
@@ -403,6 +440,20 @@ export default function TimesheetEntryPage() {
             const hasHolidayOrLeave = holidays.size > 0 || rows.some(r => r.isLeaveRow)
             if (!hasAnyHours && !hasHolidayOrLeave) {
                 throw new Error('Please enter some hours before submitting.')
+            }
+
+            // Future date validation
+            const today = new Date();
+            today.setHours(23, 59, 59, 999);
+            const hasFutureEntry = rows.some(r => r.dayHours.some((h, idx) => {
+                if (h !== '00:00' && h !== '-8') {
+                    return weekDays[idx].getTime() > today.getTime();
+                }
+                return false;
+            }));
+
+            if (hasFutureEntry) {
+                throw new Error('Cannot submit timesheet with entries for future dates.');
             }
 
             // Policy-Driven Daily Hours Guardrails (min/max from Timesheet Policy settings)
@@ -536,8 +587,9 @@ export default function TimesheetEntryPage() {
                     return acc + oh + (om / 60)
                 }, 0)
 
-                if (otherRowsDayTotal + newValueTotalHours > 24) {
-                    toast.error('Total hours for a day cannot exceed 24 hours.')
+                const maxDayHrs = tsSettings?.maxHoursPerDay || 24;
+                if (otherRowsDayTotal + newValueTotalHours > maxDayHrs) {
+                    toast.error(`Daily hour limit exceeded. Maximum allowed: ${maxDayHrs} hours.`);
                     return r
                 }
 
@@ -657,7 +709,7 @@ export default function TimesheetEntryPage() {
     if (isLoading || isLoadingLeaves) return <div className="flex justify-center pt-20"><Spinner size="lg" /></div>
 
     return (
-        <div className="space-y-6 animate-fade-in max-w-[1600px] mx-auto pb-10">
+        <div className="space-y-6 fluid-container animate-fade-in pb-10">
             <PageHeader title="Timesheet Entry" />
 
             {isWeekFrozen && (
@@ -672,7 +724,7 @@ export default function TimesheetEntryPage() {
                         </div>
                     </div>
                     <button
-                        onClick={() => navigate('/incidents')}
+                        onClick={() => navigate('/incidents', { state: { autoOpen: true, type: 'frozen' } })}
                         className="whitespace-nowrap bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
                     >
                         Raise Ticket
@@ -708,9 +760,17 @@ export default function TimesheetEntryPage() {
                     </button>
                 </div>
 
+                {tsSettings?.submissionDeadline && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl">
+                        <Clock size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Deadline:</span>
+                        <span className="text-xs font-bold text-slate-700 dark:text-white">{tsSettings.submissionDeadline}</span>
+                    </div>
+                )}
+
                 <button
                     onClick={() => setCurrentDate(new Date())}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-md transition-all active:scale-95"
+                    className="flex items-center gap-2 px-4 py-2 btn-primary hover:bg-primary-700 text-white rounded-lg font-medium shadow-md transition-all active:scale-95"
                 >
                     <Calendar size={16} />
                     CURRENT WEEK
@@ -725,7 +785,7 @@ export default function TimesheetEntryPage() {
                             onClick={handleAddRow}
                             disabled={isWeekSubmitted}
                             title={isWeekSubmitted ? 'Timesheet already submitted' : 'Add a new project row'}
-                            className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none flex-1 lg:flex-none justify-center"
+                            className="flex items-center gap-2 px-3 lg:px-4 py-2 btn-primary hover:bg-primary-700 text-white rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none flex-1 lg:flex-none justify-center"
                         >
                             <Plus size={16} /> <span className="hidden sm:inline">ADD PROJECT</span><span className="sm:hidden">PROJECT</span>
                         </button>
@@ -739,7 +799,7 @@ export default function TimesheetEntryPage() {
                                         ? 'Only one permission row allowed'
                                         : `Add a permission row (Limit: ${tsSettings?.permissionMaxHoursPerDay || 4}h/day${tsSettings?.permissionMaxDaysPerWeek > 0 ? `, ${tsSettings.permissionMaxDaysPerWeek} days/week` : ''})`
                             }
-                            className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none flex-1 lg:flex-none justify-center"
+                            className="flex items-center gap-2 px-3 lg:px-4 py-2 btn-primary hover:bg-primary-700 text-white rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none flex-1 lg:flex-none justify-center"
                         >
                             <Plus size={16} /> <span className="hidden sm:inline">ADD PERMISSION</span><span className="sm:hidden">PERM</span>
                         </button>
@@ -754,7 +814,7 @@ export default function TimesheetEntryPage() {
                     </div>
                 </div>
 
-                <div className={`overflow-x-auto${rows.length > 5 ? ' overflow-y-auto max-h-[360px]' : ''}`}>
+                <div className={`overflow-x-auto${rows.length > 5 ? ' scroll-v-adaptive' : ''}`}>
                     <table className="w-full border-collapse">
                         <thead className="sticky top-0 z-10">
                             <tr className="bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-white text-slate-500 uppercase text-[11px] font-bold tracking-wider">
@@ -893,16 +953,21 @@ export default function TimesheetEntryPage() {
                                             const isLop = cellLeaveType?.toLowerCase().includes('lop');
 
                                             const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
+                                            const isFutureDate = day.getTime() > new Date().setHours(23, 59, 59, 999);
+                                            const isProjectOrTaskNotSelected = !row.isLeaveRow && !isPermissionRow(row.taskType) && (!row.projectId || row.taskType === 'Select Task');
+                                            const isDisabledInput = isRowLocked(row) || isWeekSubmitted || lockedDays[i] || isHoliday || isFutureDate || isProjectOrTaskNotSelected;
 
                                             return (
                                                 <td key={i} className={`px-2 py-3 border-r border-slate-100 dark:border-white transition-colors ${isHoliday ? 'bg-blue-50/80 dark:bg-blue-900/20' : ''}`}>
-                                                    <div className={`flex flex-col items-center justify-center p-1.5 focus-within:ring-1 focus-within:ring-indigo-500 transition-all ${isLop && isPendingCell ? 'bg-rose-100/50 border-rose-200 dark:border-rose-900 border rounded-lg' :
+                                                    <div className={`flex flex-col items-center justify-center p-1.5 transition-all ${!isDisabledInput ? 'focus-within:ring-1 focus-within:ring-indigo-500' : ''} ${isLop && isPendingCell ? 'bg-rose-100/50 border-rose-200 dark:border-rose-900 border rounded-lg' :
                                                         isLop && isApprovedCell ? 'bg-rose-100/30 border-rose-300 dark:border-rose-800 border rounded-lg' :
                                                             isPendingCell ? 'bg-amber-100/30 border-amber-200 dark:border-amber-800 border rounded-lg' :
                                                                 isApprovedCell ? 'bg-emerald-100/30 border-emerald-200 dark:border-emerald-800 border rounded-lg' :
                                                                     isHoliday ? 'bg-blue-100/60 dark:bg-blue-800/40 border-blue-300 dark:border-blue-600 border rounded-lg' :
                                                                         'bg-slate-50 dark:bg-black border-slate-200 dark:border-white border rounded-lg'
-                                                        } ${lockedDays[i] && !row.isLeaveRow ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800' : ''}`}>
+                                                        } ${isDisabledInput && !row.isLeaveRow ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800' : ''}`}
+                                                        title={isProjectOrTaskNotSelected ? "Please select a project and task first" : isFutureDate ? "Cannot enter time for future dates" : ""}
+                                                    >
                                                         <div className="flex items-center justify-center w-full">
                                                             {isLop && isLeaveCell ? (
                                                                 <div className="flex items-center justify-center w-full relative group/lop">
@@ -918,28 +983,28 @@ export default function TimesheetEntryPage() {
                                                                         type="text"
                                                                         maxLength={2}
                                                                         placeholder="00"
-                                                                        className="w-6 bg-transparent text-center text-sm font-semibold outline-none disabled:opacity-60"
+                                                                        className="w-6 bg-transparent text-center text-sm font-semibold outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                                                                         value={time.split(':')[0]}
                                                                         onChange={(e) => {
                                                                             const h = e.target.value.replace(/\D/g, '')
                                                                             const m = time.split(':')[1] || '00'
                                                                             handleUpdateHour(row.id, i, `${h}:${m}`)
                                                                         }}
-                                                                        disabled={isRowLocked(row) || isWeekSubmitted || lockedDays[i] || isHoliday}
+                                                                        disabled={isDisabledInput}
                                                                     />
                                                                     <span className="text-slate-400 font-medium px-0.5">:</span>
                                                                     <input
                                                                         type="text"
                                                                         maxLength={2}
                                                                         placeholder="00"
-                                                                        className="w-6 bg-transparent text-center text-sm font-semibold outline-none disabled:opacity-60"
+                                                                        className="w-6 bg-transparent text-center text-sm font-semibold outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                                                                         value={time.split(':')[1]}
                                                                         onChange={(e) => {
                                                                             const m = e.target.value.replace(/\D/g, '')
                                                                             const h = time.split(':')[0] || '00'
                                                                             handleUpdateHour(row.id, i, `${h}:${m}`)
                                                                         }}
-                                                                        disabled={isRowLocked(row) || isWeekSubmitted || lockedDays[i] || isHoliday}
+                                                                        disabled={isDisabledInput}
                                                                         onBlur={(e) => {
                                                                             let m = parseInt(e.target.value, 10) || 0
                                                                             if (m > 59) m = 59
@@ -1003,23 +1068,39 @@ export default function TimesheetEntryPage() {
                         </tbody>
                         <tfoot className="sticky bottom-0 z-10 border-t-2 border-slate-100 dark:border-white">
                             <tr className="bg-slate-50 dark:bg-black font-medium text-slate-700 dark:text-white border-t border-slate-100 dark:border-white">
-                                <td colSpan={3} className="px-6 py-4 text-sm font-bold flex items-center gap-2">
-                                    Office Presence (Swipe Hours)
-                                    <div className="group relative">
-                                        <Info size={14} className="text-slate-400 cursor-help" />
-                                        <div className="hidden group-hover:block absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 p-3 bg-slate-800 text-white text-[10px] rounded-xl shadow-2xl z-50 font-medium leading-relaxed">
-                                            Office swipe hours will be automatically captured once attendance integration is enabled by your organization.
+                                <td colSpan={3} className="px-6 py-4 text-sm font-bold border-r border-slate-100 dark:border-white">
+                                    <div className="flex items-center gap-2">
+                                        Office Presence (Swipe Hours)
+                                        <div className="group relative">
+                                            <Info size={14} className="text-slate-400 cursor-help" />
+                                            <div className="hidden group-hover:block absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 p-3 bg-slate-800 text-white text-[10px] rounded-xl shadow-2xl z-50 font-medium leading-relaxed">
+                                                Office swipe hours will be automatically captured once attendance integration is enabled by your organization.
+                                            </div>
                                         </div>
                                     </div>
                                 </td>
                                 {weekDays.map((day, i) => {
                                     const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
                                     if (!general?.isWeekendWorkable && isWeekendDay) return null;
+                                    
+                                    const dayStr = format(day, 'yyyy-MM-dd');
+                                    const dayLogs = attendanceLogs?.filter(log => format(new Date(log.timestamp), 'yyyy-MM-dd') === dayStr) || [];
+                                    let swipeHours = 0;
+                                    if (dayLogs.length >= 2) {
+                                        // Calculate duration between first and last swipe of the day
+                                        const timestamps = dayLogs.map(log => new Date(log.timestamp).getTime());
+                                        const startTime = Math.min(...timestamps);
+                                        const endTime = Math.max(...timestamps);
+                                        
+                                        // Duration in decimal hours (e.g., 8.5)
+                                        swipeHours = (endTime - startTime) / (1000 * 60 * 60);
+                                    }
+
                                     return (
                                         <td key={i} className="px-2 py-4 text-center text-sm font-bold text-slate-400">
-                                            —
+                                            {isAttendanceEnabled ? (swipeHours > 0 ? formatHours(swipeHours) : '0.00h') : '—'}
                                         </td>
-                                    )
+                                    );
                                 })}
                                 <td className="px-4 py-4 text-center text-sm text-slate-400">—</td>
                                 <td className="px-4 py-4"></td>
@@ -1033,16 +1114,23 @@ export default function TimesheetEntryPage() {
             <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div className="space-y-1">
                     <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
-                        <ClipboardCheck size={16} className="text-indigo-600" />
+                        <ClipboardCheck size={16} className="text-primary" />
                         Office Swipe Integration
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                        Attendance device integration is not configured for this organization.
-                        Contact your administrator to enable real-time swipe tracking.
+                        {isAttendanceEnabled 
+                            ? "Biometric attendance integration is active. Your swipe hours are automatically synced from the office gateway."
+                            : "Attendance device integration is not configured for this organization. Contact your administrator to enable real-time swipe tracking."
+                        }
                     </p>
                 </div>
-                <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900 text-[10px] font-bold text-amber-700 dark:text-amber-400 rounded-lg uppercase tracking-widest">
-                    Status: Not Configured
+                <div className={clsx(
+                    "px-4 py-2 border text-[10px] font-bold rounded-lg uppercase tracking-widest",
+                    isAttendanceEnabled 
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                        : "bg-amber-50 border-amber-200 text-amber-700"
+                )}>
+                    Status: {isAttendanceEnabled ? 'Active' : 'Not Configured'}
                 </div>
             </div>
 
@@ -1070,7 +1158,7 @@ export default function TimesheetEntryPage() {
                     onClick={() => submitWeekMutation.mutate()}
                     disabled={submitWeekMutation.isPending || (totalWeekHours === 0 && holidays.size === 0 && !rows.some(r => r.isLeaveRow)) || isWeekSubmitted}
                     title={isWeekSubmitted ? 'This week has already been submitted' : ''}
-                    className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:pointer-events-none"
+                    className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 btn-primary hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:pointer-events-none"
                 >
                     {submitWeekMutation.isPending ? (
                         <Spinner size="sm" className="text-white" />

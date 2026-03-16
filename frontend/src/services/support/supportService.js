@@ -1,53 +1,43 @@
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+import api from '../api';
 
 const supportService = {
     submitTicket: async (ticketData) => {
-        const response = await axios.post(`${API_URL}/support/tickets`, ticketData);
+        const response = await api.post('/support/tickets', ticketData);
         return response.data;
     },
 
     sendOTP: async (email) => {
-        const response = await axios.post(`${API_URL}/support/send-otp`, { email });
+        const response = await api.post('/support/send-otp', { email });
         return response.data;
     },
 
     verifyOTP: async (email, otp) => {
-        const response = await axios.post(`${API_URL}/support/verify-otp`, { email, otp });
+        const response = await api.post('/support/verify-otp', { email, otp });
         return response.data;
     },
 
     getTickets: async (params = {}) => {
-        const token = localStorage.getItem('token');
-        const response = await axios.get(`${API_URL}/support/tickets`, {
-            params,
-            headers: { Authorization: `Bearer ${token}` }
-        });
+        const response = await api.get('/support/tickets', { params });
+        return response.data;
+    },
+
+    trackTickets: async (email) => {
+        const response = await api.post('/support/track-tickets', { email });
         return response.data;
     },
 
     updateTicketStatus: async (id, status) => {
-        const token = localStorage.getItem('token');
-        const response = await axios.patch(`${API_URL}/support/tickets/${id}`, { status }, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+        const response = await api.patch(`/support/tickets/${id}`, { status });
         return response.data;
     },
 
     deleteTicket: async (id) => {
-        const token = localStorage.getItem('token');
-        const response = await axios.delete(`${API_URL}/support/tickets/${id}`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+        const response = await api.delete(`/support/tickets/${id}`);
         return response.data;
     },
-    trackTickets: async (email) => {
-        const response = await axios.post(`${API_URL}/support/track-tickets`, { email });
-        return response.data;
-    },
+
     addTicketMessage: async (id, message, sender = 'user') => {
-        const response = await axios.post(`${API_URL}/support/tickets/${id}/messages`, { message, sender });
+        const response = await api.post(`/support/tickets/${id}/messages`, { message, sender });
         return response.data;
     }
 };

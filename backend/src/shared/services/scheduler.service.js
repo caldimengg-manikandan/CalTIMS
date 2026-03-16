@@ -54,11 +54,13 @@ async function runScheduler() {
   for (const schedule of schedules) {
     if (!isDue(schedule, now)) continue;
 
-    // Fetch company name
+    // Fetch company name and format
     let companyName = 'CALTIMS';
+    let format = 'PDF';
     try {
       const settings = await Settings.findOne().lean();
       companyName = settings?.general?.companyName || companyName;
+      format = settings?.report?.defaultFormat || format;
     } catch (_) {}
 
     // Fetch recipient emails
@@ -84,7 +86,8 @@ async function runScheduler() {
         emails,
         schedule.reportType,
         companyName,
-        schedule.projectIds || []
+        schedule.projectIds || [],
+        format
       );
       historyEntry = {
         sentAt: now,

@@ -65,14 +65,14 @@ export default function ForgotPasswordPage() {
                     {errors.email && <p className="error-msg">{errors.email.message}</p>}
                 </div>
 
-                <button type="submit" disabled={isPending} className="btn-primary w-full justify-center py-3.5 shadow-lg shadow-indigo-600/20">
+                <button type="submit" disabled={isPending} className="btn-primary w-full justify-center py-3.5 shadow-lg shadow-primary/20">
                     {isPending ? <Spinner size="sm" /> : null}
                     <span className="font-bold tracking-wide">{isPending ? 'Sending...' : 'Send'}</span>
                 </button>
             </form>
 
             <div className="pt-6 border-t border-slate-100 dark:border-slate-900">
-                <Link to="/login" className="flex items-center justify-center gap-2 text-sm text-indigo-600 font-bold hover:text-indigo-700 transition-colors">
+                <Link to="/login" className="flex items-center justify-center gap-2 text-sm text-primary font-bold hover:text-primary-700 transition-colors">
                     <ArrowLeft size={18} /> Back to login
                 </Link>
             </div>

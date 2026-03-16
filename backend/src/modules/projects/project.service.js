@@ -4,6 +4,7 @@ const Project = require('./project.model');
 const AppError = require('../../shared/utils/AppError');
 const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
 const { ROLES } = require('../../constants');
+const { logAction } = require('../audit/audit.routes');
 
 const projectService = {
   async getAll(query, requestor) {
@@ -50,10 +51,21 @@ const projectService = {
     return project;
   },
 
-  async create(data) {
+  async create(data, requestorId) {
     const existing = await Project.findOne({ code: data.code.toUpperCase() });
     if (existing) throw new AppError(`Project with code '${data.code}' already exists`, 409);
-    return Project.create(data);
+    
+    const project = await Project.create(data);
+
+    logAction({
+        userId: requestorId,
+        action: 'CREATE_PROJECT',
+        entityType: 'Project',
+        entityId: project._id,
+        details: { name: project.name, code: project.code }
+    });
+
+    return project;
   },
 
   async update(id, data, requestor) {
@@ -64,6 +76,15 @@ const projectService = {
     }
     Object.assign(project, data);
     await project.save();
+
+    logAction({
+        userId: requestor._id || requestor,
+        action: 'UPDATE_PROJECT',
+        entityType: 'Project',
+        entityId: id,
+        details: { name: project.name, code: project.code }
+    });
+
     return project;
   },
 
@@ -105,6 +126,15 @@ const projectService = {
     }
 
     await Project.findByIdAndDelete(id);
+
+    logAction({
+        userId: requestor._id || requestor,
+        action: 'DELETE_PROJECT',
+        entityType: 'Project',
+        entityId: id,
+        details: { name: project.name, code: project.code }
+    });
+
     return true;
   },
 };

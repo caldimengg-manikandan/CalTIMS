@@ -1,6 +1,7 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const Settings = require('../settings/settings.model');
 const { TIMESHEET_STATUS } = require('../../constants');
 
 const timesheetEntrySchema = new mongoose.Schema(
@@ -154,7 +155,6 @@ function resolveEntryHours(entry, workingHoursPerDay = 8) {
 // ─── Pre-save: Calculate totals ──────────────────────────────────────────────
 timesheetSchema.pre('save', async function (next) {
   try {
-    const Settings = mongoose.model('Settings');
     const settings = await Settings.findOne().lean();
     const workingHoursPerDay = settings?.general?.workingHoursPerDay || 8;
     const workingDaysCount = settings?.general?.isWeekendWorkable ? 7 : 5;

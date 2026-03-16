@@ -68,7 +68,7 @@ const TimezoneSelect = ({ value, onChange, options }) => {
                 onClick={() => { setIsOpen(!isOpen); setSearch(''); }}
             >
                 <span className="truncate">{selectedOption ? selectedOption.label : 'Select Timezone'}</span>
-                <ChevronDown size={14} className="text-slate-400" />
+                <ChevronDown size={14} className="text-slate-500" />
             </div>
 
             {isOpen && (
@@ -186,199 +186,219 @@ export default function OrganizationTab() {
 
     return (
         <div className="space-y-8 pb-10">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Organization Settings</h2>
-                    <p className="text-sm text-slate-500 font-medium">Company-wide configuration and identity</p>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Organization Landscape</h2>
+                    <p className="text-sm text-slate-500 font-medium">Manage company identity, localization and operational basics</p>
                 </div>
-                <div className="flex items-center gap-3 bg-slate-100 dark:bg-white/5 p-1.5 rounded-2xl border border-slate-200 dark:border-white/10">
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-white/5 p-1 rounded-2xl border border-slate-200 dark:border-white/10 w-fit">
                     <button
                         onClick={handleToggleTier}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${appVersion === 'pro' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-800'}`}
+                        className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${appVersion === 'pro' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        Enterprise (Pro)
+                        Enterprise Profile
                     </button>
                     <button
                         onClick={handleToggleTier}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${appVersion === 'basic' ? 'bg-slate-200 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-400'}`}
+                        className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${appVersion === 'basic' ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        Basic
+                        Standard
                     </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                {/* Column 1: Identity & Branding */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                {/* Column 1: Identity & Localization */}
+                <div className="lg:col-span-8 space-y-8">
+                    <SectionCard title="Corporate Identity" subtitle="Define your company's core public information" icon={Globe}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="md:col-span-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Official Company Name</label>
+                                <input
+                                    className="input w-full h-12 text-sm font-bold bg-slate-50/50 dark:bg-white/5"
+                                    placeholder="CALTIMS"
+                                    value={form.companyName}
+                                    onChange={e => upd('companyName', e.target.value)}
+                                />
+                            </div>
 
-                <SectionCard title="Corporate Identity" subtitle="Define your company's core information" icon={Globe}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="md:col-span-2">
-                            <label className="label">Company Name</label>
-                            <input
-                                className="input w-full h-12"
-                                placeholder="CALTIMS"
-                                value={form.companyName}
-                                onChange={e => upd('companyName', e.target.value)}
-                            />
-                        </div>
+                            <div className="md:col-span-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Headquarters Address</label>
+                                <textarea
+                                    className="input w-full h-28 py-4 resize-none text-sm font-medium bg-slate-50/50 dark:bg-white/5"
+                                    placeholder="123 Enterprise Way, Tech City..."
+                                    value={form.address}
+                                    onChange={e => upd('address', e.target.value)}
+                                />
+                            </div>
 
-                        <div className="md:col-span-2">
-                            <label className="label">Company Address</label>
-                            <textarea
-                                className="input w-full h-24 py-3 resize-none"
-                                placeholder="123 Enterprise Way, Tech City..."
-                                value={form.address}
-                                onChange={e => upd('address', e.target.value)}
-                            />
-                        </div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Operational Country</label>
+                                <input
+                                    className="input w-full h-12 text-sm font-bold bg-slate-50/50 dark:bg-white/5"
+                                    placeholder="India"
+                                    value={form.country}
+                                    onChange={e => upd('country', e.target.value)}
+                                />
+                            </div>
 
-                        <div>
-                            <label className="label">Country</label>
-                            <input
-                                className="input w-full h-12"
-                                placeholder="India"
-                                value={form.country}
-                                onChange={e => upd('country', e.target.value)}
-                            />
-                        </div>
-
-                        <div>
-                            <label className="label">Currency</label>
-                            <select
-                                className="input w-full h-12 pr-10 appearance-none"
-                                value={form.currency}
-                                onChange={e => upd('currency', e.target.value)}
-                            >
-                                <option value="INR">INR (₹)</option>
-                                <option value="USD">USD ($)</option>
-                                <option value="EUR">EUR (€)</option>
-                                <option value="GBP">GBP (£)</option>
-                                <option value="AED">AED (د.إ)</option>
-                            </select>
-                        </div>
-                    </div>
-                </SectionCard>
-
-                <SectionCard title="System Localization" subtitle="Regional and time-based settings" icon={Settings2}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="label">Timezone</label>
-                            <div className="relative">
-                                <select
-                                    className="input w-full h-12 appearance-none pr-9"
-                                    value={form.timezone}
-                                    onChange={e => upd('timezone', e.target.value)}
-                                >
-                                    {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
-                                </select>
-                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Base Currency</label>
+                                <div className="relative">
+                                    <select
+                                        className="input w-full h-12 pr-10 appearance-none font-bold bg-slate-50/50 dark:bg-white/5"
+                                        value={form.currency}
+                                        onChange={e => upd('currency', e.target.value)}
+                                    >
+                                        <option value="INR">INR (₹)</option>
+                                        <option value="USD">USD ($)</option>
+                                        <option value="EUR">EUR (€)</option>
+                                        <option value="GBP">GBP (£)</option>
+                                        <option value="AED">AED (د.إ)</option>
+                                    </select>
+                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                </div>
                             </div>
                         </div>
+                    </SectionCard>
 
-                        <div>
-                            <label className="label">Date Format</label>
-                            <select
-                                className="input w-full h-12 appearance-none pr-9"
-                                value={form.dateFormat}
-                                onChange={e => upd('dateFormat', e.target.value)}
-                            >
-                                {DATE_FORMATS.map(fmt => <option key={fmt} value={fmt}>{fmt}</option>)}
-                            </select>
+                    <SectionCard title="System Localization" subtitle="Regional and time-based configurations" icon={Settings2}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Enterprise Timezone</label>
+                                <TimezoneSelect 
+                                    value={form.timezone} 
+                                    onChange={v => upd('timezone', v)} 
+                                    options={TIMEZONES} 
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Display Date Format</label>
+                                <div className="relative">
+                                    <select
+                                        className="input w-full h-12 appearance-none pr-9 font-bold bg-slate-50/50 dark:bg-white/5"
+                                        value={form.dateFormat}
+                                        onChange={e => upd('dateFormat', e.target.value)}
+                                    >
+                                        {DATE_FORMATS.map(fmt => <option key={fmt} value={fmt}>{fmt}</option>)}
+                                    </select>
+                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Fiscal Year Start</label>
+                                <div className="relative">
+                                    <select
+                                        className="input w-full h-12 appearance-none pr-9 font-bold bg-slate-50/50 dark:bg-white/5"
+                                        value={form.fiscalYearStart}
+                                        onChange={e => upd('fiscalYearStart', e.target.value)}
+                                    >
+                                        {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(month => (
+                                            <option key={month} value={month}>{month}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Standard Work Week</label>
+                                <div className="relative">
+                                    <select
+                                        className="input w-full h-12 appearance-none pr-9 font-bold bg-slate-50/50 dark:bg-white/5"
+                                        value={form.workWeek}
+                                        onChange={e => upd('workWeek', e.target.value)}
+                                    >
+                                        <option value="Mon-Fri">Monday – Friday</option>
+                                        <option value="Sun-Thu">Sunday – Thursday</option>
+                                        <option value="Mon-Sat">Monday – Saturday</option>
+                                    </select>
+                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                </div>
+                            </div>
                         </div>
-
-                        <div>
-                            <label className="label">Fiscal Year Start</label>
-                            <select
-                                className="input w-full h-12 appearance-none pr-9"
-                                value={form.fiscalYearStart}
-                                onChange={e => upd('fiscalYearStart', e.target.value)}
-                            >
-                                {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(month => (
-                                    <option key={month} value={month}>{month}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="label">Work Week</label>
-                            <select
-                                className="input w-full h-12 appearance-none pr-9"
-                                value={form.workWeek}
-                                onChange={e => upd('workWeek', e.target.value)}
-                            >
-                                <option value="Mon-Fri">Monday – Friday</option>
-                                <option value="Sun-Thu">Sunday – Thursday</option>
-                                <option value="Mon-Sat">Monday – Saturday</option>
-                            </select>
-                        </div>
-                    </div>
-                </SectionCard>
+                    </SectionCard>
+                </div>
 
 
-                {/* Column 2: Logo & Policy Summaries */}
-                {/* <div className="space-y-8">
-                    <SectionCard title="Company Logo" subtitle="Brand identity for reports" icon={Save}>
+                {/* Column 2: Assets & Rules */}
+                <div className="lg:col-span-4 space-y-8">
+                    <SectionCard title="Company Logo" subtitle="Brand assets for system reporting" icon={Globe}>
                         <div className="flex flex-col items-center gap-6 py-4">
-                            <div className="w-40 h-40 rounded-3xl bg-slate-50 dark:bg-white/5 border-2 border-dashed border-slate-200 dark:border-white/10 flex flex-col items-center justify-center text-center p-4 group hover:border-indigo-500/50 transition-colors cursor-pointer relative overflow-hidden">
+                            <div className="w-full aspect-square max-w-[200px] rounded-[2.5rem] bg-slate-50 dark:bg-white/5 border-2 border-dashed border-slate-200 dark:border-white/10 flex flex-col items-center justify-center text-center p-6 group hover:border-primary/50 transition-all cursor-pointer relative overflow-hidden">
                                 {form.companyLogo ? (
-                                    <img src={form.companyLogo} alt="Logo" className="w-full h-full object-contain p-4" />
+                                    <img src={form.companyLogo} alt="Logo" className="w-full h-full object-contain" />
                                 ) : (
                                     <>
-                                        <Globe size={32} className="text-slate-300 group-hover:text-indigo-400 transition-colors mb-2" />
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Upload PNG/JPG</p>
+                                        <div className="p-4 rounded-3xl bg-slate-100 dark:bg-slate-800 text-slate-400 group-hover:text-primary transition-colors mb-4">
+                                            <Globe size={32} />
+                                        </div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Image Asset</p>
                                     </>
                                 )}
                             </div>
-                            <button className="text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors uppercase tracking-widest">
-                                Change Logo
+                            <button className="text-[11px] font-black text-primary hover:underline transition-all uppercase tracking-widest">
+                                Upload New Logo
                             </button>
                         </div>
                     </SectionCard>
 
-                    <SectionCard title="Working Hours" subtitle="Default validation rules" icon={Clock}>
-                        <div className="space-y-4">
+                    <SectionCard title="Operational Pace" subtitle="Default system-wide pace rules" icon={Clock}>
+                        <div className="space-y-6">
                             <div>
-                                <div className="flex justify-between mb-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase">Standard Day</label>
-                                    <span className="text-xs font-black text-indigo-600">{form.workingHoursPerDay} hrs</span>
+                                <div className="flex justify-between items-end mb-3">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Standard Work Day</label>
+                                    <span className="px-2 py-1 rounded bg-primary text-[10px] font-black text-white">{form.workingHoursPerDay} HRS</span>
                                 </div>
                                 <input
                                     type="range"
                                     min={1} max={12} step={0.5}
                                     value={form.workingHoursPerDay}
                                     onChange={e => upd('workingHoursPerDay', parseFloat(e.target.value))}
-                                    className="w-full accent-indigo-600"
+                                    className="w-full accent-primary cursor-pointer"
                                 />
+                                <p className="text-[9px] text-slate-400 mt-2 font-medium">Used as the global baseline for timesheet compliance.</p>
                             </div>
 
-                            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
-                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Strict Daily Hours</span>
-                                <button onClick={() => upd('strictDailyHours', !form.strictDailyHours)}
-                                    className={`relative w-10 h-5 rounded-full transition-colors ${form.strictDailyHours ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
-                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.strictDailyHours ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
-                            </div>
+                            <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-white/5">
+                                <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 hover:border-primary0/30 transition-all">
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-tight text-slate-700 dark:text-slate-200">Strict Enforcement</p>
+                                        <p className="text-[10px] text-slate-500 font-medium">Block sub-standard entries</p>
+                                    </div>
+                                    <button onClick={() => upd('strictDailyHours', !form.strictDailyHours)}
+                                        className={`relative w-11 h-5.5 rounded-full transition-all flex items-center px-1 ${form.strictDailyHours ? 'bg-primary shadow-lg shadow-primary/25' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                                        <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${form.strictDailyHours ? 'translate-x-5.5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
 
-                            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
-                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Weekend Access</span>
-                                <button onClick={() => upd('isWeekendWorkable', !form.isWeekendWorkable)}
-                                    className={`relative w-10 h-5 rounded-full transition-colors ${form.isWeekendWorkable ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
-                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.isWeekendWorkable ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
+                                <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 hover:border-primary0/30 transition-all">
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-tight text-slate-700 dark:text-slate-200">Weekend Access</p>
+                                        <p className="text-[10px] text-slate-500 font-medium">Allow entries on Sat/Sun</p>
+                                    </div>
+                                    <button onClick={() => upd('isWeekendWorkable', !form.isWeekendWorkable)}
+                                        className={`relative w-11 h-5.5 rounded-full transition-all flex items-center px-1 ${form.isWeekendWorkable ? 'bg-primary shadow-lg shadow-primary/25' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                                        <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${form.isWeekendWorkable ? 'translate-x-5.5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </SectionCard>
-                </div> */}
+                </div>
             </div>
 
+            {/* Persistent Save Action */}
             <div className="sticky bottom-4 z-20 flex justify-end">
                 <button
                     onClick={() => saveMutation.mutate()}
                     disabled={saveMutation.isPending}
-                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest shadow-xl shadow-indigo-600/25 transition-all active:scale-95 disabled:opacity-70"
+                    className="flex items-center gap-3 px-8 py-4 rounded-2xl btn-primary hover:btn-primary hover:bg-primary-700 text-white font-black uppercase tracking-widest shadow-xl shadow-primary/25 transition-all active:scale-95 disabled:opacity-70"
                 >
-                    {saveMutation.isPending ? <Spinner size="sm" color="white" /> : <Save size={18} />}
-                    Apply Settings
+                    {saveMutation.isPending ? <Spinner size="sm" color="white" /> : <Save size={20} />}
+                    Apply Institutional Settings
                 </button>
             </div>
         </div>

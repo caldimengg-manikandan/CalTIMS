@@ -1,12 +1,14 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { History, Search, Filter } from 'lucide-react'
+import { History, Search, Filter, Eye, X } from 'lucide-react'
 import { settingsAPI, auditAPI } from '@/services/endpoints'
 import Spinner from '@/components/ui/Spinner'
 import { SectionCard } from '../components/SharedUI'
+import Modal from '@/components/ui/Modal'
 
 export default function AuditLogsTab() {
     const [page, setPage] = useState(1)
+    const [selectedLog, setSelectedLog] = useState(null)
     const limit = 20
 
     const { data: logData, isLoading } = useQuery({
@@ -42,6 +44,44 @@ export default function AuditLogsTab() {
                 return 'Successfully logged in'
             case 'LOGOUT':
                 return 'Logged out from session'
+            case 'CREATE_ANNOUNCEMENT':
+                return `Created announcement: ${details.title}`
+            case 'UPDATE_ANNOUNCEMENT':
+                return `Updated announcement: ${details.title}`
+            case 'DELETE_ANNOUNCEMENT':
+                return `Deleted announcement: ${details.title}`
+            case 'CREATE_SUPPORT_TICKET':
+                return `Raised support ticket: ${details.subject}`
+            case 'UPDATE_TICKET_STATUS':
+                return `Updated ticket #${details.ticketId} to ${details.status}`
+            case 'DELETE_SUPPORT_TICKET':
+                return `Deleted support ticket #${details.ticketId}`
+            case 'CREATE_PROJECT':
+                return `Created project: ${details.name} (${details.code})`
+            case 'UPDATE_PROJECT':
+                return `Updated project: ${details.name}`
+            case 'DELETE_PROJECT':
+                return `Deleted project: ${details.name}`
+            case 'CREATE_EMPLOYEE':
+                return `Created employee: ${details.name}`
+            case 'DELETE_EMPLOYEE':
+                return `Deleted employee: ${details.name}`
+            case 'APPROVE_TIMESHEET':
+                return `Approved timesheet for ${details.ownerName || 'Employee'} (${new Date(details.weekStartDate).toLocaleDateString()})`
+            case 'ADMIN_FILLED_TIMESHEET':
+                return `Admin filled timesheet for ${details.ownerName || 'Employee'} (${new Date(details.weekStartDate).toLocaleDateString()})`
+            case 'REJECT_TIMESHEET':
+                return `Rejected timesheet for ${details.ownerName || 'Employee'}: ${details.reason}`
+            case 'DELETE_TIMESHEET':
+                return `Deleted timesheet for ${details.ownerName || 'Employee'} (${new Date(details.weekStartDate).toLocaleDateString()})`
+            case 'APPLY_LEAVE':
+                return `${details.ownerName || 'Employee'} applied for ${details.leaveType} leave`
+            case 'APPROVE_LEAVE':
+                return `Approved leave #${details.leaveId} for ${details.ownerName || 'Employee'}`
+            case 'REJECT_LEAVE':
+                return `Rejected leave #${details.leaveId} for ${details.ownerName || 'Employee'}: ${details.reason}`
+            case 'CANCEL_LEAVE':
+                return `Cancelled leave #${details.leaveId} for ${details.ownerName || 'Employee'}`
             default:
                 break;
         }
@@ -67,7 +107,7 @@ export default function AuditLogsTab() {
                 {totalPages > 1 && (
                     <div className="flex items-center gap-4 bg-slate-50/50 dark:bg-white/5 p-2 rounded-2xl border border-slate-100 dark:border-white/10">
                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-3">
-                            Page <span className="text-indigo-600 dark:text-indigo-400">{page}</span> / {totalPages}
+                            Page <span className="text-primary dark:text-primary">{page}</span> / {totalPages}
                         </p>
                         <div className="flex gap-1">
                             <button
@@ -110,7 +150,7 @@ export default function AuditLogsTab() {
                                     <th className="px-6 py-4 border-b border-slate-100 dark:border-white/5">Action Type</th>
                                     <th className="px-6 py-4 border-b border-slate-100 dark:border-white/5">Subject Entity</th>
                                     <th className="px-6 py-4 border-b border-slate-100 dark:border-white/5">Message / Metadata</th>
-                                    <th className="px-6 py-4 border-b border-slate-100 dark:border-white/5 text-right">Access Point</th>
+                                    <th className="px-6 py-4 border-b border-slate-100 dark:border-white/5 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -126,7 +166,7 @@ export default function AuditLogsTab() {
                                         </td>
                                         <td className="px-6 py-5">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-[10px] font-black text-indigo-600 dark:text-indigo-400">
+                                                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-[10px] font-black text-white">
                                                     {log.userId?.name?.[0] || 'S'}
                                                 </div>
                                                 <p className="text-xs font-black text-slate-800 dark:text-slate-100 tracking-tight">
@@ -135,7 +175,7 @@ export default function AuditLogsTab() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-5">
-                                            <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-black uppercase tracking-widest border border-indigo-100 dark:border-indigo-500/20">
+                                            <span className="px-2.5 py-1 rounded-lg bg-primary/10 dark:bg-primary/10 text-primary dark:text-primary text-[9px] font-black uppercase tracking-widest border border-indigo-100 dark:border-primary/20">
                                                 {log.action}
                                             </span>
                                         </td>
@@ -147,16 +187,20 @@ export default function AuditLogsTab() {
                                         </td>
                                         <td className="px-6 py-5">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-1 h-3 bg-indigo-500/30 rounded-full" />
+                                                <div className="w-1 h-3 bg-primary0/30 rounded-full" />
                                                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 max-w-xs truncate" title={formatLogDetails(log)}>
                                                     {formatLogDetails(log)}
                                                 </p>
                                             </div>
                                         </td>
                                         <td className="px-6 py-5 text-right">
-                                            <p className="text-[10px] text-slate-400 font-mono font-bold tracking-tighter">
-                                                {log.ipAddress || '0.0.0.0'}
-                                            </p>
+                                            <button 
+                                                onClick={() => setSelectedLog(log)}
+                                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 dark:bg-white/5 text-slate-400 hover:text-primary hover:bg-primary/10 transition-all"
+                                                title="View Details"
+                                            >
+                                                <Eye size={14} />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -182,7 +226,7 @@ export default function AuditLogsTab() {
                             <button
                                 disabled={page === totalPages}
                                 onClick={() => setPage(page + 1)}
-                                className="h-8 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-30"
+                                className="h-8 px-4 rounded-xl btn-primary hover:btn-primary hover:bg-primary-700 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-primary/20 disabled:opacity-30"
                             >
                                 Next
                             </button>
@@ -190,6 +234,68 @@ export default function AuditLogsTab() {
                     </div>
                 )}
             </SectionCard>
+
+            {/* Details Modal */}
+            <Modal
+                isOpen={!!selectedLog}
+                onClose={() => setSelectedLog(null)}
+                title="Event Details"
+            >
+                {selectedLog && (
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-xs font-black text-white">
+                                    {selectedLog.userId?.name?.[0] || 'S'}
+                                </div>
+                                <div>
+                                    <p className="text-sm font-black text-slate-800 dark:text-white">{selectedLog.userId?.name || 'System Engine'}</p>
+                                    <p className="text-[10px] text-slate-500 font-medium">{selectedLog.action}</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                    {new Date(selectedLog.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                </p>
+                                <p className="text-[10px] text-slate-400 font-mono">
+                                    {new Date(selectedLog.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/10">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Message</p>
+                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                {formatLogDetails(selectedLog)}
+                            </p>
+                        </div>
+
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Full Metadata</p>
+                            <div className="bg-slate-900 rounded-xl p-4 overflow-x-auto max-h-60 overflow-y-auto">
+                                <pre className="text-[11px] font-mono text-indigo-300">
+                                    {JSON.stringify(selectedLog.details, null, 2)}
+                                </pre>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-slate-100 dark:border-white/5 pt-4">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-green-500" />
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Access: {selectedLog.ipAddress || 'Internal'}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setSelectedLog(null)}
+                                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 transition-all"
+                            >
+                                Close View
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div>
     )
 }

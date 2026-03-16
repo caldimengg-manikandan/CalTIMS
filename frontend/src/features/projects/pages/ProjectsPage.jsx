@@ -30,7 +30,8 @@ const projectSchema = z.object({
     allocatedEmployees: z.array(z.object({
         userId: z.string().optional().nullable(),
         role: z.string().default('Developer'),
-        allocationPercent: z.number().min(1).max(100).default(100)
+        allocationPercent: z.number().min(1).max(100).default(100),
+        budgetHours: z.preprocess((val) => val === '' ? 0 : Number(val), z.number().min(0).default(0))
     })).default([]),
     onlyProjectTasks: z.boolean().default(false),
     budgetHours: z.preprocess((val) => val === '' ? 0 : Number(val), z.number().min(0).default(0))
@@ -95,7 +96,8 @@ function ProjectFormModal({ project, onClose }) {
             allocatedEmployees: project.allocatedEmployees?.map(a => ({
                 userId: a.userId?._id || a.userId || '',
                 role: a.role || 'Developer',
-                allocationPercent: a.allocationPercent || 100
+                allocationPercent: a.allocationPercent || 100,
+                budgetHours: a.budgetHours || 0
             })) || []
         } : {
             status: 'active',
@@ -135,7 +137,8 @@ function ProjectFormModal({ project, onClose }) {
                 .map(emp => ({
                     userId: emp.userId,
                     role: emp.role || 'Developer',
-                    allocationPercent: Number(emp.allocationPercent) || 100
+                    allocationPercent: Number(emp.allocationPercent) || 100,
+                    budgetHours: Number(emp.budgetHours) || 0
                 })),
             endDate: data.endDate && data.endDate !== '' ? data.endDate : null,
             description: data.description || '',
@@ -219,9 +222,9 @@ function ProjectFormModal({ project, onClose }) {
                         </div>
                         <div className="col-span-2 space-y-1.5 pt-2">
                             <label className="flex items-center gap-2 cursor-pointer group">
-                                <input type="checkbox" {...register('onlyProjectTasks')} className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer" />
+                                <input type="checkbox" {...register('onlyProjectTasks')} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-indigo-500 transition-all cursor-pointer" />
                                 <div className="flex flex-col">
-                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 transition-colors">Only show project-specific tasks in timesheet</span>
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-primary transition-colors">Only show project-specific tasks in timesheet</span>
                                     <span className="text-[10px] text-slate-400 font-normal leading-tight">If checked, global task categories will be hidden for this project.</span>
                                 </div>
                             </label>
@@ -235,7 +238,7 @@ function ProjectFormModal({ project, onClose }) {
                         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                             <Users size={13} /> Team Assignment
                         </h3>
-                        <button type="button" onClick={() => append({ userId: '', role: 'Developer', allocationPercent: 100 })}
+                        <button type="button" onClick={() => append({ userId: '', role: 'Developer', allocationPercent: 100, budgetHours: 0 })}
                             className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1">
                             <UserPlus size={13} /> Add Member
                         </button>
@@ -254,7 +257,11 @@ function ProjectFormModal({ project, onClose }) {
                                 </div>
                                 <div className="w-20">
                                     <input type="number" {...register(`allocatedEmployees.${index}.allocationPercent`, { valueAsNumber: true })}
-                                        className="input text-xs h-9 text-center" placeholder="%" />
+                                        className="input text-xs h-9 text-center" placeholder="%" title="Allocation %" />
+                                </div>
+                                <div className="w-20">
+                                    <input type="number" step="0.5" {...register(`allocatedEmployees.${index}.budgetHours`, { valueAsNumber: true })}
+                                        className="input text-xs h-9 text-center" placeholder="Hrs" title="Budget Hours" />
                                 </div>
                                 <button type="button" onClick={() => remove(index)}
                                     className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors">
@@ -342,6 +349,10 @@ function ProjectViewModal({ project, onClose, onEdit }) {
                                         <span className="text-sm font-medium text-slate-700 dark:text-white">{a.userId?.name || '—'}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        <div className="text-right mr-2">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Budget</p>
+                                            <p className="text-xs font-black text-slate-700 dark:text-white">{a.budgetHours || 0}h</p>
+                                        </div>
                                         <span className="text-xs text-slate-400">{a.role}</span>
                                         <span className="text-[10px] font-bold bg-primary-50 dark:bg-primary-900/20 text-primary-600 px-1.5 py-0.5 rounded">{a.allocationPercent}%</span>
                                     </div>
@@ -769,6 +780,10 @@ export default function ProjectsPage() {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
+                                        <div className="text-right mr-3">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Allocated</p>
+                                            <p className="text-xs font-black text-primary-600 dark:text-primary-400">{a.budgetHours || 0}h</p>
+                                        </div>
                                         <span className="text-xs text-slate-500 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-2.5 py-1 rounded-lg font-medium">
                                             {a.role}
                                         </span>

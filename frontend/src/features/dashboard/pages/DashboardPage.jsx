@@ -93,7 +93,7 @@ export default function DashboardPage() {
 
     const { data: notifications } = useQuery({
         queryKey: ['notifications', 'recent'],
-        queryFn: () => notificationAPI.getAll({ limit: 5 }).then(r => r.data.data),
+        queryFn: () => notificationAPI.getAll({ limit: 5 }).then(r => r.data.data.notifications || []),
     })
 
     if (summaryLoading) return (
@@ -419,7 +419,8 @@ export default function DashboardPage() {
                                     </div>
                                     <button
                                         onClick={() => setCurrentWeekStart(prev => addWeeks(prev, 1))}
-                                        className="p-1.5 hover:bg-white rounded-lg transition-colors text-slate-500 hover:text-primary-600"
+                                        disabled={startOfWeek(addWeeks(currentWeekStart, 1), { weekStartsOn }) > startOfWeek(new Date(), { weekStartsOn })}
+                                        className={`p-1.5 rounded-lg transition-colors ${startOfWeek(addWeeks(currentWeekStart, 1), { weekStartsOn }) > startOfWeek(new Date(), { weekStartsOn }) ? 'text-slate-300 opacity-50 cursor-not-allowed' : 'text-slate-500 hover:text-primary-600 hover:bg-white'}`}
                                     >
                                         <ChevronRight size={16} />
                                     </button>
@@ -463,6 +464,7 @@ export default function DashboardPage() {
                             _id: p._id,
                             name: p.name,
                             hours: hourMap[p._id] || 0,
+                            budgetHours: p.budgetHours || 0,
                         })).sort((a, b) => b.hours - a.hours)
 
                         const maxH = allProjectRows[0]?.hours || 1
@@ -470,8 +472,12 @@ export default function DashboardPage() {
                         const rest = allProjectRows.slice(4)
 
                         const ProjectRow = ({ p }) => {
-                            const pct = (p.hours / maxH) * 100
+                            const pct = p.budgetHours > 0 
+                                ? Math.min(100, (p.hours / p.budgetHours) * 100)
+                                : (p.hours / maxH) * 100
                             const isSelected = selectedProjectId === p._id
+                            const isOverBudget = p.budgetHours > 0 && p.hours > p.budgetHours
+
                             return (
                                 <div
                                     key={p._id}
@@ -479,16 +485,33 @@ export default function DashboardPage() {
                                     onClick={() => setSelectedProjectId(isSelected ? 'all' : p._id)}
                                 >
                                     <div className="flex justify-between items-end mb-1.5">
-                                        <span className={`text-sm font-bold transition-colors truncate max-w-[70%] ${isSelected ? 'text-primary-600' : 'text-slate-700 group-hover:text-primary-600'}`}>
-                                            {p.name}
-                                        </span>
-                                        <span className={`text-sm font-black shrink-0 ml-2 ${isSelected ? 'text-primary-700' : 'text-slate-800'}`}>
-                                            {(p.hours || 0).toFixed(2)}h
-                                        </span>
+                                        <div className="flex flex-col min-w-0">
+                                            <span className={`text-sm font-bold transition-colors truncate ${isSelected ? 'text-primary-600' : 'text-slate-700 group-hover:text-primary-600'}`}>
+                                                {p.name}
+                                            </span>
+                                            {p.budgetHours > 0 && (
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <span className={`text-[10px] font-black uppercase tracking-tight ${isOverBudget ? 'text-rose-500' : 'text-slate-400'}`}>
+                                                        {Math.round((p.hours / p.budgetHours) * 100)}% Used
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-300">•</span>
+                                                    <span className="text-[10px] font-medium text-slate-400">Budget: {p.budgetHours}h</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="text-right shrink-0 ml-2">
+                                            <span className={`text-sm font-black ${isSelected ? 'text-primary-700' : 'text-slate-800 dark:text-white'}`}>
+                                                {(p.hours || 0).toFixed(1)}<span className="text-[10px] font-bold opacity-40 ml-0.5">h</span>
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                    <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                                         <div
-                                            className={`h-full rounded-full transition-all ${isSelected ? 'bg-primary-500' : 'bg-gradient-to-r from-primary-400 to-primary-600'}`}
+                                            className={`h-full rounded-full transition-all ${
+                                                isOverBudget ? 'bg-rose-500' :
+                                                isSelected ? 'bg-primary-500' : 
+                                                'bg-gradient-to-r from-primary-400 to-primary-600'
+                                            }`}
                                             style={{ width: `${pct}%` }}
                                         />
                                     </div>
@@ -549,9 +572,9 @@ export default function DashboardPage() {
                 >
                     {/* Smart Insight Widget */}
                     {!isAdmin && prefs.insights !== false && (
-                        <div className="card p-5 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-900/10 dark:to-transparent border-indigo-100 dark:border-indigo-900/30">
+                        <div className="card p-5 bg-gradient-to-br from-primary-50 to-white dark:from-primary-900/10 dark:to-transparent border-primary-100 dark:border-primary-900/30">
                             <div className="flex gap-3">
-                                <div className="mt-0.5 text-indigo-500 shrink-0">
+                                <div className="mt-0.5 text-primary-500 shrink-0">
                                     <HelpCircle size={18} />
                                 </div>
                                 <div>
@@ -561,7 +584,7 @@ export default function DashboardPage() {
                                     </p>
                                     <button
                                         onClick={() => navigate('/timesheets')}
-                                        className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition-colors flex items-center gap-1"
+                                        className="text-[10px] font-black uppercase tracking-widest text-primary dark:text-primary-400 hover:text-primary-700 transition-colors flex items-center gap-1"
                                     >
                                         Review Entries <ChevronRight size={12} />
                                     </button>
@@ -583,9 +606,9 @@ export default function DashboardPage() {
                             </button>
                             <button
                                 onClick={() => navigate('/leaves')}
-                                className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group"
+                                className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-primary-200 transition-all group"
                             >
-                                <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                                     <FileText size={20} />
                                 </div>
                                 <span className="text-xs font-bold text-slate-600 text-center">Leaves</span>

@@ -216,7 +216,7 @@ export default function CalendarWidget() {
                                     <div className="flex items-center justify-center flex-1 py-1">
                                         <span className={`text-[12px] leading-none
                                             ${todayDay
-                                                ? 'w-6 h-6 flex items-center justify-center rounded-full bg-indigo-600 text-white font-black'
+                                                ? 'w-6 h-6 flex items-center justify-center rounded-full btn-primary text-white font-black'
                                                 : primary ? getNum(primary.eventType) : 'text-slate-600 dark:text-slate-400 font-semibold'
                                             }
                                         `}>
@@ -246,7 +246,7 @@ export default function CalendarWidget() {
 
                 {isAdmin && (
                     <button onClick={() => navigate('/calendar/manage')}
-                        className="mt-2 w-full flex items-center justify-center gap-1.5 text-[10px] font-bold text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 transition-colors uppercase tracking-widest py-1">
+                        className="mt-2 w-full flex items-center justify-center gap-1.5 text-[10px] font-bold text-indigo-500 hover:text-primary dark:text-indigo-400 transition-colors uppercase tracking-widest py-1">
                         <Settings2 size={10} /> Manage Events
                     </button>
                 )}

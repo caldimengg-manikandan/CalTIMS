@@ -37,7 +37,7 @@ export default function AuthLayout() {
                 <div className="relative z-10 flex flex-col justify-between p-16 text-white w-full">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-black/20">
-                            <Timer size={28} className="text-indigo-600" />
+                            <Timer size={28} className="text-primary" />
                         </div>
                         <span className="text-2xl font-bold tracking-tight uppercase">CALTIMS - TimeSheet Management System </span>
                     </div >
@@ -71,7 +71,7 @@ export default function AuthLayout() {
             <div className="flex-1 flex flex-col">
                 <div className="flex justify-end p-8 lg:hidden">
                     <div className="flex items-center gap-2">
-                        <Timer size={24} className="text-indigo-600" />
+                        <Timer size={24} className="text-primary" />
                         <span className="text-xl font-bold text-slate-900">CALTIMS</span>
                     </div>
                 </div>
@@ -87,7 +87,7 @@ export default function AuthLayout() {
                 {/* Footer */}
                 <div className="py-6 text-center text-sm text-slate-500 dark:text-slate-400 font-medium tracking-wide border-t border-slate-100 dark:border-slate-800">
                     Developed by{' '}
-                    <span className="text-indigo-600 font-bold">Caldim</span>
+                    <span className="text-primary font-bold">Caldim</span>
                 </div>
             </div>
         </div >

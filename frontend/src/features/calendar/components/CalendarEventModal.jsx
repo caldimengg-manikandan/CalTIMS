@@ -145,7 +145,7 @@ export default function CalendarEventModal({ isOpen, onClose, event, onSave, onD
                                 type="checkbox"
                                 {...register('isPublic')}
                                 id="isPublic"
-                                className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
+                                className="w-5 h-5 rounded-lg border-slate-300 text-primary focus:ring-indigo-500 transition-all cursor-pointer"
                             />
                         </div>
                         <label htmlFor="isPublic" className="text-sm font-semibold text-slate-700 dark:text-white cursor-pointer select-none">

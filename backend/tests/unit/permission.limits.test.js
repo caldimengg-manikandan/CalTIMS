@@ -29,7 +29,8 @@ describe('Permission Limits Validation', () => {
 
   it('should allow permission within daily hours limit', async () => {
     await Settings.create({
-      timesheet: { permissionMaxHoursPerDay: 2 }
+      timesheet: { permissionMaxHoursPerDay: 2 },
+      compliance: { allowBackdatedEntries: true }
     });
 
     const ts = new Timesheet({
@@ -48,7 +49,8 @@ describe('Permission Limits Validation', () => {
 
   it('should throw error if permission exceeds daily hours limit', async () => {
     await Settings.create({
-      timesheet: { permissionMaxHoursPerDay: 2 }
+      timesheet: { permissionMaxHoursPerDay: 2 },
+      compliance: { allowBackdatedEntries: true }
     });
 
     const ts = new Timesheet({
@@ -67,7 +69,8 @@ describe('Permission Limits Validation', () => {
 
   it('should throw error if permission exceeds weekly days limit', async () => {
     await Settings.create({
-      timesheet: { permissionMaxDaysPerWeek: 1 }
+      timesheet: { permissionMaxDaysPerWeek: 1 },
+      compliance: { allowBackdatedEntries: true }
     });
 
     const ts = new Timesheet({
@@ -89,7 +92,8 @@ describe('Permission Limits Validation', () => {
 
   it('should throw error if permission exceeds monthly days limit across weeks', async () => {
      await Settings.create({
-      timesheet: { permissionMaxDaysPerMonth: 2 }
+      timesheet: { permissionMaxDaysPerMonth: 2 },
+      compliance: { allowBackdatedEntries: true }
     });
 
     // Existing timesheet for first week with 2 permission days

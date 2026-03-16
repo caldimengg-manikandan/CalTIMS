@@ -91,7 +91,7 @@ export default function TimesheetPolicyTab() {
                             }}
                         />
                         <div className="mt-6 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 flex items-start gap-4">
-                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary0 mt-1.5" />
                             <p className="text-xs text-slate-500 font-medium leading-relaxed">
                                 System categories are globally indexed. Adding specific tags helps in granular productivity reporting and expense tracking.
                             </p>
@@ -100,27 +100,27 @@ export default function TimesheetPolicyTab() {
 
                     <SectionCard title="Workflow & Approvals" subtitle="Governance for submission and editing" icon={Users}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="group flex items-center justify-between p-5 rounded-3xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10 hover:border-indigo-500/30 transition-all">
+                            <div className="group flex items-center justify-between p-5 rounded-3xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10 hover:border-primary0/30 transition-all">
                                 <div>
                                     <p className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-white mb-1">Manager Approval</p>
                                     <p className="text-[10px] text-slate-500 font-medium tracking-tight">Required before final processing</p>
                                 </div>
                                 <button
                                     onClick={() => upd('managerApprovalRequired', !policy.managerApprovalRequired)}
-                                    className={`relative w-11 h-6 rounded-full transition-all flex items-center px-1 ${policy.managerApprovalRequired ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'}`}
+                                    className={`relative w-11 h-6 rounded-full transition-all flex items-center px-1 ${policy.managerApprovalRequired ? 'btn-primary' : 'bg-slate-200 dark:bg-slate-700'}`}
                                 >
                                     <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${policy.managerApprovalRequired ? 'translate-x-5' : 'translate-x-0'}`} />
                                 </button>
                             </div>
 
-                            <div className="group flex items-center justify-between p-5 rounded-3xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10 hover:border-indigo-500/30 transition-all">
+                            <div className="group flex items-center justify-between p-5 rounded-3xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10 hover:border-primary0/30 transition-all">
                                 <div>
                                     <p className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-white mb-1">Edit Post-Submit</p>
                                     <p className="text-[10px] text-slate-500 font-medium tracking-tight">Allow modifications to locked entries</p>
                                 </div>
                                 <button
                                     onClick={() => upd('allowEditAfterSubmission', !policy.allowEditAfterSubmission)}
-                                    className={`relative w-11 h-6 rounded-full transition-all flex items-center px-1 ${policy.allowEditAfterSubmission ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'}`}
+                                    className={`relative w-11 h-6 rounded-full transition-all flex items-center px-1 ${policy.allowEditAfterSubmission ? 'btn-primary' : 'bg-slate-200 dark:bg-slate-700'}`}
                                 >
                                     <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${policy.allowEditAfterSubmission ? 'translate-x-5' : 'translate-x-0'}`} />
                                 </button>
@@ -135,7 +135,7 @@ export default function TimesheetPolicyTab() {
                             <div className="p-5 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
                                 <div className="flex justify-between items-end mb-3">
                                     <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Per-Day Hrs</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Per-Day Hrs</p>
                                         <p className="text-[10px] text-slate-500 font-medium">Max hours allowed per permission day</p>
                                     </div>
                                     <span className="px-2 py-1 rounded bg-amber-50 dark:bg-amber-500/10 text-[10px] font-black text-amber-600 dark:text-amber-400 shrink-0">
@@ -148,7 +148,7 @@ export default function TimesheetPolicyTab() {
                                     onChange={e => upd('permissionMaxHoursPerDay', parseFloat(e.target.value))}
                                     className="w-full accent-amber-500 cursor-pointer"
                                 />
-                                <div className="flex justify-between text-[9px] text-slate-400 mt-1">
+                                <div className="flex justify-between text-[9px] text-slate-500 mt-1">
                                     <span>0.5h</span><span>8h</span>
                                 </div>
                             </div>
@@ -157,10 +157,10 @@ export default function TimesheetPolicyTab() {
                             <div className="p-5 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
                                 <div className="flex justify-between items-end mb-3">
                                     <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Days / Week</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Days / Week</p>
                                         <p className="text-[10px] text-slate-500 font-medium">Max permission days per week</p>
                                     </div>
-                                    <span className="px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-500/10 text-[10px] font-black text-indigo-600 dark:text-indigo-400 shrink-0">
+                                    <span className="px-2 py-1 rounded bg-primary-100/50 dark:bg-primary-500/10 text-[10px] font-black text-primary-700 dark:text-primary-400 shrink-0">
                                         {policy.permissionMaxDaysPerWeek === 0 ? '∞' : `${policy.permissionMaxDaysPerWeek}d`}
                                     </span>
                                 </div>
@@ -168,9 +168,9 @@ export default function TimesheetPolicyTab() {
                                     type="range" min={0} max={5} step={1}
                                     value={policy.permissionMaxDaysPerWeek}
                                     onChange={e => upd('permissionMaxDaysPerWeek', parseInt(e.target.value))}
-                                    className="w-full accent-indigo-600 cursor-pointer"
+                                    className="w-full accent-primary cursor-pointer"
                                 />
-                                <div className="flex justify-between text-[9px] text-slate-400 mt-1">
+                                <div className="flex justify-between text-[9px] text-slate-500 mt-1">
                                     <span>Unlimited</span><span>5 days</span>
                                 </div>
                             </div>
@@ -179,10 +179,10 @@ export default function TimesheetPolicyTab() {
                             <div className="p-5 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
                                 <div className="flex justify-between items-end mb-3">
                                     <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Days / Month</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Days / Month</p>
                                         <p className="text-[10px] text-slate-500 font-medium">Max permission days per month</p>
                                     </div>
-                                    <span className="px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-500/10 text-[10px] font-black text-indigo-600 dark:text-indigo-400 shrink-0">
+                                    <span className="px-2 py-1 rounded bg-primary-100/50 dark:bg-primary-500/10 text-[10px] font-black text-primary-700 dark:text-primary-400 shrink-0">
                                         {policy.permissionMaxDaysPerMonth === 0 ? '∞' : `${policy.permissionMaxDaysPerMonth}d`}
                                     </span>
                                 </div>
@@ -190,9 +190,9 @@ export default function TimesheetPolicyTab() {
                                     type="range" min={0} max={20} step={1}
                                     value={policy.permissionMaxDaysPerMonth}
                                     onChange={e => upd('permissionMaxDaysPerMonth', parseInt(e.target.value))}
-                                    className="w-full accent-indigo-600 cursor-pointer"
+                                    className="w-full accent-primary cursor-pointer"
                                 />
-                                <div className="flex justify-between text-[9px] text-slate-400 mt-1">
+                                <div className="flex justify-between text-[9px] text-slate-500 mt-1">
                                     <span>Unlimited</span><span>20 days</span>
                                 </div>
                             </div>
@@ -213,7 +213,7 @@ export default function TimesheetPolicyTab() {
                     <SectionCard title="Submission Rules" subtitle="Time-based entry controls" icon={Clock}>
                         <div className="space-y-6">
                             <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Weekly Deadline</label>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Weekly Deadline</label>
                                 <input
                                     className="input w-full h-12 text-sm font-bold bg-slate-50/50 dark:bg-white/5"
                                     value={policy.submissionDeadline}
@@ -222,7 +222,7 @@ export default function TimesheetPolicyTab() {
                                 />
                             </div>
                             <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Auto-Lock Schedule</label>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Auto-Lock Schedule</label>
                                 <input
                                     className="input w-full h-12 text-sm font-bold bg-slate-50/50 dark:bg-white/5"
                                     value={policy.freezeTimesheet}
@@ -237,52 +237,64 @@ export default function TimesheetPolicyTab() {
                         <div className="space-y-8 py-2">
                             <div>
                                 <div className="flex justify-between items-end mb-4">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Min Threshold</label>
-                                    <span className="px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-500/10 text-[10px] font-black text-indigo-600 dark:text-indigo-400">{policy.minHoursPerDay} HRS</span>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Min Threshold</label>
+                                    <span className="px-2 py-1 rounded bg-primary-100/50 dark:bg-primary-500/10 text-[10px] font-black text-primary-700 dark:text-primary-400">{policy.minHoursPerDay} HRS</span>
                                 </div>
                                 <input
                                     type="range" min={0} max={8} step={0.5}
                                     value={policy.minHoursPerDay}
                                     onChange={e => upd('minHoursPerDay', parseFloat(e.target.value))}
-                                    className="w-full accent-indigo-600 cursor-pointer"
+                                    className="w-full accent-primary cursor-pointer"
                                 />
                             </div>
                             <div>
                                 <div className="flex justify-between items-end mb-4">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Max Capacity</label>
-                                    <span className="px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-500/10 text-[10px] font-black text-indigo-600 dark:text-indigo-400">{policy.maxHoursPerDay} HRS</span>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Max Capacity</label>
+                                    <span className="px-2 py-1 rounded bg-primary-100/50 dark:bg-primary-500/10 text-[10px] font-black text-primary-700 dark:text-primary-400">{policy.maxHoursPerDay} HRS</span>
                                 </div>
                                 <input
                                     type="range" min={8} max={24} step={0.5}
                                     value={policy.maxHoursPerDay}
                                     onChange={e => upd('maxHoursPerDay', parseFloat(e.target.value))}
-                                    className="w-full accent-indigo-600 cursor-pointer"
+                                    className="w-full accent-primary cursor-pointer"
                                 />
                             </div>
 
                             {/* Enforce on Submit toggle */}
-                            <div className="pt-2 border-t border-slate-100 dark:border-white/10">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-white mb-0.5">Enforce on Submit</p>
-                                        <p className="text-[10px] text-slate-500 font-medium leading-relaxed max-w-[160px]">
-                                            Block submission if daily hours are below min threshold
+                            <div className="pt-4 border-t border-slate-100 dark:border-white/10">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-white">Hard Enforcement</p>
+                                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${policy.enforceMinHoursOnSubmit ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-600'}`}>
+                                                {policy.enforceMinHoursOnSubmit ? 'ACTIVE' : 'INACTIVE'}
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                                            Strictly block submission if daily hours don't meet thresholds.
                                         </p>
                                     </div>
                                     <button
                                         onClick={() => upd('enforceMinHoursOnSubmit', !policy.enforceMinHoursOnSubmit)}
-                                        className={`relative w-11 h-6 rounded-full transition-all flex items-center px-1 ${policy.enforceMinHoursOnSubmit ? 'bg-rose-500' : 'bg-slate-200 dark:bg-slate-700'}`}
+                                        className={`relative w-12 h-6 rounded-full transition-all flex items-center px-1 shadow-inner ${policy.enforceMinHoursOnSubmit ? 'bg-rose-500 shadow-rose-900/20' : 'bg-slate-200 dark:bg-slate-700'}`}
                                     >
-                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${policy.enforceMinHoursOnSubmit ? 'translate-x-5' : 'translate-x-0'}`} />
+                                        <div className={`w-4 h-4 rounded-full bg-white shadow-md transition-transform ${policy.enforceMinHoursOnSubmit ? 'translate-x-6' : 'translate-x-0'}`} />
                                     </button>
                                 </div>
-                                {policy.enforceMinHoursOnSubmit && (
-                                    <div className="mt-3 p-3 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20">
-                                        <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold leading-relaxed">
-                                            ⚡ Employees cannot submit if any logged working day has fewer than <strong>{policy.minHoursPerDay}h</strong>.
-                                        </p>
-                                    </div>
-                                )}
+                                
+                                <div className={`mt-4 p-3 rounded-xl border transition-all ${policy.enforceMinHoursOnSubmit 
+                                    ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20 opacity-100' 
+                                    : 'bg-slate-50 dark:bg-white/5 border-slate-100 dark:border-white/10 opacity-60'}`}>
+                                    <p className="text-[10px] text-slate-600 dark:text-slate-500 font-semibold leading-relaxed flex items-start gap-2">
+                                        <ShieldCheck size={12} className={policy.enforceMinHoursOnSubmit ? 'text-rose-500 mt-0.5' : 'text-slate-500 mt-0.5'} />
+                                        <span>
+                                            {policy.enforceMinHoursOnSubmit 
+                                                ? <><strong>Submission Locked:</strong> Employees cannot submit if any worked day is below <strong>{policy.minHoursPerDay}h</strong> or above <strong>{policy.maxHoursPerDay}h</strong>.</>
+                                                : <><strong>Soft Warning:</strong> Limits will be shown as warnings but won't block submission.</>
+                                            }
+                                        </span>
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </SectionCard>
@@ -293,7 +305,7 @@ export default function TimesheetPolicyTab() {
                 <button
                     onClick={() => saveMutation.mutate()}
                     disabled={saveMutation.isPending}
-                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest shadow-xl shadow-indigo-600/25 transition-all active:scale-95 disabled:opacity-70"
+                    className="flex items-center gap-3 px-8 py-4 rounded-2xl btn-primary hover:btn-primary hover:bg-primary-700 text-white font-black uppercase tracking-widest shadow-xl shadow-primary/25 transition-all active:scale-95 disabled:opacity-70"
                 >
                     {saveMutation.isPending ? <Spinner size="sm" color="white" /> : <Save size={18} />}
                     Enforce Policies

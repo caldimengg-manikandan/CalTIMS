@@ -16,6 +16,7 @@ export default function EmployeeFormPage() {
         department: '',
         designation: '',
         phone: '',
+        employeeId: '',
         joinDate: new Date().toISOString().split('T')[0]
     })
     const [errors, setErrors] = React.useState({})
@@ -98,6 +99,12 @@ export default function EmployeeFormPage() {
                     {/* Basic Info */}
                     <div className="space-y-4 md:col-span-2 pb-2 border-b border-slate-50 dark:border-white">
                         <h3 className="font-semibold text-slate-800 dark:text-white">Basic Information</h3>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">Employee ID (Optional)</label>
+                        <input name="employeeId" className={getInputClass('employeeId')} placeholder="e.g. EMP001"
+                            value={formData.employeeId} onChange={handleChange} />
                     </div>
 
                     <div className="space-y-1.5">

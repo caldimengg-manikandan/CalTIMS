@@ -126,6 +126,7 @@ export const settingsAPI = {
   }),
   // Employee list for recipient picker
   getPickerEmployees: (q) => api.get('/settings/employees', { params: { q } }),
+  testHikvision: (data) => api.post('/settings/test-hikvision', data),
 }
 
 export const auditAPI = {
@@ -156,6 +157,10 @@ export const taskAPI = {
 export const systemAPI = {
   getVersion: () => api.get('/system/version'),
   updateVersion: (version) => api.patch('/system/version', { version }),
+}
+
+export const attendanceAPI = {
+  getAll: (params) => api.get('/attendance', { params }),
 }
 
 export default api

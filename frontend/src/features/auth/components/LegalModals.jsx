@@ -6,10 +6,10 @@ export const PrivacyModal = ({ isOpen, onClose }) => (
     <Modal isOpen={isOpen} onClose={onClose} title="Privacy Policy" maxWidth="max-w-3xl">
         <div className="space-y-6 text-slate-600 dark:text-slate-300">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-white pb-4">
-                <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Last Updated: March 2026</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-primary">Last Updated: March 2026</p>
                 <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 rounded-full">
-                    <ShieldCheck size={14} className="text-indigo-600" />
-                    <span className="text-[10px] font-black uppercase tracking-tight text-indigo-600">Secure & Protected</span>
+                    <ShieldCheck size={14} className="text-primary" />
+                    <span className="text-[10px] font-black uppercase tracking-tight text-primary">Secure & Protected</span>
                 </div>
             </div>
 
@@ -37,7 +37,7 @@ export const PrivacyModal = ({ isOpen, onClose }) => (
                         'System usage logs and activity'
                     ].map((item, i) => (
                         <li key={i} className="flex items-start gap-2 p-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 flex-shrink-0" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary-500 mt-1.5 flex-shrink-0" />
                             <span>{item}</span>
                         </li>
                     ))}
@@ -58,12 +58,12 @@ export const PrivacyModal = ({ isOpen, onClose }) => (
                         'Send system notifications or reminders'
                     ].map((item, i) => (
                         <div key={i} className="flex items-center gap-3 text-sm">
-                            <div className="w-5 h-5 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 text-[10px] font-bold">{i + 1}</div>
+                            <div className="w-5 h-5 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-primary text-[10px] font-bold">{i + 1}</div>
                             <p>{item}</p>
                         </div>
                     ))}
                 </div>
-                <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 mt-2">
+                <p className="text-xs font-bold text-primary dark:text-indigo-400 mt-2">
                     We do not sell or share your data with third parties unless required for service operation or legal compliance.
                 </p>
             </section>
@@ -108,10 +108,10 @@ export const TermsModal = ({ isOpen, onClose }) => (
     <Modal isOpen={isOpen} onClose={onClose} title="Terms of Service" maxWidth="max-w-3xl">
         <div className="space-y-6 text-slate-600 dark:text-slate-300">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-white pb-4">
-                <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Last Updated: March 2026</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-primary">Last Updated: March 2026</p>
                 <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 rounded-full">
-                    <FileText size={14} className="text-indigo-600" />
-                    <span className="text-[10px] font-black uppercase tracking-tight text-indigo-600">Official Agreement</span>
+                    <FileText size={14} className="text-primary" />
+                    <span className="text-[10px] font-black uppercase tracking-tight text-primary">Official Agreement</span>
                 </div>
             </div>
 
@@ -131,7 +131,7 @@ export const TermsModal = ({ isOpen, onClose }) => (
                             'Incident and support management'
                         ].map((item, i) => (
                             <div key={i} className="flex items-center gap-2 text-xs">
-                                <div className="w-1 h-1 rounded-full bg-indigo-500" />
+                                <div className="w-1 h-1 rounded-full bg-primary-500" />
                                 <span>{item}</span>
                             </div>
                         ))}

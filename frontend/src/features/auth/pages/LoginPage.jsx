@@ -71,7 +71,7 @@ export default function LoginPage() {
                 <div className="space-y-8">
                     <div className="space-y-3">
                         <h2 className="text-5xl font-black text-slate-800 dark:text-white tracking-tight">Sign In</h2>
-                        <div className="h-2 w-16 bg-indigo-600 rounded-full" />
+                        <div className="h-2 w-16 btn-primary rounded-full" />
                     </div>
 
                     <div className="flex gap-5">
@@ -103,7 +103,7 @@ export default function LoginPage() {
                     <div className="space-y-2 group">
                         <div className="flex justify-between items-center mb-1">
                             <label className="block text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 group-focus-within:text-indigo-500 transition-colors">Password</label>
-                            <Link to="/forgot-password" size={16} className="text-xs font-black text-indigo-600 hover:text-indigo-700 uppercase tracking-wider transition-colors">
+                            <Link to="/forgot-password" size={16} className="text-xs font-black text-primary hover:text-primary-700 uppercase tracking-wider transition-colors">
                                 Forgot?
                             </Link>
                         </div>

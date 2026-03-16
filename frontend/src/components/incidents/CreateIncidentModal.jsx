@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import incidentService from '../../services/incidents/incidentService';
@@ -11,7 +11,7 @@ const INCIDENT_CATEGORIES = [
     'general help'
 ];
 
-const CreateIncidentModal = ({ isOpen, onClose, relatedTimesheetId = null, onSuccess }) => {
+const CreateIncidentModal = ({ isOpen, onClose, relatedTimesheetId = null, onSuccess, initialData = null }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState({
         title: '',
@@ -19,6 +19,17 @@ const CreateIncidentModal = ({ isOpen, onClose, relatedTimesheetId = null, onSuc
         priority: 'Medium',
         description: '',
     });
+
+    useEffect(() => {
+        if (isOpen) {
+            setFormData({
+                title: initialData?.title || '',
+                category: initialData?.category || 'general help',
+                priority: initialData?.priority || 'Medium',
+                description: initialData?.description || '',
+            });
+        }
+    }, [isOpen, initialData]);
 
     if (!isOpen) return null;
 

@@ -12,6 +12,7 @@ const createUserSchema = Joi.object({
   designation: Joi.string().trim().max(100),
   managerId: Joi.string().hex().length(24).allow(null, ''),
   phone: Joi.string().trim().max(20),
+  employeeId: Joi.string().trim().max(50),
   joinDate: Joi.date().iso(),
 });
 
@@ -21,6 +22,7 @@ const updateUserSchema = Joi.object({
   designation: Joi.string().trim().max(100),
   managerId: Joi.string().hex().length(24).allow(null, ''),
   phone: Joi.string().trim().max(20),
+  employeeId: Joi.string().trim().max(50),
   avatar: Joi.string().uri(),
   role: Joi.string().valid(...Object.values(ROLES)),
   leaveBalance: Joi.object({

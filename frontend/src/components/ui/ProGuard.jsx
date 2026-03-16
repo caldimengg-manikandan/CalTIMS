@@ -12,7 +12,7 @@ export default function ProGuard({ children, title, subtitle, icon: Icon = Zap }
     if (appVersion === 'basic') {
         return (
             <div className="flex flex-col items-center justify-center h-[70vh] text-center animate-fade-in px-4">
-                <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full flex items-center justify-center mb-6 shadow-xl shadow-indigo-500/10">
+                <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-primary rounded-full flex items-center justify-center mb-6 shadow-xl shadow-indigo-500/10">
                     <Icon size={36} />
                 </div>
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-3">

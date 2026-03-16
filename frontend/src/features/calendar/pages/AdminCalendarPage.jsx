@@ -75,7 +75,7 @@ function EventModal({ event, onClose, onSave, isSaving }) {
                 {/* Header */}
                 <div className="px-6 py-4 border-b border-slate-100 dark:border-white/10 bg-slate-50 dark:bg-black flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg">
+                        <div className="w-9 h-9 rounded-xl btn-primary flex items-center justify-center shadow-lg">
                             <Calendar size={18} className="text-white" />
                         </div>
                         <h3 className="font-black text-slate-800 dark:text-white">
@@ -164,11 +164,11 @@ function EventModal({ event, onClose, onSave, isSaving }) {
                         onClick={() => update('isGlobal', !form.isGlobal)}>
                         <div className="flex items-center gap-3">
                             {form.isGlobal
-                                ? <Globe size={18} className="text-indigo-600 dark:text-indigo-400" />
+                                ? <Globe size={18} className="text-primary dark:text-indigo-400" />
                                 : <Lock size={18} className="text-slate-500" />
                             }
                             <div>
-                                <p className={`text-sm font-bold ${form.isGlobal ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                                <p className={`text-sm font-bold ${form.isGlobal ? 'text-primary-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
                                     {form.isGlobal ? 'Visible to All Employees' : 'Private Event'}
                                 </p>
                                 <p className="text-xs text-slate-500 mt-0.5">
@@ -176,7 +176,7 @@ function EventModal({ event, onClose, onSave, isSaving }) {
                                 </p>
                             </div>
                         </div>
-                        <div className={`w-10 h-5 rounded-full transition-colors relative ${form.isGlobal ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                        <div className={`w-10 h-5 rounded-full transition-colors relative ${form.isGlobal ? 'btn-primary' : 'bg-slate-300 dark:bg-slate-600'}`}>
                             <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.isGlobal ? 'translate-x-5' : 'translate-x-0.5'}`} />
                         </div>
                     </div>
@@ -190,7 +190,7 @@ function EventModal({ event, onClose, onSave, isSaving }) {
                     <button
                         onClick={() => onSave(form)}
                         disabled={!form.title.trim() || isSaving}
-                        className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-md transition-colors flex items-center gap-2 text-sm"
+                        className="px-5 py-2 btn-primary hover:bg-primary-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-md transition-colors flex items-center gap-2 text-sm"
                     >
                         {isSaving ? <Spinner size="sm" /> : <Save size={15} />}
                         {isEdit ? 'Update Event' : 'Create Event'}
@@ -282,7 +282,7 @@ export default function AdminCalendarPage() {
             <PageHeader title="Calendar Management">
                 <button
                     onClick={() => { setEditingEvent(null); setShowModal(true) }}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/20 transition-all text-sm"
+                    className="flex items-center gap-2 px-4 py-2.5 btn-primary hover:bg-primary-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/20 transition-all text-sm"
                 >
                     <Plus size={16} /> Add Event
                 </button>
@@ -333,7 +333,7 @@ export default function AdminCalendarPage() {
                                             `}
                                         >
                                             <span className={`block text-xs font-bold text-center mb-1
-                                                ${todayDay ? 'w-5 h-5 mx-auto flex items-center justify-center rounded-full bg-indigo-600 text-white' :
+                                                ${todayDay ? 'w-5 h-5 mx-auto flex items-center justify-center rounded-full btn-primary text-white' :
                                                     c ? c.text : 'text-slate-700 dark:text-slate-300'}`}>
                                                 {format(day, 'd')}
                                             </span>
@@ -369,7 +369,7 @@ export default function AdminCalendarPage() {
                             <button key={t.value} onClick={() => setFilter(t.value)}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-1
                                     ${filter === t.value
-                                        ? 'bg-indigo-600 text-white shadow-md'
+                                        ? 'btn-primary text-white shadow-md'
                                         : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10'}`}>
                                 {t.label}
                             </button>
@@ -400,7 +400,7 @@ export default function AdminCalendarPage() {
                                                         {EVENT_TYPES.find(t => t.value === e.eventType)?.label || e.eventType}
                                                     </span>
                                                     {e.isGlobal
-                                                        ? <span className="text-[9px] font-bold text-indigo-600 flex items-center gap-1"><Globe size={9} />Global</span>
+                                                        ? <span className="text-[9px] font-bold text-primary flex items-center gap-1"><Globe size={9} />Global</span>
                                                         : <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1"><Lock size={9} />Private</span>
                                                     }
                                                 </div>
@@ -415,7 +415,7 @@ export default function AdminCalendarPage() {
                                             </div>
                                             <div className="flex gap-1 flex-shrink-0">
                                                 <button onClick={() => handleEdit(e)}
-                                                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-colors">
+                                                    className="p-1.5 text-slate-400 hover:text-primary hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-colors">
                                                     <Edit2 size={14} />
                                                 </button>
                                                 <button onClick={() => {

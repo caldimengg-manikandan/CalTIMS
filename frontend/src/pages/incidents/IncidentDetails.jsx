@@ -109,10 +109,10 @@ export default function IncidentDetails() {
                                             <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                                                 <div className="flex items-baseline gap-2 mb-1">
                                                     <span className="text-sm font-semibold text-slate-700">{res.user.name}</span>
-                                                    {isAdminResponse && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Admin</span>}
+                                                    {isAdminResponse && <span className="text-[10px] bg-indigo-100 text-primary-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Admin</span>}
                                                     <span className="text-xs text-slate-400">{format(new Date(res.createdAt), 'MMM d, h:mm a')}</span>
                                                 </div>
-                                                <div className={`px-4 py-3 rounded-2xl max-w-[85%] ${isMe ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-slate-100 text-slate-800 rounded-tl-sm'}`}>
+                                                <div className={`px-4 py-3 rounded-2xl max-w-[85%] ${isMe ? 'btn-primary text-white rounded-tr-sm' : 'bg-slate-100 text-slate-800 rounded-tl-sm'}`}>
                                                     {res.message}
                                                 </div>
                                             </div>
@@ -134,7 +134,7 @@ export default function IncidentDetails() {
                                     <button
                                         type="submit"
                                         disabled={replyMutation.isPending || !replyText.trim()}
-                                        className="absolute bottom-3 right-3 p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                                        className="absolute bottom-3 right-3 p-2 btn-primary text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
                                     >
                                         <Send size={16} />
                                     </button>
@@ -211,7 +211,7 @@ export default function IncidentDetails() {
                                                     }
                                                 }}
                                                 disabled={statusMutation.isPending}
-                                                className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
+                                                className="w-full py-2 btn-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-700 transition-colors"
                                             >
                                                 Reopen Ticket
                                             </button>

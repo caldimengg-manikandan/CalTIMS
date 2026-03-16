@@ -11,7 +11,10 @@ import { Upload, Image as ImageIcon, Save } from 'lucide-react'
 
 export default function BrandingTab() {
     const qc = useQueryClient()
-    const { mode, accentPreset, customColor, setMode, setAccentPreset, setCustomColor } = useThemeStore()
+    const { mode: globalMode, accentPreset: globalAccentPreset, customColor: globalCustomColor, setMode: setGlobalMode, setAccentPreset: setGlobalAccentPreset, setCustomColor: setGlobalCustomColor } = useThemeStore()
+    const [localMode, setLocalMode] = useState(globalMode)
+    const [localAccentPreset, setLocalAccentPreset] = useState(globalAccentPreset)
+    const [localCustomColor, setLocalCustomColor] = useState(globalCustomColor)
     const colorInputRef = useRef(null)
     const logoInputRef = useRef(null)
     const faviconInputRef = useRef(null)
@@ -41,18 +44,50 @@ export default function BrandingTab() {
                 secondaryColor: data.branding.secondaryColor || '#6366f1'
             })
             // Sync with local theme store if needed
-            if (data.branding.primaryColor) setCustomColor(data.branding.primaryColor)
+            if (data.branding.primaryColor) {
+                // We don't overwrite localCustomColor blindly here because we only want to fetch initial data.
+                // It is already correctly fetched on load from useThemeStore which is persisted.
+            }
         }
     }, [data])
 
+    const [logoFile, setLogoFile] = useState(null)
+    const [faviconFile, setFaviconFile] = useState(null)
+
     const saveMutation = useMutation({
-        mutationFn: () => settingsAPI.updateSettings({
-            branding: {
-                ...branding,
-                primaryColor: customColor || branding.primaryColor
+        mutationFn: async () => {
+            let finalLogoUrl = branding.logoUrl
+            let finalFaviconUrl = branding.faviconUrl
+
+            if (logoFile) {
+                const fData = new FormData()
+                fData.append('file', logoFile)
+                const res = await settingsAPI.uploadBranding(fData)
+                finalLogoUrl = res.data.data.url
             }
-        }),
+
+            if (faviconFile) {
+                const fData = new FormData()
+                fData.append('file', faviconFile)
+                const res = await settingsAPI.uploadBranding(fData)
+                finalFaviconUrl = res.data.data.url
+            }
+
+            const updatedBranding = {
+                ...branding,
+                logoUrl: finalLogoUrl,
+                faviconUrl: finalFaviconUrl,
+                primaryColor: localCustomColor || ACCENT_PRESETS[localAccentPreset]?.primary || branding.primaryColor
+            }
+
+            return settingsAPI.updateSettings({ branding: updatedBranding })
+        },
         onSuccess: () => {
+            setGlobalMode(localMode)
+            setGlobalAccentPreset(localAccentPreset)
+            setGlobalCustomColor(localCustomColor)
+            setLogoFile(null)
+            setFaviconFile(null)
             toast.success('Branding updated!')
             qc.invalidateQueries(['settings'])
         },
@@ -61,22 +96,17 @@ export default function BrandingTab() {
 
     const upd = (k, v) => setBranding(f => ({ ...f, [k]: v }))
 
-    const handleFileUpload = async (e, type) => {
+    const handleFileUpload = (e, type) => {
         const file = e.target.files?.[0]
         if (!file) return
 
-        const formData = new FormData()
-        formData.append('file', file)
-
-        const loadingToast = toast.loading(`Uploading ${type}...`)
-        try {
-            const res = await settingsAPI.uploadBranding(formData)
-            const url = res.data.data.url
-            if (type === 'logo') upd('logoUrl', url)
-            else if (type === 'favicon') upd('faviconUrl', url)
-            toast.success(`${type} uploaded successfully`, { id: loadingToast })
-        } catch (err) {
-            toast.error(err.response?.data?.message || `Failed to upload ${type}`, { id: loadingToast })
+        const url = URL.createObjectURL(file)
+        if (type === 'logo') {
+            setLogoFile(file)
+            upd('logoUrl', url)
+        } else if (type === 'favicon') {
+            setFaviconFile(file)
+            upd('faviconUrl', url)
         }
     }
 
@@ -133,7 +163,7 @@ export default function BrandingTab() {
                                     <div className="flex-1">
                                         <button
                                             onClick={() => faviconInputRef.current?.click()}
-                                            className="text-xs font-black uppercase tracking-tight text-indigo-600 dark:text-indigo-400 hover:underline"
+                                            className="text-xs font-black uppercase tracking-tight text-primary hover:underline"
                                         >
                                             Upload Favicon
                                         </button>
@@ -151,7 +181,7 @@ export default function BrandingTab() {
 
                             <div className="md:col-span-5 flex flex-col h-full">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block text-center md:text-left">Corporate Logo</label>
-                                <div className="flex-1 flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-[2rem] bg-slate-50/50 dark:bg-white/5 group hover:border-indigo-400/50 transition-colors">
+                                <div className="flex-1 flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-[2rem] bg-slate-50/50 dark:bg-white/5 group hover:border-primary/50 transition-colors">
                                     <div className="mb-6 transform transition-transform group-hover:scale-105">
                                         {branding.logoUrl ? (
                                             <img src={branding.logoUrl} alt="Logo" className="max-h-20 w-auto object-contain" />
@@ -163,7 +193,7 @@ export default function BrandingTab() {
                                     </div>
                                     <button
                                         onClick={() => logoInputRef.current?.click()}
-                                        className="btn btn-ghost btn-sm text-[11px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400"
+                                        className="btn btn-ghost btn-sm text-[11px] font-black uppercase tracking-widest text-primary"
                                     >
                                         Select Image
                                     </button>
@@ -189,12 +219,12 @@ export default function BrandingTab() {
                                 <button
                                     key={key}
                                     onClick={() => {
-                                        setAccentPreset(key)
-                                        setCustomColor(null)
+                                        setLocalAccentPreset(key)
+                                        setLocalCustomColor(null)
                                     }}
                                     style={{ backgroundColor: preset.primary }}
-                                    className={`w-full aspect-square rounded-full transition-all hover:scale-110 active:scale-95 ${accentPreset === key && !customColor
-                                        ? 'ring-4 ring-offset-4 ring-indigo-600 dark:ring-indigo-400 scale-90'
+                                    className={`w-full aspect-square rounded-full transition-all hover:scale-110 active:scale-95 ${localAccentPreset === key && !localCustomColor
+                                        ? 'ring-4 ring-offset-4 ring-primary scale-90'
                                         : 'opacity-80 hover:opacity-100'
                                         }`}
                                 />
@@ -206,26 +236,26 @@ export default function BrandingTab() {
                             <div className="flex items-center gap-3">
                                 <div
                                     className="w-12 h-12 rounded-2xl border-2 border-slate-200 dark:border-white/20 cursor-pointer overflow-hidden shadow-sm flex-shrink-0"
-                                    style={{ backgroundColor: customColor || ACCENT_PRESETS[accentPreset]?.primary }}
+                                    style={{ backgroundColor: localCustomColor || ACCENT_PRESETS[localAccentPreset]?.primary }}
                                     onClick={() => colorInputRef.current?.click()}
                                 >
                                     <input
                                         ref={colorInputRef}
                                         type="color"
                                         className="opacity-0 w-full h-full cursor-pointer"
-                                        value={customColor || ACCENT_PRESETS[accentPreset]?.primary}
-                                        onChange={e => setCustomColor(e.target.value)}
+                                        value={localCustomColor || ACCENT_PRESETS[localAccentPreset]?.primary}
+                                        onChange={e => setLocalCustomColor(e.target.value)}
                                     />
                                 </div>
                                 <input
                                     type="text"
                                     className="input flex-1 h-12 text-sm font-mono font-bold bg-slate-50/50 dark:bg-white/5"
                                     placeholder="#4F46E5"
-                                    value={customColor || ''}
+                                    value={localCustomColor || ''}
                                     onChange={e => {
                                         const v = e.target.value
-                                        if (/^#[0-9A-Fa-f]{6}$/.test(v)) setCustomColor(v)
-                                        else if (!v) setAccentPreset(accentPreset)
+                                        if (/^#[0-9A-Fa-f]{6}$/.test(v)) setLocalCustomColor(v)
+                                        else if (!v) setLocalAccentPreset(localAccentPreset)
                                     }}
                                 />
                             </div>
@@ -237,11 +267,11 @@ export default function BrandingTab() {
                             <div className="space-y-4">
                                 <div className="h-3 w-2/3 rounded-full bg-slate-200 dark:bg-slate-800" />
                                 <div className="flex items-center gap-3">
-                                    <div className="h-8 px-4 rounded-xl flex items-center justify-center text-[10px] font-black text-white" style={{ backgroundColor: customColor || ACCENT_PRESETS[accentPreset]?.primary }}>
+                                    <div className="h-8 px-4 rounded-xl flex items-center justify-center text-[10px] font-black text-white" style={{ backgroundColor: localCustomColor || ACCENT_PRESETS[localAccentPreset]?.primary }}>
                                         ACTION
                                     </div>
-                                    <div className="h-2 w-12 rounded-full" style={{ backgroundColor: customColor || ACCENT_PRESETS[accentPreset]?.primary }} />
-                                    <div className="h-2 w-8 rounded-full opacity-30" style={{ backgroundColor: customColor || ACCENT_PRESETS[accentPreset]?.primary }} />
+                                    <div className="h-2 w-12 rounded-full" style={{ backgroundColor: localCustomColor || ACCENT_PRESETS[localAccentPreset]?.primary }} />
+                                    <div className="h-2 w-8 rounded-full opacity-30" style={{ backgroundColor: localCustomColor || ACCENT_PRESETS[localAccentPreset]?.primary }} />
                                 </div>
                             </div>
                         </div>
@@ -252,15 +282,15 @@ export default function BrandingTab() {
                             {modes.map(({ id, label, Icon }) => (
                                 <button
                                     key={id}
-                                    onClick={() => setMode(id)}
-                                    className={`relative flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all group ${mode === id
-                                        ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400'
+                                    onClick={() => setLocalMode(id)}
+                                    className={`relative flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all group ${localMode === id
+                                        ? 'border-primary bg-primary/5 text-primary'
                                         : 'border-slate-100 dark:border-white/5 text-slate-400 hover:border-slate-200'
                                         }`}
                                 >
-                                    <Icon size={16} className={`mb-2 ${mode === id ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+                                    <Icon size={16} className={`mb-2 ${localMode === id ? 'text-primary' : 'text-slate-400'}`} />
                                     <p className="text-[10px] font-black tracking-tight">{label}</p>
-                                    {mode === id && <div className="absolute top-1.5 right-1.5 w-1 h-1 rounded-full bg-indigo-600" />}
+                                    {localMode === id && <div className="absolute top-1.5 right-1.5 w-1 h-1 rounded-full bg-primary" />}
                                 </button>
                             ))}
                         </div>
@@ -272,7 +302,7 @@ export default function BrandingTab() {
                 <button
                     onClick={() => saveMutation.mutate()}
                     disabled={saveMutation.isPending}
-                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest shadow-xl shadow-indigo-600/25 transition-all active:scale-95 disabled:opacity-70"
+                    className="btn-primary px-8 py-4 rounded-2xl shadow-xl shadow-primary/25 font-black uppercase tracking-widest text-base"
                 >
                     {saveMutation.isPending ? <Spinner size="sm" color="white" /> : <Save size={18} />}
                     Sync Identity

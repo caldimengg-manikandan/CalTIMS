@@ -341,7 +341,7 @@ export default function CalendarPage() {
                                     </div>
                                     <div>
                                         <p className="font-bold text-slate-800 dark:text-white text-base">{viewOnlyEvent.title}</p>
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-indigo-50 text-indigo-700 border-indigo-200 mt-0.5 capitalize">
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-indigo-50 text-primary-700 border-indigo-200 mt-0.5 capitalize">
                                             {viewOnlyEvent.resource.eventType || 'Event'}
                                         </span>
                                     </div>

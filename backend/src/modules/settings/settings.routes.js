@@ -7,10 +7,11 @@ const ApiResponse = require('../../shared/utils/apiResponse');
 const Settings = require('./settings.model');
 const User = require('../users/user.model');
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorize } = require('../../middleware/rbac.middleware');
+const { authorize, checkPermission } = require('../../middleware/rbac.middleware');
 const emailService = require('../../shared/services/email.service');
 const { logAction } = require('../audit/audit.routes');
 const upload = require('../../middleware/upload.middleware');
+const net = require('net');
 
 router.use(authenticate);
 
@@ -19,12 +20,36 @@ router.use(authenticate);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 async function getOrCreateSettings() {
-  let s = await Settings.findOne().lean();
+  let s = await Settings.findOne();
   if (!s) {
     s = await Settings.create({});
-    s = s.toObject();
   }
-  return s;
+
+  // Heal settings: If new permissions were added to the schema but are missing in the DB
+  const defaultRoles = Settings.schema.path('roles').options.default;
+  let needsSync = false;
+
+  s.roles.forEach((role, idx) => {
+    if (role.isSystem) {
+      const defaultRole = defaultRoles.find(dr => dr.name === role.name);
+      if (defaultRole) {
+        // Find if any default permission is missing in the current role
+        for (const [perm, val] of Object.entries(defaultRole.permissions)) {
+          if (role.permissions[perm] === undefined) {
+            role.permissions[perm] = val;
+            needsSync = true;
+          }
+        }
+      }
+    }
+  });
+
+  if (needsSync) {
+    s.markModified('roles');
+    await s.save();
+  }
+
+  return s.toObject();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -47,7 +72,7 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 // PUT /api/v1/settings
-router.put('/', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+router.put('/', checkPermission('manageSettings'), asyncHandler(async (req, res) => {
   const updates = req.body;
   const currentSettings = await getOrCreateSettings();
 
@@ -58,7 +83,7 @@ router.put('/', authorize('admin', 'manager'), asyncHandler(async (req, res) => 
   // Safe keys to update
   const safeKeys = [
     'organization', 'timesheet', 'leavePolicy', 'notifications',
-    'report', 'compliance', 'branding', 'integrations', 'general', 'roles'
+    'report', 'compliance', 'branding', 'integrations', 'hardwareGateways', 'general', 'roles'
   ];
 
   const updateDoc = {};
@@ -75,6 +100,38 @@ router.put('/', authorize('admin', 'manager'), asyncHandler(async (req, res) => 
     { upsert: true, new: true }
   ).lean();
 
+  // ─── Synchronize Leave Policy to All Users ──────────────────────────────────
+  if (updateDoc.leavePolicy) {
+    const { annualLeaveDays, sickLeaveDays, casualLeaveDays, eligibleLeaveTypes } = updateDoc.leavePolicy;
+    const updatePromises = [];
+
+    // 1. Update standard allowances if they changed
+    const userUpdates = {};
+    if (annualLeaveDays !== undefined) userUpdates['leaveBalance.annual'] = annualLeaveDays;
+    if (sickLeaveDays !== undefined) userUpdates['leaveBalance.sick'] = sickLeaveDays;
+    if (casualLeaveDays !== undefined) userUpdates['leaveBalance.casual'] = casualLeaveDays;
+
+    if (Object.keys(userUpdates).length > 0) {
+      updatePromises.push(User.updateMany({ isActive: true }, { $set: userUpdates }));
+    }
+
+    // 2. Ensure all eligible types exist in user balance maps
+    if (eligibleLeaveTypes && eligibleLeaveTypes.length > 0) {
+      for (const type of eligibleLeaveTypes) {
+        const lowerType = type.toLowerCase();
+        // If the field doesn't exist, set it to 0
+        updatePromises.push(User.updateMany(
+          { isActive: true, [`leaveBalance.${lowerType}`]: { $exists: false } },
+          { $set: { [`leaveBalance.${lowerType}`]: 0 } }
+        ));
+      }
+    }
+
+    if (updatePromises.length > 0) {
+      await Promise.all(updatePromises);
+    }
+  }
+
   // Audit Log
   await logAction({
     userId: req.user._id,
@@ -87,8 +144,63 @@ router.put('/', authorize('admin', 'manager'), asyncHandler(async (req, res) => 
   ApiResponse.success(res, { message: 'Settings successfully updated', data: newSettings });
 }));
 
+// POST /api/v1/settings/test-hikvision
+router.post('/test-hikvision', checkPermission('manageSettings'), asyncHandler(async (req, res) => {
+  const { ipAddress, port, username, password, host, appKey, appSecret } = req.body;
+  
+  const targetHost = host || ipAddress;
+  if (!targetHost) {
+    return ApiResponse.error(res, { message: 'Host/IP Address is required', statusCode: 400 });
+  }
+
+  // If host is a full URL, extract hostname
+  let hostname = targetHost;
+  try {
+    if (targetHost.startsWith('http')) {
+      const urlObj = new URL(targetHost);
+      hostname = urlObj.hostname;
+    }
+  } catch (e) {}
+
+  const targetPort = parseInt(port) || 8000;
+  const timeout = 5000; 
+
+  // Basic TCP socket test
+  const checkConnection = () => {
+    return new Promise((resolve, reject) => {
+      const socket = new net.Socket();
+      socket.setTimeout(timeout);
+
+      socket.connect(targetPort, hostname, () => {
+        socket.destroy();
+        resolve(true);
+      });
+
+      socket.on('error', (err) => {
+        socket.destroy();
+        reject(err);
+      });
+
+      socket.on('timeout', () => {
+        socket.destroy();
+        reject(new Error('Connection timed out'));
+      });
+    });
+  };
+
+  try {
+    await checkConnection();
+    ApiResponse.success(res, { message: `Successfully connected to Hikvision/HikCentral at ${hostname}:${targetPort}` });
+  } catch (err) {
+    ApiResponse.error(res, { 
+      message: `Failed to connect at ${hostname}:${targetPort}. Error: ${err.message}`, 
+      statusCode: 200 
+    });
+  }
+}));
+
 // POST /api/v1/settings/upload-branding
-router.post('/upload-branding', authorize('admin', 'manager'), upload.single('file'), asyncHandler(async (req, res) => {
+router.post('/upload-branding', checkPermission('manageSettings'), upload.single('file'), asyncHandler(async (req, res) => {
   if (!req.file) {
     return ApiResponse.error(res, { message: 'No file uploaded', statusCode: 400 });
   }
@@ -170,12 +282,13 @@ router.post('/report/send-now', authorize('admin', 'manager'), asyncHandler(asyn
     return ApiResponse.error(res, { message: 'No valid email addresses found for selected recipients.', statusCode: 400 });
   }
 
-  // Get company name
+  // Get company name and format
   const companyName = settings.general?.companyName || 'TimesheetPro';
+  const format = settings.report?.defaultFormat || 'PDF';
 
   let result;
   try {
-    result = await emailService.sendReportEmail(emails, type, companyName, projectIds);
+    result = await emailService.sendReportEmail(emails, type, companyName, projectIds, format);
   } catch (smtpErr) {
     return ApiResponse.error(res, {
       message: smtpErr.message.includes('SMTP')

@@ -2,6 +2,7 @@
 
 const User = require('./user.model');
 const AppError = require('../../shared/utils/AppError');
+const emailService = require('../../shared/services/email.service');
 const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
 const { logAction } = require('../audit/audit.routes');
 
@@ -42,10 +43,62 @@ const userService = {
     return user;
   },
 
-  async create(data) {
+  async create(data, requestorId, ipAddress) {
     const existing = await User.findOne({ email: data.email });
     if (existing) throw new AppError('An account with this email already exists', 409);
+    
+    // Store plain password to send in email before it gets hashed by pre-save hook
+    const plainPassword = data.password;
+
+    // Initialize leave balance from settings if not provided
+    if (!data.leaveBalance) {
+      try {
+        const Settings = require('../settings/settings.model');
+        const settings = await Settings.findOne().lean();
+        const policy = settings?.leavePolicy || {};
+        
+        // Map policy settings to user leave balance
+        data.leaveBalance = {
+          annual: policy.annualLeaveDays || 20,
+          sick: policy.sickLeaveDays || 10,
+          casual: policy.casualLeaveDays || 6 // Default fallback
+        };
+      } catch (err) {
+        console.error('Failed to fetch leave policy for new user:', err);
+        // Fallback to hardcoded defaults if settings fetch fails
+        data.leaveBalance = { annual: 20, sick: 10, casual: 6 };
+      }
+    }
+
     const user = await User.create(data);
+
+    // Send Welcome Email
+    try {
+      const Settings = require('../settings/settings.model');
+      const settings = await Settings.findOne().lean();
+      const companyName = settings?.organization?.companyName || 'CALTIMS';
+      const portalLink = process.env.CLIENT_URL || 'http://localhost:5173';
+
+      await emailService.sendWelcomeEmail(user.email, {
+        name: user.name,
+        password: plainPassword,
+        portalLink,
+        companyName
+      });
+    } catch (error) {
+      console.error('Failed to send welcome email:', error);
+      // We don't throw here to avoid failing user creation if email fails
+    }
+
+    logAction({
+        userId: requestorId,
+        action: 'CREATE_EMPLOYEE',
+        entityType: 'Employee',
+        entityId: user._id,
+        details: { name: user.name, email: user.email, role: user.role },
+        ipAddress
+    });
+
     return user.toPublicJSON();
   },
 
@@ -107,15 +160,35 @@ const userService = {
     return true;
   },
 
-  async deactivate(id) {
+  async deactivate(id, requestorId, ipAddress) {
     const user = await User.findByIdAndUpdate(id, { isActive: false, refreshTokenHash: null }, { new: true });
     if (!user) throw new AppError('User not found', 404);
+
+    logAction({
+        userId: requestorId,
+        action: 'DEACTIVATE_EMPLOYEE',
+        entityType: 'Employee',
+        entityId: id,
+        details: { name: user.name, email: user.email },
+        ipAddress
+    });
+
     return user.toPublicJSON();
   },
 
-  async activate(id) {
+  async activate(id, requestorId, ipAddress) {
     const user = await User.findByIdAndUpdate(id, { isActive: true }, { new: true });
     if (!user) throw new AppError('User not found', 404);
+
+    logAction({
+        userId: requestorId,
+        action: 'ACTIVATE_EMPLOYEE',
+        entityType: 'Employee',
+        entityId: id,
+        details: { name: user.name, email: user.email },
+        ipAddress
+    });
+
     return user.toPublicJSON();
   },
 
@@ -129,9 +202,21 @@ const userService = {
     return this.getById(userId);
   },
 
-  async deleteUser(id) {
-    const user = await User.findByIdAndDelete(id);
+  async deleteUser(id, requestorId, ipAddress) {
+    const user = await User.findById(id);
     if (!user) throw new AppError('User not found', 404);
+
+    await User.findByIdAndDelete(id);
+
+    logAction({
+        userId: requestorId,
+        action: 'DELETE_EMPLOYEE',
+        entityType: 'Employee',
+        entityId: id,
+        details: { name: user.name, email: user.email },
+        ipAddress
+    });
+
     return true;
   },
 

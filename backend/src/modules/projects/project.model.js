@@ -23,6 +23,10 @@ const allocationSchema = new mongoose.Schema(
     },
     startDate: { type: Date },
     endDate: { type: Date },
+    budgetHours: {
+      type: Number,
+      default: 0,
+    },
   },
   { _id: true, timestamps: false }
 );

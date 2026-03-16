@@ -101,10 +101,13 @@ router.post('/:id/send-now', asyncHandler(async (req, res) => {
   }
 
   const companyName = await getCompanyName();
+  
+  const settings = await Settings.findOne().lean();
+  const format = settings?.report?.defaultFormat || 'PDF';
 
   let result;
   try {
-    result = await emailService.sendReportEmail(emails, schedule.reportType, companyName, schedule.projectIds || []);
+    result = await emailService.sendReportEmail(emails, schedule.reportType, companyName, schedule.projectIds || [], format);
   } catch (err) {
     // Save failed history
     const doc = await ReportSchedule.findById(schedule._id);

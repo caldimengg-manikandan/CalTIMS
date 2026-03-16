@@ -8,24 +8,33 @@ const Timesheet = require('../timesheets/timesheet.model');
 const Leave = require('../leaves/leave.model');
 const User = require('../users/user.model');
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorize } = require('../../middleware/rbac.middleware');
+const { checkPermission } = require('../../middleware/rbac.middleware');
 const { TIMESHEET_STATUS, LEAVE_STATUS } = require('../../constants');
 const { requireProTier } = require('../../middleware/tier.middleware');
+const { getPeriodRange } = require('../../shared/utils/dateHelpers');
 
 router.use(authenticate);
-router.use(authorize('admin', 'manager'));
+router.use(checkPermission('viewReports'));
 
 // ─── Timesheet hours summary (by employee and project) ─────────────────────
 router.get('/timesheet-summary', asyncHandler(async (req, res) => {
+  let { from, to, period, userId, projectId } = req.query;
+  
+  if (period) {
+    const range = getPeriodRange(period);
+    from = range.from;
+    to = range.to;
+  }
+
   const match = { status: TIMESHEET_STATUS.APPROVED };
-  if (req.query.from) match.weekStartDate = { $gte: new Date(req.query.from) };
-  if (req.query.to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(req.query.to) };
-  if (req.query.userId) match.userId = require('mongoose').Types.ObjectId.createFromHexString(req.query.userId);
+  if (from) match.weekStartDate = { $gte: new Date(from) };
+  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
+  if (userId) match.userId = require('mongoose').Types.ObjectId.createFromHexString(userId);
 
   const summary = await Timesheet.aggregate([
     { $match: match },
     { $unwind: '$rows' },
-    ...(req.query.projectId ? [{ $match: { 'rows.projectId': require('mongoose').Types.ObjectId.createFromHexString(req.query.projectId) } }] : []),
+    ...(projectId ? [{ $match: { 'rows.projectId': require('mongoose').Types.ObjectId.createFromHexString(projectId) } }] : []),
     {
       $group: {
         _id: { userId: '$userId', projectId: '$rows.projectId' },
@@ -62,9 +71,18 @@ router.get('/timesheet-summary', asyncHandler(async (req, res) => {
 
 // ─── NEW: Compliance Summary (Donut Chart Data) ───────────────────────────
 router.get('/compliance-summary', requireProTier, asyncHandler(async (req, res) => {
+  let { from, to, period, projectId } = req.query;
+  
+  if (period) {
+    const range = getPeriodRange(period);
+    from = range.from;
+    to = range.to;
+  }
+
   const match = {};
-  if (req.query.from) match.weekStartDate = { $gte: new Date(req.query.from) };
-  if (req.query.to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(req.query.to) };
+  if (from) match.weekStartDate = { $gte: new Date(from) };
+  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
+  if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
 
   // 1. Get total active employees
   const totalEmployees = await User.countDocuments({ role: 'employee', isActive: true });
@@ -117,17 +135,33 @@ router.get('/compliance-summary', requireProTier, asyncHandler(async (req, res) 
 
 // ─── Project utilization (aggregated hours per project) ────────────────────
 router.get('/project-utilization', requireProTier, asyncHandler(async (req, res) => {
+  let { from, to, period, projectId } = req.query;
+
+  if (period) {
+    const range = getPeriodRange(period);
+    from = range.from;
+    to = range.to;
+  }
+
   const match = { status: TIMESHEET_STATUS.APPROVED };
-  if (req.query.from) match.weekStartDate = { $gte: new Date(req.query.from) };
-  if (req.query.to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(req.query.to) };
+  if (from) match.weekStartDate = { $gte: new Date(from) };
+  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
+  if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
 
   const data = await Timesheet.aggregate([
     { $match: match },
     { $unwind: '$rows' },
+    ...(projectId ? [{ $match: { 'rows.projectId': require('mongoose').Types.ObjectId.createFromHexString(projectId) } }] : []),
     {
       $group: {
         _id: '$rows.projectId',
         totalHours: { $sum: '$rows.totalHours' },
+        employees: {
+          $push: {
+            userId: '$userId',
+            hours: '$rows.totalHours'
+          }
+        },
         employeeCount: { $addToSet: '$userId' },
       },
     },
@@ -138,18 +172,69 @@ router.get('/project-utilization', requireProTier, asyncHandler(async (req, res)
         localField: '_id',
         foreignField: '_id',
         as: 'project',
-        pipeline: [{ $project: { name: 1, code: 1, allocatedEmployees: 1 } }],
+        pipeline: [{ $project: { name: 1, code: 1, allocatedEmployees: 1, budgetHours: 1 } }],
       },
     },
     { $unwind: { path: '$project', preserveNullAndEmptyArrays: true } },
+    // Enrich allocatedEmployees with user names
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'project.allocatedEmployees.userId',
+        foreignField: '_id',
+        as: 'allocatedUserInfos'
+      }
+    },
     {
       $addFields: {
-        // Calculate rough capacity: Allocated Employees * 40 hrs
         capacity: {
-          $multiply: [
-            { $cond: { if: { $isArray: '$project.allocatedEmployees' }, then: { $size: '$project.allocatedEmployees' }, else: '$employeeCount' } },
-            40
-          ]
+          $cond: {
+            if: { $gt: ['$project.budgetHours', 0] },
+            then: '$project.budgetHours',
+            else: {
+              $multiply: [
+                { $cond: { if: { $isArray: '$project.allocatedEmployees' }, then: { $size: '$project.allocatedEmployees' }, else: '$employeeCount' } },
+                40
+              ]
+            }
+          }
+        },
+        // Calculate employee-level utilization if per-project detail requested
+        employeeDetails: {
+          $map: {
+            input: '$project.allocatedEmployees',
+            as: 'alloc',
+            in: {
+              userId: {
+                $let: {
+                  vars: {
+                    userInfo: {
+                      $filter: {
+                        input: '$allocatedUserInfos',
+                        as: 'u',
+                        cond: { $eq: ['$$u._id', '$$alloc.userId'] }
+                      }
+                    }
+                  },
+                  in: {
+                    _id: '$$alloc.userId',
+                    name: { $arrayElemAt: ['$$userInfo.name', 0] }
+                  }
+                }
+              },
+              role: '$$alloc.role',
+              budgetHours: '$$alloc.budgetHours',
+              loggedHours: {
+                $reduce: {
+                  input: '$employees',
+                  initialValue: 0,
+                  in: {
+                    $cond: [{ $eq: ['$$this.userId', '$$alloc.userId'] }, { $add: ['$$value', '$$this.hours'] }, '$$value']
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -172,9 +257,17 @@ router.get('/project-utilization', requireProTier, asyncHandler(async (req, res)
 
 // ─── Leave summary ─────────────────────────────────────────────────────────
 router.get('/leave-summary', asyncHandler(async (req, res) => {
+  let { from, to, period } = req.query;
+
+  if (period) {
+    const range = getPeriodRange(period);
+    from = range.from;
+    to = range.to;
+  }
+
   const match = {};
-  if (req.query.from) match.startDate = { $gte: new Date(req.query.from) };
-  if (req.query.to) match.startDate = { ...match.startDate, $lte: new Date(req.query.to) };
+  if (from) match.startDate = { $gte: new Date(from) };
+  if (to) match.startDate = { ...match.startDate, $lte: new Date(to) };
 
   const data = await Leave.aggregate([
     { $match: match },
@@ -248,9 +341,17 @@ router.get('/timesheet-details', asyncHandler(async (req, res) => {
 
 // ─── Employee attendance overview ──────────────────────────────────────────
 router.get('/employee-attendance', asyncHandler(async (req, res) => {
+  let { from, to, period } = req.query;
+
+  if (period) {
+    const range = getPeriodRange(period);
+    from = range.from;
+    to = range.to;
+  }
+
   const match = { status: TIMESHEET_STATUS.APPROVED };
-  if (req.query.from) match.weekStartDate = { $gte: new Date(req.query.from) };
-  if (req.query.to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(req.query.to) };
+  if (from) match.weekStartDate = { $gte: new Date(from) };
+  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
 
   const data = await Timesheet.aggregate([
     { $match: match },
@@ -265,11 +366,19 @@ router.get('/employee-attendance', asyncHandler(async (req, res) => {
 
 // ─── NEW: Weekly hours trend (for line chart) ─────────────────────────────
 router.get('/weekly-trend', requireProTier, asyncHandler(async (req, res) => {
+  let { from, to, period, userId, projectId } = req.query;
+
+  if (period) {
+    const range = getPeriodRange(period);
+    from = range.from;
+    to = range.to;
+  }
+
   const match = { status: TIMESHEET_STATUS.APPROVED };
-  if (req.query.from) match.weekStartDate = { $gte: new Date(req.query.from) };
-  if (req.query.to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(req.query.to) };
-  if (req.query.userId) match.userId = require('mongoose').Types.ObjectId.createFromHexString(req.query.userId);
-  if (req.query.projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(req.query.projectId);
+  if (from) match.weekStartDate = { $gte: new Date(from) };
+  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
+  if (userId) match.userId = require('mongoose').Types.ObjectId.createFromHexString(userId);
+  if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
 
   const data = await Timesheet.aggregate([
     { $match: match },
@@ -304,9 +413,18 @@ router.get('/weekly-trend', requireProTier, asyncHandler(async (req, res) => {
 
 // ─── NEW: Department hours summary (for stacked bar chart) ────────────────
 router.get('/department-summary', requireProTier, asyncHandler(async (req, res) => {
+  let { from, to, period, projectId } = req.query;
+
+  if (period) {
+    const range = getPeriodRange(period);
+    from = range.from;
+    to = range.to;
+  }
+
   const match = { status: TIMESHEET_STATUS.APPROVED };
-  if (req.query.from) match.weekStartDate = { $gte: new Date(req.query.from) };
-  if (req.query.to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(req.query.to) };
+  if (from) match.weekStartDate = { $gte: new Date(from) };
+  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
+  if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
 
   const data = await Timesheet.aggregate([
     { $match: match },
@@ -321,6 +439,7 @@ router.get('/department-summary', requireProTier, asyncHandler(async (req, res) 
     },
     { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
     { $unwind: '$rows' },
+    ...(projectId ? [{ $match: { 'rows.projectId': require('mongoose').Types.ObjectId.createFromHexString(projectId) } }] : []),
     {
       $group: {
         _id: {
@@ -369,14 +488,25 @@ router.get('/department-summary', requireProTier, asyncHandler(async (req, res) 
 
 // ─── NEW: Smart Insights Generator ──────────────────────────────────────────
 router.get('/smart-insights', requireProTier, asyncHandler(async (req, res) => {
+  let { from, to, period, projectId } = req.query;
+
+  if (period) {
+    const range = getPeriodRange(period);
+    from = range.from;
+    to = range.to;
+  }
+
   const match = { status: TIMESHEET_STATUS.APPROVED };
-  if (req.query.from) match.weekStartDate = { $gte: new Date(req.query.from) };
-  if (req.query.to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(req.query.to) };
+  if (from) match.weekStartDate = { $gte: new Date(from) };
+  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
+  if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
 
   const [totalHoursRes, deptStats, leaveStats] = await Promise.all([
     Timesheet.aggregate([
       { $match: match },
-      { $group: { _id: null, totalHours: { $sum: '$totalHours' } } }
+      { $unwind: '$rows' },
+      ...(projectId ? [{ $match: { 'rows.projectId': require('mongoose').Types.ObjectId.createFromHexString(projectId) } }] : []),
+      { $group: { _id: null, totalHours: { $sum: '$rows.totalHours' } } }
     ]),
     Timesheet.aggregate([
       { $match: match },
@@ -419,13 +549,22 @@ router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
   const mongoose = require('mongoose');
   const pdfGeneratorService = require('./pdfGenerator.service');
 
-  const from = req.query.from ? new Date(req.query.from) : null;
-  const to = req.query.to ? new Date(req.query.to) : null;
+  let { from, to, period, userId, projectId } = req.query;
+
+  if (period) {
+    const range = getPeriodRange(period);
+    from = range.from;
+    to = range.to;
+  }
+
+  from = from ? new Date(from) : null;
+  to = to ? new Date(to) : null;
 
   const match = { status: TIMESHEET_STATUS.APPROVED };
   if (from) match.weekStartDate = { $gte: from };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: to };
-  if (req.query.userId) match.userId = mongoose.Types.ObjectId.createFromHexString(req.query.userId);
+  if (userId) match.userId = mongoose.Types.ObjectId.createFromHexString(userId);
+  if (projectId) match['rows.projectId'] = mongoose.Types.ObjectId.createFromHexString(projectId);
 
   // Fetch all needed data in parallel
   const [timesheetStats, projectData, leaveData, weeklyTrend, employeeData, deptStats, complianceRes] = await Promise.all([
@@ -446,7 +585,7 @@ router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
       { $match: match },
       { $unwind: '$rows' },
       { $group: { _id: '$rows.projectId', totalHours: { $sum: '$rows.totalHours' } } },
-      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'project', pipeline: [{ $project: { name: 1, code: 1 } }] } },
+      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'project', pipeline: [{ $project: { name: 1, code: 1, budgetHours: 1 } }] } },
       { $unwind: { path: '$project', preserveNullAndEmptyArrays: true } },
       { $sort: { totalHours: -1 } },
       { $limit: 15 },
@@ -513,13 +652,23 @@ router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
 // ─── NEW: CSV Export ─────────────────────────────────────────────────────────
 router.get('/csv-export', requireProTier, asyncHandler(async (req, res) => {
   const mongoose = require('mongoose');
-  const from = req.query.from ? new Date(req.query.from) : null;
-  const to = req.query.to ? new Date(req.query.to) : null;
+  
+  let { from, to, period, userId, projectId } = req.query;
+
+  if (period) {
+    const range = getPeriodRange(period);
+    from = range.from;
+    to = range.to;
+  }
+
+  from = from ? new Date(from) : null;
+  to = to ? new Date(to) : null;
 
   const match = { status: TIMESHEET_STATUS.APPROVED };
   if (from) match.weekStartDate = { $gte: from };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: to };
-  if (req.query.userId) match.userId = mongoose.Types.ObjectId.createFromHexString(req.query.userId);
+  if (userId) match.userId = mongoose.Types.ObjectId.createFromHexString(userId);
+  if (projectId) match['rows.projectId'] = mongoose.Types.ObjectId.createFromHexString(projectId);
 
   // Fetch categorized summary data (paralleling the PDF data)
   const [timesheetStats, projectData, employeeData, deptStats, complianceRes] = await Promise.all([
@@ -531,7 +680,7 @@ router.get('/csv-export', requireProTier, asyncHandler(async (req, res) => {
       { $match: match },
       { $unwind: '$rows' },
       { $group: { _id: '$rows.projectId', totalHours: { $sum: '$rows.totalHours' } } },
-      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'p', pipeline: [{ $project: { name: 1 } }] } },
+      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'p', pipeline: [{ $project: { name: 1, budgetHours: 1 } }] } },
       { $unwind: '$p' },
       { $sort: { totalHours: -1 } },
       { $limit: 15 }
@@ -590,9 +739,11 @@ router.get('/csv-export', requireProTier, asyncHandler(async (req, res) => {
   csv += `\n`;
 
   csv += `3. PROJECT FOCUS AREAS\n`;
-  csv += `Project Name,Total Productive Hours\n`;
+  csv += `Project Name,Total Productive Hours,Budget Hours,Utilization %\n`;
   projectData.forEach(p => {
-    csv += `${escapeCsv(p.p?.name || 'Unknown')},${p.totalHours}\n`;
+    const budget = p.p?.budgetHours || 0;
+    const util = budget > 0 ? ((p.totalHours / budget) * 100).toFixed(1) : 'N/A';
+    csv += `${escapeCsv(p.p?.name || 'Unknown')},${p.totalHours},${budget},${util}%\n`;
   });
   csv += `\n`;
 

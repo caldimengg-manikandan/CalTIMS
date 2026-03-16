@@ -15,7 +15,7 @@ import Pagination from '@/components/ui/Pagination'
 
 const INITIAL_FORM = {
     name: '', email: '', password: '', role: 'employee',
-    department: '', designation: '', phone: '',
+    department: '', designation: '', phone: '', employeeId: '',
     joinDate: new Date().toISOString().split('T')[0]
 }
 
@@ -103,6 +103,10 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                     Basic Information
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5 col-span-2">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Employee ID (Optional)</label>
+                        <input name="employeeId" className={getInputClass('employeeId')} placeholder="e.g. EMP001" value={formData.employeeId || ''} onChange={onChange} />
+                    </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name *</label>
                         <input name="name" className={getInputClass('name')} placeholder="John Doe" value={formData.name} onChange={onChange} />
@@ -313,6 +317,7 @@ export default function EmployeesPage() {
             department: emp.department || '',
             designation: emp.designation || '',
             phone: emp.phone || '',
+            employeeId: emp.employeeId || '',
             joinDate: emp.joinDate ? emp.joinDate.split('T')[0] : new Date().toISOString().split('T')[0]
         })
     }
@@ -687,7 +692,7 @@ export default function EmployeesPage() {
                 <div className="flex justify-end items-center gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0">
                     <button
                         onClick={() => setShowHistory(!showHistory)}
-                        className={`flex items-center gap-2 mr-auto px-4 py-2 text-sm font-semibold rounded-xl transition-all ${showHistory ? 'bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}`}
+                        className={`flex items-center gap-2 mr-auto px-4 py-2 text-sm font-semibold rounded-xl transition-all ${showHistory ? 'bg-primary-100 text-primary-700 border border-primary-200 hover:bg-primary-200' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}`}
                     >
                         <History size={15} /> {showHistory ? 'Hide History' : 'Change History'}
                     </button>

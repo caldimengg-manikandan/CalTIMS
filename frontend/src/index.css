@@ -6,6 +6,27 @@
 :root {
   --color-primary: #6366f1;
   --color-primary-rgb: 99 102 241;
+
+  /* Responsive Layout Variables */
+  --header-height: 72px;
+  --footer-height: 60px;
+  --table-max-height: calc(100vh - 400px);
+  --modal-max-height: 85vh;
+  --animation-speed: 0.3s;
+}
+
+@media (max-height: 700px) {
+  :root {
+    --table-max-height: calc(100vh - 300px);
+    --animation-speed: 0.2s;
+  }
+}
+
+@media (min-height: 900px) {
+  :root {
+    --table-max-height: calc(100vh - 500px);
+    --animation-speed: 0.4s;
+  }
 }
 
 /* Dynamic primary color utilities */
@@ -139,7 +160,17 @@
   }
 
   .btn-primary {
-    @apply btn bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 active:scale-95;
+    @apply btn text-white active:scale-95;
+    background-color: var(--color-primary);
+    box-shadow: 0 4px 6px -1px rgb(var(--color-primary-rgb) / 0.2);
+  }
+
+  .btn-primary:hover {
+    background-color: color-mix(in srgb, var(--color-primary) 85%, black);
+  }
+
+  .btn-primary:focus {
+    --tw-ring-color: var(--color-primary);
   }
 
   .btn-secondary {
@@ -229,7 +260,7 @@
   }
 
   .table-wrapper.max-h-container {
-    max-height: calc(100vh - 350px);
+    max-height: var(--table-max-height);
     overflow-y: auto;
   }
 
@@ -307,12 +338,42 @@
     color: #a5b4fc;
   }
 
-  .page-header {
-    @apply flex items-center justify-between mb-6;
-  }
-
   .page-title {
     @apply text-2xl font-bold text-slate-800;
+  }
+
+  /* Responsive Layout Helpers */
+  .fluid-container {
+    @apply w-full mx-auto px-4 lg:px-6;
+    max-width: 1600px;
+  }
+
+  @media (min-aspect-ratio: 21/9) {
+    .fluid-container {
+      max-width: 90%;
+    }
+
+    .ultrawide-grid-2 {
+      @apply grid-cols-2;
+    }
+
+    .ultrawide-grid-3 {
+      @apply grid-cols-3;
+    }
+
+    .ultrawide-grid-4 {
+      @apply grid-cols-4;
+    }
+  }
+
+  .scroll-v-adaptive {
+    overflow-y: auto;
+    max-height: var(--table-max-height);
+  }
+
+  .modal-scroll-adaptive {
+    overflow-y: auto;
+    max-height: var(--modal-max-height);
   }
 }
 
@@ -359,11 +420,44 @@
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn var(--animation-speed) ease-out;
 }
 
 .animate-slide-in {
-  animation: slideIn 0.3s ease-out;
+  animation: slideIn var(--animation-speed) ease-out;
+}
+
+/* Responsive Animations */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  ::before,
+  ::after {
+    animation-delay: -1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    background-attachment: initial !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+}
+
+@media (max-width: 640px) {
+
+  .animate-fade-in,
+  .animate-slide-in {
+    animation-duration: 0.2s;
+    /* Faster on mobile */
+  }
+}
+
+@media (min-height: 900px) {
+  .animate-slide-in {
+    animation-duration: 0.5s;
+    /* More dramatic on tall screens */
+    transform-origin: top;
+  }
 }
 
 /* ─── React Big Calendar Dark Mode (Black & White) ────────────── */
@@ -471,9 +565,7 @@
 }
 
 /* Remove forced B&W on buttons in dark modes */
-.dark .btn-primary {
-  @apply bg-primary-500 text-white border-transparent hover:bg-primary-600;
-}
+
 
 .dark .btn-danger {
   @apply bg-danger-500 text-white border-transparent hover:bg-danger-600;

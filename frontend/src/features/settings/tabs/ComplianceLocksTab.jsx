@@ -116,7 +116,7 @@ export default function ComplianceLocksTab() {
                             </div>
                         </div>
 
-                        <div className="p-5 rounded-[2rem] bg-indigo-600 text-white shadow-xl shadow-indigo-600/20">
+                        <div className="p-5 rounded-[2rem] btn-primary text-white shadow-xl shadow-primary/20">
                             <div className="flex items-center gap-3 mb-3">
                                 <div className="p-2 rounded-xl bg-white/20">
                                     <FileLock size={20} />
@@ -135,7 +135,7 @@ export default function ComplianceLocksTab() {
                 <button
                     onClick={() => saveMutation.mutate()}
                     disabled={saveMutation.isPending}
-                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest shadow-xl shadow-indigo-600/25 transition-all active:scale-95 disabled:opacity-70"
+                    className="flex items-center gap-3 px-8 py-4 rounded-2xl btn-primary hover:btn-primary hover:bg-primary-700 text-white font-black uppercase tracking-widest shadow-xl shadow-primary/25 transition-all active:scale-95 disabled:opacity-70"
                 >
                     {saveMutation.isPending ? <Spinner size="sm" color="white" /> : <Save size={18} />}
                     Enforce Policy

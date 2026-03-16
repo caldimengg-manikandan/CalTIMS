@@ -134,7 +134,16 @@ class PDFGeneratorService {
         let projY = 460;
         projectData.slice(0, 5).forEach((proj, i) => {
             doc.rect(50, projY, 500, 40).fill(i % 2 === 0 ? colors.bg : colors.surface);
-            doc.fillColor(colors.textMain).font('Helvetica-Bold').fontSize(10).text(proj.project?.name || 'Unknown Project', 65, projY + 15);
+            
+            const pName = proj.project?.name || 'Unknown Project';
+            const budget = proj.project?.budgetHours || 0;
+            const util = budget > 0 ? Math.round((proj.totalHours / budget) * 100) : 0;
+            
+            doc.fillColor(colors.textMain).font('Helvetica-Bold').fontSize(10).text(pName, 65, projY + 10);
+            if (budget > 0) {
+                doc.fillColor(colors.textMuted).font('Helvetica').fontSize(8).text(`Budget: ${budget}h | Util: ${util}%`, 65, projY + 22);
+            }
+            
             doc.fillColor(colors.primary).font('Helvetica-Bold').fontSize(11).text(`${proj.totalHours.toLocaleString()} hrs`, 450, projY + 15, { align: 'right', width: 80 });
             projY += 40;
         });
