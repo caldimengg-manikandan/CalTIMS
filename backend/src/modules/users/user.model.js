@@ -108,7 +108,7 @@ const userSchema = new mongoose.Schema(
     },
     isTrialUser: {
       type: Boolean,
-      default: true,
+      default: false,
     },
   },
   {

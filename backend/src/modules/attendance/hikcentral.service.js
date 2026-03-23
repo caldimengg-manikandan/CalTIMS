@@ -60,10 +60,11 @@ const hikcentralService = {
     }
   },
 
-  /**
+   /**
    * Synchronize events from HikCentral using Attendance Report API.
    */
-  async syncDevice(device, targetPersonCode = null) {
+  async syncDevice(device, options = {}) {
+    const { targetPersonCode = null, startTime: manualStartTime = null, endTime: manualEndTime = null } = options;
     if (!device || device.type !== 'hikcentral' || !device.enabled) return;
     if (targetPersonCode) {
       logger.info(`[HikCentralService] Targeted sync for ${targetPersonCode} on ${device.name}`);
@@ -79,8 +80,8 @@ const hikcentralService = {
     }
 
     const now = new Date();
-    const startTime = device.lastSyncAt || new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const endTime = now;
+    const startTime = manualStartTime || device.lastSyncAt || new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const endTime = manualEndTime || now;
 
     const url = '/artemis/api/attendance/v1/report';
     const method = 'POST';
@@ -157,7 +158,10 @@ const hikcentralService = {
         hasMore = records.length === pageSize;
       }
 
-      device.lastSyncAt = endTime;
+      // Only update lastSyncAt if it's a regular sync (not a manual range)
+      if (!manualStartTime && !manualEndTime) {
+        device.lastSyncAt = endTime;
+      }
       device.status = 'online';
       device.lastError = '';
       await device.save();
@@ -177,13 +181,13 @@ const hikcentralService = {
   /**
    * Sync all HikCentral devices (usually one per HikCentral server).
    */
-  async syncAll() {
+  async syncAll(options = {}) {
     const devices = await Device.find({ type: 'hikcentral', enabled: true });
     const results = [];
 
     for (const device of devices) {
       try {
-        const result = await this.syncDevice(device);
+        const result = await this.syncDevice(device, options);
         results.push({ deviceId: device._id, ...result });
       } catch (err) {
         results.push({ deviceId: device._id, success: false, error: err.message });
