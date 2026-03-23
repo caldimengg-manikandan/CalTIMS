@@ -47,8 +47,8 @@ export default function LoginPage() {
     const { mutate: login, isPending } = useMutation({
         mutationFn: (data) => authAPI.login(data),
         onSuccess: (res) => {
-            const { accessToken, refreshToken, user } = res.data.data
-            setAuth(user, accessToken, refreshToken)
+            const { accessToken, refreshToken, user, subscription } = res.data.data
+            setAuth(user, accessToken, refreshToken, subscription)
             toast.success(`Welcome back, ${user.name.split(' ')[0]}!`)
             navigate('/dashboard', { replace: true })
         },
@@ -142,8 +142,11 @@ export default function LoginPage() {
                     </div>
                 </form>
 
-                <div className="pt-8 border-t border-slate-100 dark:border-slate-800 text-center">
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400 italic">
+                <div className="pt-8 border-t border-slate-100 dark:border-slate-800 text-center space-y-4">
+                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                        New organization? <Link to="/signup" className="text-indigo-600 font-bold hover:underline">Start 28-day free trial</Link>
+                    </p>
+                    <p className="text-xs font-medium text-slate-400 dark:text-slate-500 italic">
                         Securing workforce productivity in real-time.
                     </p>
                 </div>

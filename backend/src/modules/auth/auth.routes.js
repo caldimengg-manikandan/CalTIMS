@@ -7,12 +7,14 @@ const { authenticate } = require('../../middleware/auth.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const {
   loginSchema,
+  registerSchema,
   changePasswordSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
 } = require('./auth.validation');
 
 // Public routes
+router.post('/register', validate(registerSchema), authController.register);
 router.post('/login', validate(loginSchema), authController.login);
 router.post('/refresh', authController.refresh);
 router.post('/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword);

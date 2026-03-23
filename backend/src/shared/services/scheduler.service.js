@@ -11,8 +11,10 @@ const ReportSchedule = require('../../modules/reportSchedules/reportSchedule.mod
 const User = require('../../modules/users/user.model');
 const emailService = require('./email.service');
 const Settings = require('../../modules/settings/settings.model');
+const subscriptionReminderService = require('./subscriptionReminder.service');
 
 let _job = null;
+let _reminderJob = null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -125,11 +127,19 @@ const schedulerService = {
     _job = cron.schedule('* * * * *', () => {
       runScheduler().catch(err => console.error('[Scheduler] Unhandled error:', err.message));
     });
+
+    // Run trial reminders every hour on the hour
+    _reminderJob = cron.schedule('0 * * * *', () => {
+      subscriptionReminderService.checkTrialReminders().catch(err => console.error('[SubscriptionReminder] Unhandled error:', err.message));
+    });
+
     console.log('[Scheduler] ✅ Report scheduler started — checking every minute.');
+    console.log('[Scheduler] ✅ Subscription reminders started — checking every hour.');
   },
 
   stop() {
     if (_job) { _job.stop(); _job = null; }
+    if (_reminderJob) { _reminderJob.stop(); _reminderJob = null; }
   },
 };
 

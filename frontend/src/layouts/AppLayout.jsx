@@ -8,6 +8,7 @@ import { useThemeStore } from '@/store/themeStore'
 import { useInactivityTimer } from '@/hooks/useInactivityTimer'
 import { clsx } from 'clsx'
 import PasswordRotationPolicy from '@/features/auth/components/PasswordRotationPolicy'
+import TrialBanner from '@/components/ui/TrialBanner'
 
 export default function AppLayout() {
     useInactivityTimer()
@@ -54,6 +55,7 @@ export default function AppLayout() {
                 'flex flex-col flex-1 overflow-hidden transition-all duration-300',
                 sidebarOpen ? 'md:ml-64' : 'md:ml-[68px]'
             )}>
+                <TrialBanner />
                 <Navbar />
                 <PasswordRotationPolicy />
                 <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 animate-fade-in pb-20 md:pb-6 relative w-full">

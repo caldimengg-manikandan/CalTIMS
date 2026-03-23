@@ -4,7 +4,11 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const User = require('../users/user.model');
+const Organization = require('../organizations/organization.model');
+const Subscription = require('../subscriptions/subscription.model');
+const TrialTracking = require('../subscriptions/trialTracking.model');
 const AppError = require('../../shared/utils/AppError');
+const { ROLES } = require('../../constants');
 
 /**
  * Generate JWT tokens
@@ -35,13 +39,73 @@ const authService = {
       throw new AppError('Invalid email or password', 401);
     }
 
-    // No longer checking isLocked as per request to remove trial/lock system
+    // Update lastLogin on login
+    user.lastLogin = new Date();
+    const { accessToken, refreshToken } = generateTokens(user._id, user.role);
+    user.refreshTokenHash = hashToken(refreshToken);
+    await user.save({ validateBeforeSave: false });
+
+    const subscription = await Subscription.findOne({ organizationId: user.organizationId });
+
+    return { accessToken, refreshToken, user: user.toPublicJSON(), subscription };
+  },
+
+  /**
+   * Signup an organization and create first admin user with 28-day trial
+   */
+  async register({ email, password, name, organizationName, phoneNumber, ipAddress, deviceFingerprint }) {
+    // 1. Trial Abuse Prevention
+    const existingTrial = await TrialTracking.findOne({
+      $or: [{ email }, { phoneNumber }]
+    });
+
+    if (existingTrial) {
+      throw new AppError('You have already used your free trial.', 400);
+    }
+
+    // Check if email already used in User model
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      throw new AppError('Email already registered.', 409);
+    }
+
+    // 2. Create Organization
+    const organization = await Organization.create({
+      name: organizationName
+    });
+
+    // 3. Create Admin User
+    const user = await User.create({
+      email,
+      password,
+      name,
+      phoneNumber,
+      organizationId: organization._id,
+      role: ROLES.ADMIN,
+      isActive: true,
+      lastLogin: new Date()
+    });
+
+    // 4. Create 28-Day Trial Subscription
+    const subscription = await Subscription.create({
+      organizationId: organization._id,
+      planType: 'TRIAL',
+      status: 'ACTIVE'
+    });
+
+    // 5. Save Trial Tracking info
+    await TrialTracking.create({
+      email,
+      phoneNumber,
+      ipAddress,
+      deviceFingerprint
+    });
 
     const { accessToken, refreshToken } = generateTokens(user._id, user.role);
     user.refreshTokenHash = hashToken(refreshToken);
     await user.save({ validateBeforeSave: false });
 
-    return { accessToken, refreshToken, user: user.toPublicJSON() };
+    return { accessToken, refreshToken, user: user.toPublicJSON(), subscription };
   },
 
   /**

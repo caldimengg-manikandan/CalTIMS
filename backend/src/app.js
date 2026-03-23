@@ -24,10 +24,10 @@ const settingsRoutes = require('./modules/settings/settings.routes');
 const reportScheduleRoutes = require('./modules/reportSchedules/reportSchedule.routes');
 const taskRoutes = require('./modules/tasks/task.routes');
 const incidentRoutes = require('./modules/incidents/incident.routes');
-const systemRoutes = require('./modules/system/system.routes');
 const supportRoutes = require('./modules/support/support.routes');
 const { router: auditRoutes } = require('./modules/audit/audit.routes');
 const attendanceRoutes = require('./modules/attendance/attendance.routes');
+const adminRoutes = require('./modules/admin/admin.routes');
 const schedulerService = require('./shared/services/scheduler.service');
 
 const app = express();
@@ -108,10 +108,10 @@ app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/report-schedules', reportScheduleRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/incidents', incidentRoutes);
-app.use('/api/v1/system', systemRoutes);
 app.use('/api/v1/support', supportRoutes);
 app.use('/api/v1/audit', auditRoutes);
 app.use('/api/v1/attendance', attendanceRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 // ─── Start Scheduler ────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {

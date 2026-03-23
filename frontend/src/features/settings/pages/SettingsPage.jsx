@@ -11,7 +11,7 @@ import Modal from '@/components/ui/Modal'
 import toast from 'react-hot-toast'
 import { useThemeStore, ACCENT_PRESETS } from '@/store/themeStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import { useSystemStore } from '@/store/systemStore'
+import { useAuthStore } from '@/store/authStore'
 import PageHeader from '@/components/ui/PageHeader'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -845,7 +845,7 @@ function ThemeTab() {
 function GeneralTab() {
     const qc = useQueryClient()
     const { updateGeneralSettings } = useSettingsStore()
-    const { appVersion } = useSystemStore()
+    const { isPro } = useAuthStore()
     const [form, setForm] = useState({
         companyName: '',
         timezone: 'Asia/Kolkata',

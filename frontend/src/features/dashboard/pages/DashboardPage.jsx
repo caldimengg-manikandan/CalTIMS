@@ -4,7 +4,6 @@ import { Clock, CheckCircle, XCircle, AlertCircle, CalendarDays, Award, ChevronR
 import { timesheetAPI, leaveAPI, announcementAPI, notificationAPI, projectAPI } from '@/services/endpoints'
 import { useAuthStore } from '@/store/authStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import { useSystemStore } from '@/store/systemStore'
 import { clsx } from 'clsx'
 import { toast } from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
@@ -24,8 +23,7 @@ const fadeUp = {
 }
 
 export default function DashboardPage() {
-    const { user } = useAuthStore()
-    const { appVersion } = useSystemStore()
+    const { user, isPro } = useAuthStore()
     const { general } = useSettingsStore()
     const isAdmin = ['admin', 'manager'].includes(user?.role)
     const navigate = useNavigate()
@@ -253,7 +251,7 @@ export default function DashboardPage() {
                                         }}
                                         className={clsx(
                                             "w-full py-2.5 rounded-xl text-white text-[10px] font-black uppercase tracking-widest transition-all border",
-                                            appVersion === 'basic' ? "bg-slate-700/50 border-white/5 opacity-50 cursor-not-allowed" : "bg-white/10 hover:bg-white/20 border-white/10"
+                                            !isPro() ? "bg-slate-700/50 border-white/5 opacity-50 cursor-not-allowed" : "bg-white/10 hover:bg-white/20 border-white/10"
                                         )}
                                     >
                                         Review Compliance
@@ -351,7 +349,7 @@ export default function DashboardPage() {
                         }}
                         className={clsx(
                             "card p-5 group hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer",
-                            isAdmin && appVersion === 'basic' ? "opacity-60 grayscale cursor-not-allowed" : "hover:border-rose-500/30"
+                            isAdmin && !isPro() ? "opacity-60 grayscale cursor-not-allowed" : "hover:border-rose-500/30"
                         )}
                     >
                         <div className="flex items-start justify-between">
@@ -360,7 +358,7 @@ export default function DashboardPage() {
                             </div>
                             <span className="text-2xl font-black text-slate-800 flex items-center gap-2">
                                 {isAdmin ? summaryData?.notSubmittedCount : summaryData?.rejectedTimesheets}
-                                {isAdmin && appVersion === 'basic' && <Lock size={14} style={{ color: '#9333ea' }} />}
+                                {isAdmin && !isPro() && <Lock size={14} style={{ color: '#9333ea' }} />}
                             </span>
                         </div>
                         <div className="mt-4">

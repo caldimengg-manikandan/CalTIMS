@@ -10,10 +10,11 @@ const User = require('../users/user.model');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { checkPermission } = require('../../middleware/rbac.middleware');
 const { TIMESHEET_STATUS, LEAVE_STATUS } = require('../../constants');
-const { requireProTier } = require('../../middleware/tier.middleware');
+const { checkSubscription, requireFeature } = require('../../middleware/subscription.middleware');
 const { getPeriodRange } = require('../../shared/utils/dateHelpers');
 
 router.use(authenticate);
+router.use(checkSubscription);
 router.use(checkPermission('viewReports'));
 
 // ─── Timesheet hours summary (by employee and project) ─────────────────────
@@ -70,7 +71,7 @@ router.get('/timesheet-summary', asyncHandler(async (req, res) => {
 }));
 
 // ─── NEW: Compliance Summary (Donut Chart Data) ───────────────────────────
-router.get('/compliance-summary', requireProTier, asyncHandler(async (req, res) => {
+router.get('/compliance-summary', requireFeature('advanced_reports'), asyncHandler(async (req, res) => {
   let { from, to, period, projectId } = req.query;
   
   if (period) {
@@ -134,7 +135,7 @@ router.get('/compliance-summary', requireProTier, asyncHandler(async (req, res) 
 }));
 
 // ─── Project utilization (aggregated hours per project) ────────────────────
-router.get('/project-utilization', requireProTier, asyncHandler(async (req, res) => {
+router.get('/project-utilization', requireFeature('advanced_reports'), asyncHandler(async (req, res) => {
   let { from, to, period, projectId } = req.query;
 
   if (period) {
@@ -365,7 +366,7 @@ router.get('/employee-attendance', asyncHandler(async (req, res) => {
 }));
 
 // ─── NEW: Weekly hours trend (for line chart) ─────────────────────────────
-router.get('/weekly-trend', requireProTier, asyncHandler(async (req, res) => {
+router.get('/weekly-trend', requireFeature('advanced_reports'), asyncHandler(async (req, res) => {
   let { from, to, period, userId, projectId } = req.query;
 
   if (period) {
@@ -412,7 +413,7 @@ router.get('/weekly-trend', requireProTier, asyncHandler(async (req, res) => {
 }));
 
 // ─── NEW: Department hours summary (for stacked bar chart) ────────────────
-router.get('/department-summary', requireProTier, asyncHandler(async (req, res) => {
+router.get('/department-summary', requireFeature('advanced_reports'), asyncHandler(async (req, res) => {
   let { from, to, period, projectId } = req.query;
 
   if (period) {
@@ -487,7 +488,7 @@ router.get('/department-summary', requireProTier, asyncHandler(async (req, res) 
 }));
 
 // ─── NEW: Smart Insights Generator ──────────────────────────────────────────
-router.get('/smart-insights', requireProTier, asyncHandler(async (req, res) => {
+router.get('/smart-insights', requireFeature('advanced_reports'), asyncHandler(async (req, res) => {
   let { from, to, period, projectId } = req.query;
 
   if (period) {
@@ -545,7 +546,7 @@ router.get('/smart-insights', requireProTier, asyncHandler(async (req, res) => {
 }));
 
 // ─── NEW: PDF Export ────────────────────────────────────────────────────────
-router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
+router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async (req, res) => {
   const mongoose = require('mongoose');
   const pdfGeneratorService = require('./pdfGenerator.service');
 
@@ -650,7 +651,7 @@ router.get('/pdf-export', requireProTier, asyncHandler(async (req, res) => {
 }));
 
 // ─── NEW: CSV Export ─────────────────────────────────────────────────────────
-router.get('/csv-export', requireProTier, asyncHandler(async (req, res) => {
+router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async (req, res) => {
   const mongoose = require('mongoose');
   
   let { from, to, period, userId, projectId } = req.query;

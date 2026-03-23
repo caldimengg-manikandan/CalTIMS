@@ -8,8 +8,20 @@ const emailService = require('../../shared/services/email.service');
 const authController = {
   login: asyncHandler(async (req, res) => {
     const { accessToken, refreshToken, user } = await authService.login(req.body);
-    ApiResponse.success(res, {
+     ApiResponse.success(res, {
       message: 'Login successful',
+      data: { accessToken, refreshToken, user },
+    });
+  }),
+
+  register: asyncHandler(async (req, res) => {
+    const { accessToken, refreshToken, user } = await authService.register({
+      ...req.body,
+      ipAddress: req.ip,
+      deviceFingerprint: req.headers['user-agent'],
+    });
+    ApiResponse.created(res, {
+      message: 'Organization registered successfully. 28-day free trial started.',
       data: { accessToken, refreshToken, user },
     });
   }),

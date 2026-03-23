@@ -8,48 +8,52 @@ import {
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import { useSystemStore } from '@/store/systemStore'
 import { clsx } from 'clsx'
 import { toast } from 'react-hot-toast'
 import { Lock } from 'lucide-react'
 
 const navSections = [
     {
+        label: 'Super Admin',
+        items: [
+            { to: '/admin/dashboard', icon: BarChart3, label: 'Super Dashboard', roles: ['super_admin'] },
+        ]
+    },
+    {
         label: 'Timesheets',
         items: [
-            { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'employee'], end: true },
-            { to: '/timesheets', icon: Clock, label: 'Timesheet Entry', roles: ['admin', 'manager', 'employee'], end: true },
-            { to: '/timesheets/history', icon: List, label: 'History', roles: ['admin', 'manager', 'employee'] },
-            { to: '/timesheets/manage', icon: CheckSquare, label: 'Manage Timesheets', roles: ['admin', 'manager'] },
-            { to: '/timesheets/compliance', icon: AlertCircle, label: 'Compliance & Locks', roles: ['admin', 'manager'], proFeature: true },
+            { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'employee', 'super_admin'], end: true },
+            { to: '/timesheets', icon: Clock, label: 'Timesheet Entry', roles: ['admin', 'manager', 'employee', 'super_admin'], end: true },
+            { to: '/timesheets/history', icon: List, label: 'History', roles: ['admin', 'manager', 'employee', 'super_admin'] },
+            { to: '/timesheets/manage', icon: CheckSquare, label: 'Manage Timesheets', roles: ['admin', 'manager', 'super_admin'] },
+            { to: '/timesheets/compliance', icon: AlertCircle, label: 'Compliance & Locks', roles: ['admin', 'manager', 'super_admin'], proFeature: true },
         ]
     },
     {
         label: 'Workspace',
         items: [
-            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', roles: ['employee', 'manager', 'admin'], proFeature: true, end: true },
-            { to: '/leaves/manage', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager'], proFeature: true },
-            { to: '/announcements', icon: Megaphone, label: 'Announcements', roles: ['admin'] },
-            { to: '/incidents', icon: AlertCircle, label: 'Help & Support', roles: ['admin', 'manager', 'employee'], proFeature: true },
+            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', roles: ['employee', 'manager', 'admin', 'super_admin'], proFeature: true, end: true },
+            { to: '/leaves/manage', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager', 'super_admin'], proFeature: true },
+            { to: '/announcements', icon: Megaphone, label: 'Announcements', roles: ['admin', 'super_admin'] },
+            { to: '/incidents', icon: AlertCircle, label: 'Help & Support', roles: ['admin', 'manager', 'employee', 'super_admin'], proFeature: true },
         ]
     },
     {
         label: 'Management',
         items: [
-            { to: '/projects', icon: FolderOpen, label: 'Projects', roles: ['admin', 'manager'] },
-            { to: '/tasks', icon: ListTodo, label: 'Tasks', roles: ['admin'] },
-            { to: '/employees', icon: Users, label: 'Employees', roles: ['admin'] },
-            { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'manager'], proFeature: true },
-            { to: '/settings', icon: Settings2, label: 'Settings', roles: ['admin'] },
+            { to: '/projects', icon: FolderOpen, label: 'Projects', roles: ['admin', 'manager', 'super_admin'] },
+            { to: '/tasks', icon: ListTodo, label: 'Tasks', roles: ['admin', 'super_admin'] },
+            { to: '/employees', icon: Users, label: 'Employees', roles: ['admin', 'super_admin'] },
+            { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'manager', 'super_admin'], proFeature: true },
+            { to: '/settings', icon: Settings2, label: 'Settings', roles: ['admin', 'super_admin'] },
         ]
     },
 ]
 
 export default function Sidebar() {
-    const { user } = useAuthStore()
+    const { user, isPro, canAccess } = useAuthStore()
     const { sidebarOpen, toggleSidebar, setSidebar } = useUIStore()
     const { general } = useSettingsStore()
-    const { appVersion } = useSystemStore()
     const navigate = useNavigate()
 
     const [currentTime, setCurrentTime] = useState(new Date())
@@ -113,7 +117,10 @@ export default function Sidebar() {
             `}</style>
             {/* ── Logo ─────────────────────────────────────── */}
             <div
-                onClick={() => window.location.href = '/dashboard'}
+                onClick={() => {
+                    const target = user?.role === 'super_admin' ? '/admin/dashboard' : '/dashboard'
+                    navigate(target)
+                }}
                 className={clsx(
                     'flex items-center border-b border-slate-100 dark:border-white/10 flex-shrink-0 transition-all duration-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 logo-3d-container',
                     sidebarOpen ? 'gap-3 px-5 py-4' : 'justify-center px-0 py-4 group-hover/sidebar:justify-start group-hover/sidebar:px-5 group-hover/sidebar:gap-3'
@@ -218,11 +225,11 @@ export default function Sidebar() {
                                             isActive
                                                 ? 'bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-semibold shadow-sm'
                                                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-800 dark:hover:text-white',
-                                            item.proFeature && appVersion === 'basic' && 'opacity-60 grayscale cursor-not-allowed'
+                                            item.proFeature && !isPro() && 'opacity-60 grayscale'
                                         )}
                                         title={!sidebarOpen ? item.label : undefined}
                                         onClick={(e) => {
-                                            if (item.proFeature && appVersion === 'basic') {
+                                            if (item.proFeature && !isPro()) {
                                                 // Allow navigation so ProGuard can show the upgrade screen
                                             }
                                             if (window.innerWidth < 1024) {
@@ -251,11 +258,11 @@ export default function Sidebar() {
                                                     <span
                                                         className={clsx(
                                                             "flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md self-center border",
-                                                            appVersion === 'basic'
+                                                            !isPro()
                                                                 ? "bg-[#f3e8ff] text-[#9333ea] border-[#e9d5ff]"
                                                                 : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
                                                         )}>
-                                                        {appVersion === 'basic' && <Lock size={10} />} PRO
+                                                        {!isPro() && <Lock size={10} />} PRO
                                                     </span>
                                                 )}
                                                 {!sidebarOpen && (
