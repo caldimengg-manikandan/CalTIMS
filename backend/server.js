@@ -61,9 +61,26 @@ async function autoBackfillLeaveTimesheets() {
   }
 }
 
+// One-time migration to unlock all users previously restricted by the trial system
+async function unlockAllUsers() {
+  try {
+    const User = require('./src/modules/users/user.model');
+    const result = await User.updateMany(
+      { $or: [{ isLocked: true }, { isTrialUser: true }] },
+      { $set: { isLocked: false, isTrialUser: false, trialExpiresAt: null } }
+    );
+    if (result.modifiedCount > 0) {
+      logger.info(`[Migration] Unlocked ${result.modifiedCount} users and disabled trial flags`);
+    }
+  } catch (err) {
+    logger.warn(`[Migration] Failed to unlock users: ${err.message}`);
+  }
+}
+
 const startServer = async () => {
   try {
     await connectDB();
+    await unlockAllUsers();
     await dropLegacyIndexes();
 
     // Auto-sync any approved leaves that are missing timesheet entries

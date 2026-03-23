@@ -35,10 +35,7 @@ const authService = {
       throw new AppError('Invalid email or password', 401);
     }
 
-    // Check if account is locked
-    if (user.isLocked) {
-      throw new AppError('Account locked. Please contact administrator.', 403);
-    }
+    // No longer checking isLocked as per request to remove trial/lock system
 
     const { accessToken, refreshToken } = generateTokens(user._id, user.role);
     user.refreshTokenHash = hashToken(refreshToken);

@@ -8,7 +8,6 @@ const compression = require('compression');
 const mongoSanitize = require('express-mongo-sanitize');
 // ─── Body Parsing & Sanitization ─────────────────────────────────────────────
 const { errorHandler, notFound } = require('./middleware/error.middleware');
-const accountLock = require('./middleware/lock.middleware');
 const logger = require('./shared/utils/logger');
 
 // Route imports
@@ -96,9 +95,6 @@ app.get('/api/v1/health', (req, res) => {
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/v1/auth', authRoutes);
-
-// Apply account lock to all other routes
-app.use(accountLock);
 
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/timesheets', timesheetRoutes);
