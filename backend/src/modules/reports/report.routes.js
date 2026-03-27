@@ -15,6 +15,7 @@ const { getPeriodRange } = require('../../shared/utils/dateHelpers');
 
 router.use(authenticate);
 router.use(checkSubscription);
+router.use(requireFeature('reports'));
 router.use(checkPermission('viewReports'));
 
 // ─── Timesheet hours summary (by employee and project) ─────────────────────

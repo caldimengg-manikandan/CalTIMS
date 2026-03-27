@@ -54,8 +54,11 @@ const RunPayroll = lazy(() => import('@/features/payroll').then(m => ({ default:
 const PayrollHistory = lazy(() => import('@/features/payroll').then(m => ({ default: m.PayrollHistory })))
 const MyPayslips = lazy(() => import('@/features/payroll').then(m => ({ default: m.MyPayslips })))
 
+import { useFeatureAccess } from '@/hooks/useFeatureAccess'
+import { FEATURE_KEYS } from '@/constants/plans'
+
 // ─── Protected Route Guard ───────────────────────────────────────────────────
-const ProtectedRoute = ({ children, roles }) => {
+const ProtectedRoute = ({ children, roles, featureKey }) => {
     const { isAuthenticated, isHydrating, user, subscription } = useAuthStore()
 
     // Wait for checkAuth to finish before making any redirect decisions.
@@ -67,7 +70,7 @@ const ProtectedRoute = ({ children, roles }) => {
             </div>
         )
     }
-    
+
     if (!isAuthenticated) return <Navigate to="/login" replace />
 
     // Trial Expiration Check (Skip for Super Admin)
@@ -75,7 +78,15 @@ const ProtectedRoute = ({ children, roles }) => {
         return <Paywall />
     }
 
+    const { hasAccess } = useFeatureAccess()
+
     if (user?.role === 'super_admin') return children
+    
+    // Subscription Feature Guard
+    if (featureKey && !hasAccess(featureKey)) {
+        return <Navigate to="/dashboard" replace />
+    }
+
     if (roles && !roles.includes(user?.role)) return <Navigate to="/dashboard" replace />
     return children
 }
@@ -125,7 +136,7 @@ export default function App() {
             <Routes>
                 {/* Public Landing Page / Redirect for Authed */}
                 <Route path="/" element={
-                    isAuthenticated 
+                    isAuthenticated
                         ? (user?.role === 'super_admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />)
                         : <PageSuspense><LandingPage /></PageSuspense>
                 } />
@@ -151,16 +162,32 @@ export default function App() {
                     <Route path="/profile" element={<PageSuspense><ProfilePage /></PageSuspense>} />
                     <Route path="/timesheets" element={<PageSuspense><TimesheetEntry /></PageSuspense>} />
                     <Route path="/timesheets/history" element={<PageSuspense><TimesheetHistory /></PageSuspense>} />
-                    <Route path="/leaves" element={<PageSuspense><LeavePage /></PageSuspense>} />
+                    <Route path="/leaves" element={
+                        <ProtectedRoute featureKey={FEATURE_KEYS.LEAVE_MANAGEMENT}>
+                            <PageSuspense><LeavePage /></PageSuspense>
+                        </ProtectedRoute>
+                    } />
                     <Route path="/calendar" element={<PageSuspense><CalendarPage /></PageSuspense>} />
                     <Route path="/announcements" element={
                         <ProtectedRoute roles={['admin']}>
                             <PageSuspense><AnnouncementsPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
-                    <Route path="/incidents" element={<PageSuspense><IncidentList /></PageSuspense>} />
-                    <Route path="/my-payslips" element={<PageSuspense><MyPayslips /></PageSuspense>} />
-                    <Route path="/incidents/:id" element={<PageSuspense><IncidentDetails /></PageSuspense>} />
+                    <Route path="/incidents" element={
+                        <ProtectedRoute featureKey={FEATURE_KEYS.SUPPORT}>
+                            <PageSuspense><IncidentList /></PageSuspense>
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/my-payslips" element={
+                        <ProtectedRoute featureKey={FEATURE_KEYS.PAYSLIPS}>
+                            <PageSuspense><MyPayslips /></PageSuspense>
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/incidents/:id" element={
+                        <ProtectedRoute featureKey={FEATURE_KEYS.SUPPORT}>
+                            <PageSuspense><IncidentDetails /></PageSuspense>
+                        </ProtectedRoute>
+                    } />
 
                     {/* Manager + Admin */}
                     <Route path="/timesheets/manage" element={
@@ -169,12 +196,12 @@ export default function App() {
                         </ProtectedRoute>
                     } />
                     <Route path="/timesheets/compliance" element={
-                        <ProtectedRoute roles={['admin', 'manager']}>
+                        <ProtectedRoute roles={['admin', 'manager']} featureKey={FEATURE_KEYS.AUDIT_LOGS}>
                             <PageSuspense><AdminTimesheetsCompliance /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/leaves/manage" element={
-                        <ProtectedRoute roles={['admin', 'manager']}>
+                        <ProtectedRoute roles={['admin', 'manager']} featureKey={FEATURE_KEYS.LEAVE_MANAGEMENT}>
                             <PageSuspense><LeavePage isAdminView={true} /></PageSuspense>
                         </ProtectedRoute>
                     } />
@@ -211,7 +238,7 @@ export default function App() {
                         </ProtectedRoute>
                     } />
                     <Route path="/reports" element={
-                        <ProtectedRoute roles={['admin', 'manager']}>
+                        <ProtectedRoute roles={['admin', 'manager']} featureKey={FEATURE_KEYS.REPORTS}>
                             <PageSuspense><ReportsPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
@@ -221,26 +248,32 @@ export default function App() {
                         </ProtectedRoute>
                     } />
                     <Route path="/audit-logs" element={
-                        <ProtectedRoute roles={['admin', 'manager']}>
+                        <ProtectedRoute roles={['admin', 'manager']} featureKey={FEATURE_KEYS.AUDIT_LOGS}>
                             <PageSuspense><AuditLogPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
 
 
                     {/* Payroll Module */}
-                    <Route path="/payroll/dashboard" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><PayrollDashboard /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/profiles" element={<ProtectedRoute roles={['admin', 'manager', 'finance', 'hr']}><PageSuspense><EmployeePayrollProfiles /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/salary-structures" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><SalaryStructures /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/processing" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><PayrollProcessing /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/payslip" element={<ProtectedRoute roles={['admin', 'manager', 'finance', 'employee']}><PageSuspense><PayslipGeneration /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/taxes" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><TaxesDeductions /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/reports" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><PayrollReports /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/export" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><BankTransferExport /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/hour-management" element={<ProtectedRoute roles={['admin', 'manager', 'finance', 'hr']}><PageSuspense><HourManagement /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/policy" element={<ProtectedRoute roles={['admin', 'hr']}><PageSuspense><PolicySettings /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/run" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><RunPayroll /></PageSuspense></ProtectedRoute>} />
-                    <Route path="/payroll/history" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><PayrollHistory /></PageSuspense></ProtectedRoute>} />
-                    
+                    <Route path="/payroll/*" element={
+                        <ProtectedRoute roles={['admin', 'manager', 'finance', 'hr', 'employee']} featureKey={FEATURE_KEYS.PAYROLL}>
+                            <Routes>
+                                <Route path="dashboard" element={<PageSuspense><PayrollDashboard /></PageSuspense>} />
+                                <Route path="profiles" element={<PageSuspense><EmployeePayrollProfiles /></PageSuspense>} />
+                                <Route path="salary-structures" element={<PageSuspense><SalaryStructures /></PageSuspense>} />
+                                <Route path="processing" element={<PageSuspense><PayrollProcessing /></PageSuspense>} />
+                                <Route path="payslip" element={<PageSuspense><PayslipGeneration /></PageSuspense>} />
+                                <Route path="taxes" element={<PageSuspense><TaxesDeductions /></PageSuspense>} />
+                                <Route path="reports" element={<PageSuspense><PayrollReports /></PageSuspense>} />
+                                <Route path="export" element={<PageSuspense><BankTransferExport /></PageSuspense>} />
+                                <Route path="hour-management" element={<PageSuspense><HourManagement /></PageSuspense>} />
+                                <Route path="policy" element={<PageSuspense><PolicySettings /></PageSuspense>} />
+                                <Route path="run" element={<PageSuspense><RunPayroll /></PageSuspense>} />
+                                <Route path="history" element={<PageSuspense><PayrollHistory /></PageSuspense>} />
+                            </Routes>
+                        </ProtectedRoute>
+                    } />
+
                     {/* Super Admin only */}
                     <Route path="/admin/dashboard" element={
                         <ProtectedRoute roles={['super_admin']}>

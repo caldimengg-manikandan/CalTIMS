@@ -15,6 +15,8 @@ import { Lock } from 'lucide-react'
 import { authAPI } from '@/services/endpoints'
 
 import { hasPermission } from '@/utils/rbac'
+import { useFeatureAccess } from '@/hooks/useFeatureAccess'
+import { FEATURE_KEYS } from '@/constants/plans'
 
 const navSections = [
     {
@@ -30,17 +32,17 @@ const navSections = [
             { to: '/timesheets', icon: Clock, label: 'Timesheet Entry', permission: { module: 'Timesheets', submodule: 'Entry', action: 'view' }, end: true },
             { to: '/timesheets/history', icon: List, label: 'History', permission: { module: 'Timesheets', submodule: 'History', action: 'view' } },
             { to: '/timesheets/manage', icon: CheckSquare, label: 'Manage Timesheets', permission: { module: 'Timesheets', submodule: 'Management', action: 'view' } },
-            { to: '/timesheets/compliance', icon: AlertCircle, label: 'Compliance & Locks', permission: { module: 'Settings', submodule: 'Audit Logs', action: 'view' }, proFeature: true },
+            { to: '/timesheets/compliance', icon: AlertCircle, label: 'Compliance & Locks', permission: { module: 'Settings', submodule: 'Audit Logs', action: 'view' }, featureKey: FEATURE_KEYS.AUDIT_LOGS },
         ]
     },
     {
         label: 'Workspace',
         items: [
-            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', permission: { module: 'Leave Management', submodule: 'Leave Tracker', action: 'view' }, end: true },
-            { to: '/leaves/manage', icon: ClipboardList, label: 'Leave Management', permission: { module: 'Leave Management', submodule: 'Leave Requests', action: 'view' } },
-            { to: '/my-payslips', icon: Banknote, label: 'My Payslips', permission: { module: 'My Payslip', submodule: 'Payslip View', action: 'view' } },
+            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', permission: { module: 'Leave Management', submodule: 'Leave Tracker', action: 'view' }, end: true, featureKey: FEATURE_KEYS.LEAVE_MANAGEMENT },
+            { to: '/leaves/manage', icon: ClipboardList, label: 'Leave Management', permission: { module: 'Leave Management', submodule: 'Leave Requests', action: 'view' }, featureKey: FEATURE_KEYS.LEAVE_MANAGEMENT },
+            { to: '/my-payslips', icon: Banknote, label: 'My Payslips', permission: { module: 'My Payslip', submodule: 'Payslip View', action: 'view' }, featureKey: FEATURE_KEYS.PAYSLIPS },
             { to: '/announcements', icon: Megaphone, label: 'Announcements', permission: { module: 'Announcements', submodule: 'Announcements', action: 'view' } },
-            { to: '/incidents', icon: AlertCircle, label: 'Help & Support', permission: { module: 'Support', submodule: 'Help & Support', action: 'view' } },
+            { to: '/incidents', icon: AlertCircle, label: 'Help & Support', permission: { module: 'Support', submodule: 'Help & Support', action: 'view' }, featureKey: FEATURE_KEYS.SUPPORT },
         ]
     },
     {
@@ -53,6 +55,7 @@ const navSections = [
                 label: 'Payroll',
                 icon: Banknote,
                 permission: { module: 'Payroll' },
+                featureKey: FEATURE_KEYS.PAYROLL,
                 subItems: [
                     { to: '/payroll/dashboard', label: 'Dashboard', permission: { module: 'Payroll', submodule: 'Dashboard', action: 'view' } },
                     { to: '/payroll/profiles', label: 'Payroll Profiles', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'view' } },
@@ -65,17 +68,18 @@ const navSections = [
                     { to: '/payroll/export', label: 'Bank Export', permission: { module: 'Payroll', submodule: 'Bank Export', action: 'view' } },
                 ]
             },
-            { to: '/reports', icon: BarChart3, label: 'Reports', permission: { module: 'Reports', submodule: 'Reports Dashboard', action: 'view' } },
-            { to: '/audit-logs', icon: Shield, label: 'Audit Logs', permission: { module: 'Settings', submodule: 'Audit Logs', action: 'view' } },
+            { to: '/reports', icon: BarChart3, label: 'Reports', permission: { module: 'Reports', submodule: 'Reports Dashboard', action: 'view' }, featureKey: FEATURE_KEYS.REPORTS },
+            { to: '/audit-logs', icon: Shield, label: 'Audit Logs', permission: { module: 'Settings', submodule: 'Audit Logs', action: 'view' }, featureKey: FEATURE_KEYS.AUDIT_LOGS },
             { to: '/settings', icon: Settings2, label: 'Settings', permission: { module: 'Settings', submodule: 'Users & Roles', action: 'view' } },
         ]
     },
 ]
 
 export default function Sidebar() {
-    const { user, logout, isPro } = useAuthStore()
+    const { user, logout } = useAuthStore()
     const { sidebarOpen, setSidebar } = useUIStore()
     const { general, payroll, fetchGeneralSettings, fetchPayrollSettings } = useSettingsStore()
+    const { isFeatureLocked, planType } = useFeatureAccess()
     const navigate = useNavigate()
     const location = useLocation()
 
@@ -279,7 +283,8 @@ export default function Sidebar() {
                                                             : 'px-0 justify-center group-hover/sidebar:justify-start group-hover/sidebar:px-2.5',
                                                         isExpanded
                                                             ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400'
-                                                            : 'text-slate-500 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300'
+                                                            : 'text-slate-500 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300',
+                                                        item.featureKey && isFeatureLocked(item.featureKey) && 'opacity-50 grayscale cursor-not-allowed pointer-events-none select-none'
                                                     )}
                                                 >
                                                     <item.icon
@@ -341,10 +346,17 @@ export default function Sidebar() {
                                                 isActive
                                                     ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 font-semibold'
                                                     : 'text-slate-500 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300',
-                                                item.proFeature && !isPro() && 'opacity-50 grayscale cursor-not-allowed'
+                                                item.featureKey && isFeatureLocked(item.featureKey) && 'opacity-50 grayscale cursor-not-allowed'
                                             )}
                                             title={!sidebarOpen ? item.label : undefined}
-                                            onClick={() => { if (window.innerWidth < 1024) setSidebar(false) }}
+                                            onClick={(e) => { 
+                                                if (item.featureKey && isFeatureLocked(item.featureKey)) {
+                                                    e.preventDefault();
+                                                    toast.error(`The ${item.label} module is locked in the ${planType} plan. Please upgrade to Pro.`);
+                                                    return;
+                                                }
+                                                if (window.innerWidth < 1024) setSidebar(false) 
+                                            }}
                                         >
                                             {({ isActive }) => (
                                                 <>
@@ -361,15 +373,13 @@ export default function Sidebar() {
                                                     {sidebarOpen && (
                                                         <span className="truncate flex-1 text-left">{item.label}</span>
                                                     )}
-                                                    {sidebarOpen && item.proFeature && (
+                                                    {sidebarOpen && item.featureKey && isFeatureLocked(item.featureKey) && (
                                                         <span className={clsx(
                                                             "text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md border",
-                                                            !isPro()
-                                                                ? "bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/20 dark:border-violet-800"
-                                                                : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800"
+                                                            "bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/20 dark:border-violet-800"
                                                         )}>
-                                                            {!isPro() && <Lock size={8} className="inline mr-0.5" />}
-                                                            PRO
+                                                            <Lock size={8} className="inline mr-0.5" />
+                                                            LOCKED
                                                         </span>
                                                     )}
                                                     {!sidebarOpen && (

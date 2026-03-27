@@ -1,6 +1,4 @@
-'use strict';
-
-const PLAN_FEATURES = Object.freeze({
+export const PLAN_FEATURES = Object.freeze({
   TRIAL: {
     timesheets: true,
     reports: false,
@@ -42,4 +40,15 @@ const PLAN_FEATURES = Object.freeze({
   },
 });
 
-module.exports = { PLAN_FEATURES };
+export const FEATURE_KEYS = {
+    TIMESHEETS: 'timesheets',
+    REPORTS: 'reports',
+    ADVANCED_REPORTS: 'advanced_reports',
+    ANALYTICS: 'analytics',
+    SUPPORT: 'support',
+    PAYROLL: 'payroll',
+    LEAVE_MANAGEMENT: 'leave_management',
+    PAYSLIPS: 'payslips',
+    AUDIT_LOGS: 'audit_logs',
+    AI: 'ai'
+};

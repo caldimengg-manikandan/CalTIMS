@@ -7,8 +7,11 @@ const ApiResponse = require('../../shared/utils/apiResponse');
 const leaveService = require('./leave.service');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize, checkPermission } = require('../../middleware/rbac.middleware');
+const { checkSubscription, requireFeature } = require('../../middleware/subscription.middleware');
 
 router.use(authenticate);
+router.use(checkSubscription);
+router.use(requireFeature('leave_management'));
 
 router.post('/', asyncHandler(async (req, res) => {
   const leave = await leaveService.apply(req.body, req.user._id);

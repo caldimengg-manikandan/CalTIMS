@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const asyncHandler = require('../../shared/utils/asyncHandler');
 const { authenticate } = require('../../middleware/auth.middleware');
+const { checkSubscription, requireFeature } = require('../../middleware/subscription.middleware');
 const AuditLog = require('./audit.model');
 
 // @route   GET /api/audit
@@ -12,6 +13,8 @@ const AuditLog = require('./audit.model');
 router.get(
     '/',
     authenticate,
+    checkSubscription,
+    requireFeature('audit_logs'),
     asyncHandler(async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 50;

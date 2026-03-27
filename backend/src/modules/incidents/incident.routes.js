@@ -14,7 +14,7 @@ const router = express.Router();
 // All incident routes require authentication and active subscription
 router.use(authenticate);
 router.use(checkSubscription);
-router.use(requireFeature('incidents'));
+router.use(requireFeature('support'));
 
 // ─── Shared Routes (Employee & Admin) ────────────────────────────────────────
 // GET /api/v1/incidents - Lists tickets (Employees see own, Admins see all)

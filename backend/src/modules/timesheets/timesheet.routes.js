@@ -19,10 +19,10 @@ router.get('/admin-filters', checkPermission('viewReports'), timesheetController
 router.get('/admin-kpi', checkPermission('viewReports'), timesheetController.getAdminKpiSummary);
 
 // CRUD
-router.get('/compliance', checkPermission('viewReports'), requireFeature('reports'), timesheetController.getCompliance);
+router.get('/compliance', checkPermission('viewReports'), requireFeature('audit_logs'), timesheetController.getCompliance);
 router.post('/bulk', timesheetController.bulkUpsert);
 router.post('/bulk-submit', timesheetController.bulkSubmit);
-router.post('/admin-fill', checkPermission('manageEmployees'), requireFeature('timesheet'), timesheetController.adminFill);
+router.post('/admin-fill', checkPermission('manageEmployees'), requireFeature('timesheets'), timesheetController.adminFill);
 router.post('/', timesheetController.create);
 router.get('/', timesheetController.getAll);
 router.get('/:id', timesheetController.getById);
