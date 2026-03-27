@@ -8,7 +8,6 @@ const compression = require('compression');
 const mongoSanitize = require('express-mongo-sanitize');
 // ─── Body Parsing & Sanitization ─────────────────────────────────────────────
 const { errorHandler, notFound } = require('./middleware/error.middleware');
-const trialLock = require('./middleware/trial.middleware');
 const logger = require('./shared/utils/logger');
 
 // Route imports
@@ -27,10 +26,10 @@ const settingsRoutes = require('./modules/settings/settings.routes');
 const reportScheduleRoutes = require('./modules/reportSchedules/reportSchedule.routes');
 const taskRoutes = require('./modules/tasks/task.routes');
 const incidentRoutes = require('./modules/incidents/incident.routes');
-const systemRoutes = require('./modules/system/system.routes');
 const supportRoutes = require('./modules/support/support.routes');
 const { router: auditRoutes } = require('./modules/audit/audit.routes');
 const attendanceRoutes = require('./modules/attendance/attendance.routes');
+const adminRoutes = require('./modules/admin/admin.routes');
 const schedulerService = require('./shared/services/scheduler.service');
 
 const app = express();
@@ -99,9 +98,6 @@ app.get('/api/v1/health', (req, res) => {
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/v1/auth', authRoutes);
 
-// Apply trial lock to all other routes
-app.use(trialLock);
-
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/roles', roleRoutes);
 
@@ -116,14 +112,13 @@ app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/report-schedules', reportScheduleRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/incidents', incidentRoutes);
-app.use('/api/v1/system', systemRoutes);
 app.use('/api/v1/support', supportRoutes);
 app.use('/api/v1/audit', auditRoutes);
 app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/payroll', require('./modules/payroll/payroll.routes'));
 app.use('/api/v1/payslip-templates', require('./modules/payroll/payslipTemplate.routes'));
 app.use('/api/v1/policy', require('./modules/policyEngine/policy.routes'));
-
+app.use('/api/v1/admin', adminRoutes);
 
 // ─── Start Scheduler ────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {

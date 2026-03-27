@@ -65,17 +65,18 @@ const hikvisionService = {
     }
   },
 
-  /**
+   /**
    * Synchronize a single device.
    */
-  async syncDevice(deviceId) {
+  async syncDevice(deviceId, options = {}) {
+    const { startTime: manualStartTime = null, endTime: manualEndTime = null } = options;
     const device = await Device.findById(deviceId);
     if (!device || !device.enabled) return;
 
     const now = new Date();
     // Start from lastSyncAt or 24 hours ago if never synced
-    const startTime = device.lastSyncAt || new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const endTime = now;
+    const startTime = manualStartTime || device.lastSyncAt || new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const endTime = manualEndTime || now;
 
     let position = 0;
     let totalProcessed = 0;
@@ -108,7 +109,10 @@ const hikvisionService = {
         if (position >= totalMatches || events.length === 0) break;
       }
 
-      device.lastSyncAt = endTime;
+      // Only update lastSyncAt if it's a regular sync (not a manual range)
+      if (!manualStartTime && !manualEndTime) {
+        device.lastSyncAt = endTime;
+      }
       device.status = 'online';
       device.lastError = '';
       await device.save();
@@ -128,13 +132,13 @@ const hikvisionService = {
   /**
    * Sync all enabled Hikvision devices.
    */
-  async syncAllDevices() {
+  async syncAllDevices(options = {}) {
     const devices = await Device.find({ type: 'hikvision', enabled: true });
     const results = [];
 
     for (const device of devices) {
       try {
-        const result = await this.syncDevice(device._id);
+        const result = await this.syncDevice(device._id, options);
         results.push({ deviceId: device._id, ...result });
       } catch (err) {
         results.push({ deviceId: device._id, success: false, error: err.message });

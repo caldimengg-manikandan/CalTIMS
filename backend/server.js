@@ -71,9 +71,77 @@ async function autoBackfillLeaveTimesheets() {
   }
 }
 
+// One-time migration to unlock all users previously restricted by the trial system
+async function unlockAllUsers() {
+  try {
+    const User = require('./src/modules/users/user.model');
+    const result = await User.updateMany(
+      { $or: [{ isLocked: true }, { isTrialUser: true }] },
+      { $set: { isLocked: false, isTrialUser: false, trialExpiresAt: null } }
+    );
+    if (result.modifiedCount > 0) {
+      logger.info(`[Migration] Unlocked ${result.modifiedCount} users and disabled trial flags`);
+    }
+  } catch (err) {
+    logger.warn(`[Migration] Failed to unlock users: ${err.message}`);
+  }
+}
+
+// Ensure Super Admin exists
+async function ensureSuperAdmin() {
+  try {
+    const User = require('./src/modules/users/user.model');
+    const Organization = require('./src/modules/organizations/organization.model');
+    
+    const adminEmail = 'superadmin@timesheetpro.com';
+    const adminPassword = 'SuperAdmin@1234';
+
+    let superAdmin = await User.findOne({ email: adminEmail });
+    
+    if (!superAdmin) {
+      logger.info('[Seed] Super Admin not found. Creating...');
+      
+      // 1. Ensure a System Organization exists
+      let org = await Organization.findOne({ name: 'CALTIMS System' });
+      if (!org) {
+        org = await Organization.create({
+          name: 'CALTIMS System',
+          taxId: 'SYSTEM',
+          address: 'System Cloud'
+        });
+      }
+
+      // 2. Create User
+      superAdmin = await User.create({
+        name: 'Super Admin',
+        email: adminEmail,
+        password: adminPassword,
+        role: 'super_admin',
+        organizationId: org._id,
+        isActive: true,
+        isLocked: false,
+        employeeId: 'SA-0001'
+      });
+      
+      logger.info(`[Seed] Super Admin created successfully: ${adminEmail}`);
+    } else {
+      // Ensure role is correct even if user exists
+      if (superAdmin.role !== 'super_admin') {
+        superAdmin.role = 'super_admin';
+        await superAdmin.save();
+        logger.info('[Seed] Updated existing service user to super_admin role');
+      }
+    }
+  } catch (err) {
+    logger.error(`[Seed] Error ensuring Super Admin: ${err.message}`);
+  }
+}
+
 const startServer = async () => {
   try {
     await connectDB();
+    await ensureSuperAdmin();
+    await unlockAllUsers();
     await dropLegacyIndexes();
 
     // Auto-sync any approved leaves that are missing timesheet entries

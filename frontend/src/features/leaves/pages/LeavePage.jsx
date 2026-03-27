@@ -1240,7 +1240,7 @@ function EmployeeLeaveView() {
 export default function LeavePage() {
     const { user } = useAuthStore()
     const location = useLocation()
-    const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager'
+    const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'super_admin'
     const isManageView = location.pathname.includes('/manage')
 
     if (isAdminOrManager && isManageView) {

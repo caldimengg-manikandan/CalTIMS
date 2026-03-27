@@ -11,6 +11,9 @@ const authorize = (...roles) => {
     if (!req.user) {
       return next(new AppError('You must be logged in to access this resource.', 401));
     }
+    if (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'super_admin')) {
+      return next();
+    }
     if (!allowedRoles.includes(req.user.role)) {
       return next(new AppError('You do not have permission to perform this action.', 403));
     }
@@ -32,7 +35,7 @@ const checkPermission = (module, submodule, action) => {
     }
 
     // Safety: Admin role always bypasses granular checks
-    if (req.user.role && req.user.role.toLowerCase() === 'admin') {
+    if (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'super_admin')) {
       return next();
     }
 
@@ -87,7 +90,7 @@ const authorizeOwnerOrRole = (userIdParam = 'id', roles = ['admin']) => {
       return next(new AppError('You must be logged in.', 401));
     }
     const isOwner = req.user._id.toString() === req.params[userIdParam];
-    const hasRole = roles.map(r => r.toLowerCase()).includes(req.user.role.toLowerCase());
+    const hasRole = roles.map(r => r.toLowerCase()).includes(req.user.role.toLowerCase()) || req.user.role.toLowerCase() === 'super_admin';
     if (!isOwner && !hasRole) {
       return next(new AppError('You do not have permission to perform this action.', 403));
     }
@@ -95,4 +98,4 @@ const authorizeOwnerOrRole = (userIdParam = 'id', roles = ['admin']) => {
   };
 };
 
-module.exports = { authorize, authorizeOwnerOrRole, checkPermission };
+module.exports = { authorize, permit: authorize, authorizeOwnerOrRole, checkPermission };

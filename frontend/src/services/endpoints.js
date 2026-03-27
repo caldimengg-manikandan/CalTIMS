@@ -2,6 +2,7 @@ import api from './api'
 
 export const authAPI = {
   login: (data) => api.post('/auth/login', data),
+  register: (data) => api.post('/auth/register', data),
   logout: () => api.post('/auth/logout'),
   changePassword: (data) => api.post('/auth/change-password', data),
   forgotPassword: (data) => api.post('/auth/forgot-password', data),
@@ -168,15 +169,11 @@ export const taskAPI = {
   delete: (id) => api.delete(`/tasks/${id}`),
 }
 
-export const systemAPI = {
-  getVersion: () => api.get('/system/version'),
-  updateVersion: (version) => api.patch('/system/version', { version }),
-}
-
 export const attendanceAPI = {
   getAll: (params) => api.get('/attendance', { params }),
 }
 
+<<<<<<< HEAD
 export const payrollAPI = {
   getConfig: () => api.get('/payroll/config'),
   updateConfig: (data) => api.patch('/payroll/config', data),
@@ -232,6 +229,11 @@ export const payslipTemplateAPI = {
   uploadBackground: (formData) => api.post('/payslip-templates/upload-background', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
+=======
+export const adminAPI = {
+  getDashboardMetrics: () => api.get('/admin/dashboard-metrics'),
+  getOrganizations: () => api.get('/admin/organizations'),
+>>>>>>> origin/main
 }
 
 export default api

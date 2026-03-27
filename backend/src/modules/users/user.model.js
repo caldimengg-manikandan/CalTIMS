@@ -4,6 +4,12 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { ROLES } = require('../../constants');
 
+// Update ROLES if not already containing SUPER_ADMIN
+const ALL_ROLES = {
+  ...ROLES,
+  SUPER_ADMIN: 'super_admin'
+};
+
 const userSchema = new mongoose.Schema(
   {
     companyId: {
@@ -40,7 +46,23 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      default: ROLES.EMPLOYEE,
+      enum: Object.values(ALL_ROLES),
+      default: ALL_ROLES.EMPLOYEE,
+    },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
+    },
+    phoneNumber: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
+    lastLogin: {
+      type: Date,
+      default: null,
     },
     roleId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -120,7 +142,7 @@ const userSchema = new mongoose.Schema(
     },
     isTrialUser: {
       type: Boolean,
-      default: true,
+      default: false,
     },
     // Bank Details
     bankName: {
@@ -205,6 +227,9 @@ userSchema.methods.toPublicJSON = function () {
     leaveBalance: this.leaveBalance,
     isLocked: this.isLocked,
     isTrialUser: this.isTrialUser,
+    organizationId: this.organizationId,
+    phoneNumber: this.phoneNumber,
+    lastLogin: this.lastLogin,
     trialStartDate: this.trialStartDate,
     trialExpiresAt: this.trialExpiresAt,
     passwordChangedAt: this.passwordChangedAt,

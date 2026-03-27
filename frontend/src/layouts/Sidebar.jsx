@@ -10,7 +10,6 @@ import {
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import { useSystemStore } from '@/store/systemStore'
 import { clsx } from 'clsx'
 import { Lock } from 'lucide-react'
 import { authAPI } from '@/services/endpoints'
@@ -18,6 +17,12 @@ import { authAPI } from '@/services/endpoints'
 import { hasPermission } from '@/utils/rbac'
 
 const navSections = [
+    {
+        label: 'Super Admin',
+        items: [
+            { to: '/admin/dashboard', icon: BarChart3, label: 'Super Dashboard', roles: ['super_admin'] },
+        ]
+    },
     {
         label: 'Timesheets',
         items: [
@@ -158,7 +163,10 @@ export default function Sidebar() {
 
             {/* ─── Logo ───────────────────────────────────────── */}
             <div
-                onClick={() => window.location.href = '/dashboard'}
+                onClick={() => {
+                    const target = user?.role === 'super_admin' ? '/admin/dashboard' : '/dashboard'
+                    navigate(target)
+                }}
                 className={clsx(
                     'flex items-center border-b border-slate-100 dark:border-slate-800/60 flex-shrink-0 transition-all duration-300 cursor-pointer hover:bg-slate-50/80 dark:hover:bg-white/5 active:scale-[0.98] logo-3d-container',
                     sidebarOpen
@@ -276,6 +284,9 @@ export default function Sidebar() {
                                                         <ChevronDown size={13}
                                                             className={clsx('text-slate-400 transition-transform duration-200', isExpanded ? 'rotate-180' : '')}
                                                         />
+                                                    )}
+                                                    {!sidebarOpen && (
+                                                        <span className="truncate hidden group-hover/sidebar:block flex-1 text-left">{item.label}</span>
                                                     )}
                                                 </button>
 

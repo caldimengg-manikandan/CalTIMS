@@ -1,15 +1,15 @@
 import React from 'react'
 import { Zap } from 'lucide-react'
-import { useSystemStore } from '@/store/systemStore'
+import { useAuthStore } from '@/store/authStore'
 
 /**
  * A component that guards Pro features by showing an "Upgrade to Pro" splash screen
- * when the application is in 'basic' mode.
+ * when the organization is NOT on a PRO plan.
  */
 export default function ProGuard({ children, title, subtitle, icon: Icon = Zap }) {
-    const { appVersion } = useSystemStore()
+    const isPro = useAuthStore(state => state.isPro())
 
-    if (appVersion === 'basic') {
+    if (!isPro) {
         return (
             <div className="flex flex-col items-center justify-center h-[70vh] text-center animate-fade-in px-4">
                 <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-primary rounded-full flex items-center justify-center mb-6 shadow-xl shadow-indigo-500/10">

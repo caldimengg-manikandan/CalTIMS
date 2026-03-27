@@ -21,7 +21,6 @@ import {
     Search,
     Lock,
 } from 'lucide-react'
-import { useSystemStore } from '@/store/systemStore'
 import { clsx } from 'clsx'
 import TimesheetDetailsModal from '../components/TimesheetDetailsModal'
 import CreateIncidentModal from '@/components/incidents/CreateIncidentModal'
@@ -37,7 +36,7 @@ const STATUSES = ['All Status', 'draft', 'submitted', 'approved', 'rejected']
 
 
 export default function TimesheetHistoryPage() {
-    const { user } = useAuthStore()
+    const { user, isPro } = useAuthStore()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
     const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager'
@@ -57,7 +56,6 @@ export default function TimesheetHistoryPage() {
     const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false)
     const [incidentTimesheetId, setIncidentTimesheetId] = useState(null)
     const [search, setSearch] = useState('')
-    const { appVersion } = useSystemStore()
 
 
 
@@ -399,13 +397,13 @@ export default function TimesheetHistoryPage() {
                                                     }}
                                                     className={clsx(
                                                         "p-2 rounded-lg transition-all active:scale-95",
-                                                        appVersion === 'basic'
+                                                        !isPro()
                                                             ? "text-slate-300 cursor-not-allowed grayscale"
                                                             : "text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-white dark:hover:text-black"
                                                     )}
-                                                    title={appVersion === 'basic' ? "Unlock Pro to Report Issues" : "Report Issue"}
+                                                    title={!isPro() ? "Unlock Pro to Report Issues" : "Report Issue"}
                                                 >
-                                                    {appVersion === 'basic' ? <Lock size={16} /> : <AlertTriangle size={18} />}
+                                                    {!isPro() ? <Lock size={16} /> : <AlertTriangle size={18} />}
                                                 </button>
                                             </div>
                                         </td>

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { reportAPI, projectAPI, userAPI } from '@/services/endpoints'
-import { useSystemStore } from '@/store/systemStore'
+import { useAuthStore } from '@/store/authStore'
 import Spinner from '@/components/ui/Spinner'
 import ProGuard from '@/components/ui/ProGuard'
 import Modal from '@/components/ui/Modal'
@@ -122,7 +122,7 @@ const ProgressBar = ({ label, value, max, color, isBudget = false }) => {
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function ReportsPage() {
-    const { appVersion } = useSystemStore()
+    const { isPro } = useAuthStore()
     const [range, setRange] = useState({ from: '', to: '' })
     const [selectedProjectId, setSelectedProjectId] = useState('all')
     const [selectedUserId, setSelectedUserId] = useState('all')

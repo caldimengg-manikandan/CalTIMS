@@ -5,9 +5,10 @@ const router = express.Router();
 const timesheetController = require('./timesheet.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize, checkPermission } = require('../../middleware/rbac.middleware');
-const { requireProTier } = require('../../middleware/tier.middleware');
+const { checkSubscription, requireFeature } = require('../../middleware/subscription.middleware');
 
 router.use(authenticate);
+router.use(checkSubscription);
 
 // Dashboard summary for timesheets
 router.get('/summary', timesheetController.getDashboardSummary);
@@ -18,10 +19,10 @@ router.get('/admin-filters', checkPermission('viewReports'), timesheetController
 router.get('/admin-kpi', checkPermission('viewReports'), timesheetController.getAdminKpiSummary);
 
 // CRUD
-router.get('/compliance', checkPermission('manageSettings'), requireProTier, timesheetController.getCompliance);
+router.get('/compliance', checkPermission('viewReports'), requireFeature('reports'), timesheetController.getCompliance);
 router.post('/bulk', timesheetController.bulkUpsert);
 router.post('/bulk-submit', timesheetController.bulkSubmit);
-router.post('/admin-fill', checkPermission('manageEmployees'), requireProTier, timesheetController.adminFill);
+router.post('/admin-fill', checkPermission('manageEmployees'), requireFeature('timesheet'), timesheetController.adminFill);
 router.post('/', timesheetController.create);
 router.get('/', timesheetController.getAll);
 router.get('/:id', timesheetController.getById);

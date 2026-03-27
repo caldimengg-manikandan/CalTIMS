@@ -8,6 +8,14 @@ const loginSchema = Joi.object({
   macAddress: Joi.string().trim(),
 });
 
+const registerSchema = Joi.object({
+  email: Joi.string().email().lowercase().trim().required(),
+  password: Joi.string().min(8).required(),
+  name: Joi.string().trim().required(),
+  organizationName: Joi.string().trim().required(),
+  phoneNumber: Joi.string().trim().required(),
+});
+
 const changePasswordSchema = Joi.object({
   currentPassword: Joi.string().required(),
   newPassword: Joi.string().min(8).required(),
@@ -27,4 +35,4 @@ const resetPasswordSchema = Joi.object({
   }),
 });
 
-module.exports = { loginSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema };
+module.exports = { loginSchema, registerSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema };

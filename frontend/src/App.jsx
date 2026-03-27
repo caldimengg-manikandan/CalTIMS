@@ -1,13 +1,14 @@
-import React, { Suspense, lazy } from 'react'
+import React, { Suspense, lazy, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
-import { useSystemStore } from '@/store/systemStore'
+import { useUIStore } from '@/store/uiStore'
 import AppLayout from '@/layouts/AppLayout'
 import AuthLayout from '@/layouts/AuthLayout'
 import Spinner from '@/components/ui/Spinner'
 
 // ─── Lazy-loaded pages (code splitting) ──────────────────────────────────────
 const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'))
+const SignupPage = lazy(() => import('@/features/auth/pages/SignupPage'))
 const ForgotPassword = lazy(() => import('@/features/auth/pages/ForgotPasswordPage'))
 const ResetPassword = lazy(() => import('@/features/auth/pages/ResetPasswordPage'))
 
@@ -28,6 +29,8 @@ const ProfilePage = lazy(() => import('@/features/employees/pages/ProfilePage'))
 const SettingsLayout = lazy(() => import('@/features/settings/pages/SettingsLayout'))
 const CalendarPage = lazy(() => import('@/features/calendar/pages/CalendarPage'))
 const AdminCalendarPage = lazy(() => import('@/features/calendar/pages/AdminCalendarPage'))
+const AdminDashboard = lazy(() => import('@/features/admin/pages/AdminDashboard'))
+const Paywall = lazy(() => import('@/components/ui/Paywall'))
 const IncidentList = lazy(() => import('@/pages/incidents/IncidentList'))
 const IncidentDetails = lazy(() => import('@/pages/incidents/IncidentDetails'))
 const LandingPage = lazy(() => import('@/pages/LandingPage'))
@@ -52,8 +55,16 @@ const MyPayslips = lazy(() => import('@/features/payroll').then(m => ({ default:
 
 // ─── Protected Route Guard ───────────────────────────────────────────────────
 const ProtectedRoute = ({ children, roles }) => {
-    const { isAuthenticated, user } = useAuthStore()
+    const { isAuthenticated, user, subscription } = useAuthStore()
+    
     if (!isAuthenticated) return <Navigate to="/login" replace />
+
+    // Trial Expiration Check (Skip for Super Admin)
+    if (user?.role !== 'super_admin' && subscription?.status === 'EXPIRED') {
+        return <Paywall />
+    }
+
+    if (user?.role === 'super_admin') return children
     if (roles && !roles.includes(user?.role)) return <Navigate to="/dashboard" replace />
     return children
 }
@@ -70,14 +81,12 @@ const PageSuspense = ({ children }) => (
 )
 
 export default function App() {
-    const { isAuthenticated } = useAuthStore()
-    const { fetchVersion } = useSystemStore()
+    const { checkAuth, isTrial, subscription, user, isAuthenticated } = useAuthStore()
+    const { sidebarOpen } = useUIStore()
 
-    React.useEffect(() => {
-        if (isAuthenticated) {
-            fetchVersion()
-        }
-    }, [isAuthenticated, fetchVersion])
+    useEffect(() => {
+        checkAuth()
+    }, [checkAuth])
 
     return (
         <PageSuspense>
@@ -90,6 +99,7 @@ export default function App() {
                 {/* Auth routes */}
                 <Route element={<AuthLayout />}>
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/signup" element={<SignupPage />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password/:token" element={<ResetPassword />} />
                 </Route>
@@ -101,6 +111,8 @@ export default function App() {
                         <AppLayout />
                     </ProtectedRoute>
                 }>
+                    <Route index element={user?.role === 'super_admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />} />
+                    <Route path="/" element={user?.role === 'super_admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard" element={<PageSuspense><DashboardPage /></PageSuspense>} />
                     <Route path="/profile" element={<PageSuspense><ProfilePage /></PageSuspense>} />
                     <Route path="/timesheets" element={<PageSuspense><TimesheetEntry /></PageSuspense>} />
@@ -119,7 +131,7 @@ export default function App() {
                     {/* Manager + Admin */}
                     <Route path="/timesheets/manage" element={
                         <ProtectedRoute roles={['admin', 'manager']}>
-                            <PageSuspense><AdminTimesheets /></PageSuspense>
+                            <PageSuspense><AdminTimesheets isAdminView={true} /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/timesheets/compliance" element={
@@ -129,7 +141,7 @@ export default function App() {
                     } />
                     <Route path="/leaves/manage" element={
                         <ProtectedRoute roles={['admin', 'manager']}>
-                            <PageSuspense><LeavePage /></PageSuspense>
+                            <PageSuspense><LeavePage isAdminView={true} /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/projects" element={
@@ -194,10 +206,17 @@ export default function App() {
                     <Route path="/payroll/policy" element={<ProtectedRoute roles={['admin', 'hr']}><PageSuspense><PolicySettings /></PageSuspense></ProtectedRoute>} />
                     <Route path="/payroll/run" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><RunPayroll /></PageSuspense></ProtectedRoute>} />
                     <Route path="/payroll/history" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><PayrollHistory /></PageSuspense></ProtectedRoute>} />
+                    
+                    {/* Super Admin only */}
+                    <Route path="/admin/dashboard" element={
+                        <ProtectedRoute roles={['super_admin']}>
+                            <PageSuspense><AdminDashboard /></PageSuspense>
+                        </ProtectedRoute>
+                    } />
                 </Route>
 
                 <Route path="*" element={<PageSuspense><NotFoundPage /></PageSuspense>} />
-            </ Routes>
+            </Routes>
         </PageSuspense>
     )
 }
