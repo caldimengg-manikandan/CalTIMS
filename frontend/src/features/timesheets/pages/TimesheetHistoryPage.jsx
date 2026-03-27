@@ -385,7 +385,7 @@ export default function TimesheetHistoryPage() {
                                                 )}
                                                 <button
                                                     onClick={() => {
-                                                        if (appVersion === 'basic') {
+                                                        if (!isPro()) {
                                                             toast.error('Reporting issues via incidents is an Enterprise Pro feature.', {
                                                                 icon: '🔒',
                                                                 style: { borderRadius: '12px', background: '#1e293b', color: '#fff' }

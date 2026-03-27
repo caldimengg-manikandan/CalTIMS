@@ -73,10 +73,9 @@ const navSections = [
 ]
 
 export default function Sidebar() {
-    const { user, logout } = useAuthStore()
+    const { user, logout, isPro } = useAuthStore()
     const { sidebarOpen, setSidebar } = useUIStore()
     const { general, payroll, fetchGeneralSettings, fetchPayrollSettings } = useSettingsStore()
-    const { appVersion } = useSystemStore()
     const navigate = useNavigate()
     const location = useLocation()
 
@@ -331,7 +330,7 @@ export default function Sidebar() {
                                                 isActive
                                                     ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 font-semibold'
                                                     : 'text-slate-500 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300',
-                                                item.proFeature && appVersion === 'basic' && 'opacity-50 grayscale cursor-not-allowed'
+                                                item.proFeature && !isPro() && 'opacity-50 grayscale cursor-not-allowed'
                                             )}
                                             title={!sidebarOpen ? item.label : undefined}
                                             onClick={() => { if (window.innerWidth < 1024) setSidebar(false) }}
@@ -354,11 +353,11 @@ export default function Sidebar() {
                                                     {sidebarOpen && item.proFeature && (
                                                         <span className={clsx(
                                                             "text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md border",
-                                                            appVersion === 'basic'
+                                                            !isPro()
                                                                 ? "bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/20 dark:border-violet-800"
                                                                 : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800"
                                                         )}>
-                                                            {appVersion === 'basic' && <Lock size={8} className="inline mr-0.5" />}
+                                                            {!isPro() && <Lock size={8} className="inline mr-0.5" />}
                                                             PRO
                                                         </span>
                                                     )}
