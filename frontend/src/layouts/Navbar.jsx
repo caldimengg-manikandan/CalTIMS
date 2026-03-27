@@ -5,25 +5,9 @@ import { useAuthStore } from '@/store/authStore'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { authAPI } from '@/services/endpoints'
 import NotificationBell from '@/components/ui/NotificationBell'
+import ActivityFeed from '@/features/audit/components/ActivityFeed'
 import { useSettingsStore } from '@/store/settingsStore'
-
-const ROUTE_LABELS = {
-    'dashboard': 'Dashboard',
-    'profile': 'Account Settings',
-    'timesheets': 'Timesheet Entry',
-    'history': 'History',
-    'manage': 'Manage Timesheets',
-    'leaves': 'Leave Tracker',
-    'calendar': 'Calendar',
-    'announcements': 'Announcements',
-    'projects': 'Projects',
-    'tasks': 'Tasks',
-    'employees': 'Employees',
-    'reports': 'Reports',
-    'settings': 'Settings',
-    'new': 'New',
-    'edit': 'Edit'
-}
+import { ROUTE_LABELS } from '@/components/ui/PageHeader'
 
 export default function Navbar() {
     const { toggleSidebar, theme, toggleDarkMode } = useUIStore()
@@ -36,11 +20,11 @@ export default function Navbar() {
 
     const pathnames = location.pathname.split('/').filter(x => x)
 
-    // Helper to get label from path part
     const getLabel = (part) => {
         if (/^[0-9a-fA-F]{24}$/.test(part)) return 'Details'
-        return ROUTE_LABELS[part] || part.charAt(0).toUpperCase() + part.slice(1)
+        return ROUTE_LABELS[part] || part.charAt(0).toUpperCase() + part.slice(1).replace(/-/g, ' ')
     }
+
     const panelRef = useRef(null)
     const avatarRef = useRef(null)
     const timeoutRef = useRef(null)
@@ -51,38 +35,34 @@ export default function Navbar() {
     }
 
     const handleMouseLeave = () => {
-        timeoutRef.current = setTimeout(() => {
-            setProfileOpen(false)
-        }, 150)
+        timeoutRef.current = setTimeout(() => setProfileOpen(false), 150)
     }
 
     const initial = user?.name?.charAt(0)?.toUpperCase() || '?'
+    const fullInitials = user?.name
+        ? user.name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
+        : '?'
 
     const handleLogout = async () => {
         try {
             await authAPI.logout()
-            logout() // Local state last, so token is available for the API call
+            logout()
         } catch (err) {
             console.error('Logout error:', err)
-            logout() // Still logout locally if API fails
+            logout()
         } finally {
             navigate('/login', { replace: true })
         }
     }
 
-    // Close panel when clicking outside
     useEffect(() => {
         function handleClickOutside(e) {
             if (
                 panelRef.current && !panelRef.current.contains(e.target) &&
                 avatarRef.current && !avatarRef.current.contains(e.target)
-            ) {
-                setProfileOpen(false)
-            }
+            ) setProfileOpen(false)
         }
-        if (profileOpen) {
-            document.addEventListener('mousedown', handleClickOutside)
-        }
+        if (profileOpen) document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [profileOpen])
 
@@ -96,67 +76,56 @@ export default function Navbar() {
 
     const formatTime = () => {
         const tz = general?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
-        return new Intl.DateTimeFormat('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true,
-            timeZone: tz
-        }).format(currentTime)
+        return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: tz }).format(currentTime)
     }
 
     const formatDate = () => {
         const tz = general?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
-        return new Intl.DateTimeFormat('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            timeZone: tz
-        }).format(currentTime)
+        return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: tz }).format(currentTime)
     }
 
     const getRoleBadgeClass = (role) => {
         switch (role) {
-            case 'admin': return 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
-            case 'manager': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-            default: return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+            case 'admin':   return 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+            case 'manager': return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+            case 'hr':      return 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'
+            case 'finance': return 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+            default:        return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
         }
     }
 
     return (
         <>
-            <header className="h-14 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10 flex items-center justify-between px-5 flex-shrink-0 z-30 relative">
+            <header className="h-14 bg-white dark:bg-[#0a1120] border-b border-slate-100 dark:border-slate-800/60 flex items-center justify-between px-5 flex-shrink-0 z-30 relative">
                 {/* Left */}
-                <div className="flex items-center gap-1.5 overflow-hidden">
+                <div className="flex items-center gap-1.5 overflow-hidden min-w-0">
                     <button
                         onClick={toggleSidebar}
-                        className="p-2 -ml-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white rounded-lg transition-all duration-200 shrink-0"
+                        className="p-2 -ml-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200 rounded-lg transition-all duration-150 shrink-0"
                         title="Toggle sidebar"
                     >
-                        <Menu size={19} className="pointer-events-none" />
+                        <Menu size={18} className="pointer-events-none" />
                     </button>
 
-                    <div className="w-px h-5 bg-slate-200 dark:bg-white/10 mx-1.5 shrink-0" />
+                    <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
 
-                    {/* Navigation Breadcrumbs */}
-                    <nav className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                    {/* Breadcrumb */}
+                    <nav className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 min-w-0">
                         {location.pathname !== '/dashboard' && (
                             <button
                                 onClick={() => navigate(-1)}
-                                className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all flex items-center gap-1.5 font-bold text-xs shrink-0"
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 dark:hover:text-indigo-400 rounded-md transition-all flex items-center gap-1 text-xs font-semibold shrink-0"
                                 title="Go back"
                             >
-                                <ArrowLeft size={15} strokeWidth={2.5} className="pointer-events-none" />
-                                <span className="hidden sm:inline">Back</span>
+                                <ArrowLeft size={13} strokeWidth={2.5} className="pointer-events-none" />
                             </button>
                         )}
 
                         <Link
                             to="/dashboard"
-                            className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary transition-colors whitespace-nowrap shrink-0"
+                            className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors whitespace-nowrap shrink-0"
                         >
-                            DASHBOARD
+                            Home
                         </Link>
 
                         {pathnames.map((part, index) => {
@@ -167,15 +136,15 @@ export default function Navbar() {
 
                             return (
                                 <React.Fragment key={routeTo}>
-                                    <ChevronRight size={10} className="text-slate-300 flex-shrink-0" />
+                                    <ChevronRight size={9} className="text-slate-300 dark:text-slate-600 flex-shrink-0" />
                                     {isLast ? (
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-primary truncate whitespace-nowrap">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 truncate whitespace-nowrap">
                                             {label}
                                         </span>
                                     ) : (
                                         <Link
                                             to={routeTo}
-                                            className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary transition-colors truncate whitespace-nowrap"
+                                            className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate whitespace-nowrap"
                                         >
                                             {label}
                                         </Link>
@@ -187,105 +156,92 @@ export default function Navbar() {
                 </div>
 
                 {/* Right */}
-                <div className="flex items-center gap-2">
-                    {/* Dynamic Date & Time */}
-                    <div className="hidden md:flex flex-col items-end justify-center mr-3">
-                        <span className="text-xs font-bold text-slate-800 dark:text-white leading-tight">{formatTime()}</span>
-                        <span className="text-[10px] font-medium text-slate-400 capitalize bg-slate-100 dark:bg-white/10 px-1.5 rounded-sm mt-0.5">{formatDate()}</span>
+                <div className="flex items-center gap-1.5">
+                    {/* Clock */}
+                    <div className="hidden md:flex flex-col items-end justify-center mr-2">
+                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 leading-tight tabular-nums">{formatTime()}</span>
+                        <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mt-0.5">{formatDate()}</span>
                     </div>
 
-                    {/* Theme mode toggle */}
+                    {/* Dark mode */}
                     <button
                         onClick={toggleDarkMode}
-                        className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white rounded-lg transition-all duration-200"
-                        title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200 rounded-lg transition-all duration-150"
+                        title={theme === 'light' ? 'Dark mode' : 'Light mode'}
                     >
-                        {theme === 'light' ? <Moon size={17} className="pointer-events-none" /> : <Sun size={17} className="pointer-events-none" />}
+                        {theme === 'light'
+                            ? <Moon size={16} className="pointer-events-none" />
+                            : <Sun size={16} className="pointer-events-none" />}
                     </button>
 
-                    {/* Notifications Bell */}
+                    <ActivityFeed />
                     <NotificationBell />
 
-                    {/* Divider */}
-                    <div className="w-px h-6 bg-slate-200 dark:bg-white/10 mx-1" />
+                    <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
 
-                    {/* Circle Avatar — click to open profile panel */}
+                    {/* Avatar */}
                     <button
                         ref={avatarRef}
                         onClick={() => setProfileOpen(prev => !prev)}
                         onMouseEnter={handleMouseEnter}
                         onMouseLeave={handleMouseLeave}
-                        className={`w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold shadow-md transition-all duration-200 hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 ${profileOpen ? 'ring-2 ring-primary-500 ring-offset-2 scale-105' : ''}`}
-                        title="View profile"
+                        className={`w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm transition-all duration-150 hover:bg-indigo-700 hover:shadow-md focus:outline-none ${profileOpen ? 'ring-2 ring-indigo-500 ring-offset-2' : ''}`}
+                        title="Account"
                     >
-                        {initial}
+                        {fullInitials}
                     </button>
                 </div>
             </header>
 
-            {/* ── Profile Panel ───────────────────────────────── */}
-
-            {/* Panel */}
+            {/* ── Profile Panel ─────────────────────────────────────── */}
             <div
                 ref={panelRef}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
-                className={`fixed top-[60px] right-4 z-50 w-72 bg-white dark:bg-[#0f0f0f] rounded-2xl shadow-2xl border border-slate-100 dark:border-white/10 transition-all duration-250 origin-top-right ${profileOpen
+                className={`fixed top-[58px] right-4 z-50 w-72 bg-white dark:bg-[#0f1a2e] rounded-xl shadow-[0_8px_32px_-4px_rgb(0_0_0/0.18)] border border-slate-100 dark:border-slate-700/60 transition-all duration-200 origin-top-right ${profileOpen
                     ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
                     : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
                     }`}
             >
                 {/* Header */}
-                <div className="relative px-5 pt-6 pb-4 text-center border-b border-slate-100 dark:border-white/10">
+                <div className="relative px-5 pt-6 pb-5 text-center border-b border-slate-100 dark:border-slate-700/60">
                     <button
                         onClick={() => setProfileOpen(false)}
-                        className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg transition-all"
+                        className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all"
                     >
-                        <X size={14} />
+                        <X size={13} />
                     </button>
 
-                    {/* Big Avatar */}
-                    <div className="w-16 h-16 rounded-full gradient-primary flex items-center justify-center text-white text-2xl font-bold shadow-lg mx-auto mb-3">
-                        {initial}
+                    <div className="w-14 h-14 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-lg mx-auto mb-3">
+                        {fullInitials}
                     </div>
 
-                    <h3 className="font-bold text-slate-800 dark:text-white text-base leading-snug">{user?.name}</h3>
+                    <h3 className="font-semibold text-slate-800 dark:text-white text-sm leading-snug">{user?.name}</h3>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{user?.email}</p>
 
-                    <span className={`inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize mt-1 ${getRoleBadgeClass(user?.role)}`}>
+                    <span className={`inline-block text-[10px] font-semibold px-2.5 py-0.5 rounded-full capitalize mt-2 ${getRoleBadgeClass(user?.role)}`}>
                         {user?.role}
                     </span>
                 </div>
 
-                {/* Info rows */}
-                <div className="px-5 py-3 space-y-2.5">
-                    {user?.email && (
-                        <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-                            <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-white/5 flex items-center justify-center flex-shrink-0">
-                                <Mail size={13} className="text-slate-400" />
-                            </div>
-                            <span className="truncate">{user.email}</span>
-                        </div>
-                    )}
-                </div>
-
                 {/* Actions */}
-                <div className="px-5 py-2 border-t border-slate-100 dark:border-white/5 space-y-1">
+                <div className="px-3 py-2 space-y-0.5">
                     <button
                         onClick={() => { setProfileOpen(false); navigate('/profile') }}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-primary transition-all"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all"
                     >
-                        <Settings2 size={16} />
+                        <Settings2 size={15} className="text-slate-400" />
                         Account Settings
                     </button>
                 </div>
 
                 {/* Logout */}
-                <div className="px-4 pb-4 pt-1">
+                <div className="px-3 pb-3 pt-1">
                     <button
                         onClick={handleLogout}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 text-sm font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all duration-200"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-100 dark:hover:bg-red-900/30 transition-all duration-150"
                     >
-                        <LogOut size={15} />
+                        <LogOut size={14} />
                         Sign Out
                     </button>
                 </div>

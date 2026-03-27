@@ -1,14 +1,24 @@
 import React from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { userAPI } from '@/services/endpoints'
-import { ArrowLeft, Save, UserPlus } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { userAPI, roleAPI } from '@/services/endpoints'
+import { ArrowLeft, Save, UserPlus, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+
 
 export default function EmployeeFormPage() {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
+    
+    // Fetch dynamic roles
+    const { data: rolesData, isLoading: rolesLoading } = useQuery({
+        queryKey: ['roles'],
+        queryFn: () => roleAPI.getAll()
+    })
+    const roles = rolesData?.data?.data || []
+
     const [formData, setFormData] = React.useState({
+
         name: '',
         email: '',
         password: '',
@@ -17,8 +27,17 @@ export default function EmployeeFormPage() {
         designation: '',
         phone: '',
         employeeId: '',
-        joinDate: new Date().toISOString().split('T')[0]
+        joinDate: new Date().toISOString().split('T')[0],
+        bankName: '',
+        accountNumber: '',
+        branchName: '',
+        ifscCode: '',
+        uan: '',
+        pan: '',
+        aadhaar: '',
+        roleId: ''
     })
+
     const [errors, setErrors] = React.useState({})
 
     const mutation = useMutation({
@@ -44,6 +63,17 @@ export default function EmployeeFormPage() {
         if (!formData.phone?.trim() || formData.phone.replace(/\D/g, '').length !== 10) newErrors.phone = true
         if (!formData.joinDate) newErrors.joinDate = true
 
+        // Bank Details Validation
+        if (!formData.bankName?.trim()) newErrors.bankName = true
+        if (!formData.accountNumber?.trim() || !/^\d+$/.test(formData.accountNumber)) newErrors.accountNumber = true
+        if (!formData.branchName?.trim()) newErrors.branchName = true
+        if (!formData.ifscCode?.trim() || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(formData.ifscCode)) newErrors.ifscCode = true
+        if (!formData.uan?.trim()) newErrors.uan = true
+
+        // Personal Details Validation
+        if (!formData.pan?.trim() || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.pan)) newErrors.pan = true
+        if (!formData.aadhaar?.trim() || !/^\d{12}$/.test(formData.aadhaar)) newErrors.aadhaar = true
+
         setErrors(newErrors)
         return Object.keys(newErrors).length === 0
     }
@@ -60,7 +90,18 @@ export default function EmployeeFormPage() {
 
     const handleChange = (e) => {
         const { name, value } = e.target
-        setFormData(prev => ({ ...prev, [name]: value }))
+        
+        if (name === 'role') {
+            const selectedRole = roles.find(r => r.name.toLowerCase() === value.toLowerCase())
+            setFormData(prev => ({ 
+                ...prev, 
+                role: value,
+                roleId: selectedRole?._id || ''
+            }))
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }))
+        }
+
         if (errors[name]) {
             setErrors(prev => {
                 const updated = { ...prev }
@@ -69,6 +110,7 @@ export default function EmployeeFormPage() {
             })
         }
     }
+
 
     const getInputClass = (name) => {
         return `input ${errors[name] ? 'bg-red-50 border-red-300 ring-red-200' : ''}`
@@ -127,12 +169,25 @@ export default function EmployeeFormPage() {
 
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Role *</label>
-                        <select name="role" className={getInputClass('role')} value={formData.role} onChange={handleChange}>
-                            <option value="employee">Employee</option>
-                            <option value="manager">Manager</option>
-                            <option value="admin">Admin</option>
-                        </select>
+                        <div className="relative">
+                            <select 
+                                name="role" 
+                                className={getInputClass('role')} 
+                                value={formData.role} 
+                                onChange={handleChange}
+                                disabled={rolesLoading}
+                            >
+                                <option value="">Select Role</option>
+                                {roles.map(r => (
+                                    <option key={r._id} value={r.name.toLowerCase()}>{r.name}</option>
+                                ))}
+                            </select>
+                            {rolesLoading && (
+                                <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-primary animate-spin" />
+                            )}
+                        </div>
                     </div>
+
 
                     {/* Workplace Info */}
                     <div className="space-y-4 md:col-span-2 pt-2 pb-2 border-b border-slate-50 dark:border-white">
@@ -161,6 +216,58 @@ export default function EmployeeFormPage() {
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Joining Date *</label>
                         <input name="joinDate" type="date" max="9999-12-31" className={getInputClass('joinDate')}
                             value={formData.joinDate} onChange={handleChange} />
+                    </div>
+
+                    {/* Bank Details */}
+                    <div className="space-y-4 md:col-span-2 pt-2 pb-2 border-b border-slate-50 dark:border-white">
+                        <h3 className="font-semibold text-slate-800 dark:text-white">Bank Details</h3>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">Bank Name *</label>
+                        <input name="bankName" className={getInputClass('bankName')} placeholder="e.g. HDFC Bank"
+                            value={formData.bankName} onChange={handleChange} />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">Account Number *</label>
+                        <input name="accountNumber" className={getInputClass('accountNumber')} placeholder="Numeric only"
+                            value={formData.accountNumber} onChange={handleChange} />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">Branch Name *</label>
+                        <input name="branchName" className={getInputClass('branchName')} placeholder="e.g. Mumbai"
+                            value={formData.branchName} onChange={handleChange} />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">IFSC Code *</label>
+                        <input name="ifscCode" className={getInputClass('ifscCode')} placeholder="e.g. HDFC0001234"
+                            value={formData.ifscCode} onChange={handleChange} maxLength={11} />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">UAN Number *</label>
+                        <input name="uan" className={getInputClass('uan')} placeholder="e.g. 123456789012"
+                            value={formData.uan} onChange={handleChange} />
+                    </div>
+
+                    {/* Personal Details */}
+                    <div className="space-y-4 md:col-span-2 pt-2 pb-2 border-b border-slate-50 dark:border-white">
+                        <h3 className="font-semibold text-slate-800 dark:text-white">Personal Details</h3>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">PAN Number *</label>
+                        <input name="pan" className={getInputClass('pan')} placeholder="e.g. ABCDE1234F"
+                            value={formData.pan} onChange={handleChange} maxLength={10} />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">Aadhaar Number *</label>
+                        <input name="aadhaar" className={getInputClass('aadhaar')} placeholder="12 digit number"
+                            value={formData.aadhaar} onChange={handleChange} maxLength={12} />
                     </div>
                 </div>
 

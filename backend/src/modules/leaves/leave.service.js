@@ -12,6 +12,7 @@ const { getWeekStart, getWeekEnd, formatDate } = require('../../shared/utils/dat
 const notificationService = require('../notifications/notification.service');
 const notifier = require('../../shared/services/notifier');
 const { logAction } = require('../audit/audit.routes');
+const policyService = require('../policyEngine/policy.service');
 
 // ─── Helper: get or create the system "Leave" project ────────────────────────
 async function getOrCreateLeaveProject(managerId) {
@@ -33,9 +34,8 @@ async function getOrCreateLeaveProject(managerId) {
 
 // ─── Helper: get all working days between two dates respecting organization settings ─
 async function getWorkingDaysBetween(startDate, endDate) {
-  const Settings = mongoose.model('Settings');
-  const settings = await Settings.findOne().select('organization.workWeek').lean();
-  const workWeek = settings?.organization?.workWeek || 'Mon-Fri';
+  const policy = await policyService.getPolicy();
+  const workWeek = policy?.attendance?.workWeek || 'Mon-Fri';
 
   const days = [];
   const cur = new Date(startDate);
@@ -65,9 +65,8 @@ async function getWorkingDaysBetween(startDate, endDate) {
 
 // ─── Helper: group dates by ISO week ─────────────────────────────────────────
 async function getWeekStartDay() {
-  const Settings = mongoose.model('Settings');
-  const settings = await Settings.findOne().select('general.weekStartDay').lean();
-  return settings?.general?.weekStartDay || 'monday';
+  const policy = await policyService.getPolicy();
+  return policy?.attendance?.weekStartDay || 'monday';
 }
 
 function groupByWeek(dates, weekStartDay = 'monday') {
@@ -588,11 +587,11 @@ const leaveService = {
       Leave.distinct('leaveId'),
       Leave.distinct('status'),
       Leave.distinct('leaveType'),
-      Settings.findOne().select('leavePolicy.leaveTypes').lean()
+      policyService.getPolicy()
     ]);
 
     // Merge leave types from settings with those already in use
-    const settingsTypes = settings?.leavePolicy?.leaveTypes || [];
+    const settingsTypes = (settings?.leave?.types || []).map(t => t.name);
     const allLeaveTypes = [...new Set([...settingsTypes, ...leaveTypesInUse])];
 
     return {

@@ -1,59 +1,94 @@
 import React, { useState, useEffect } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
     LayoutDashboard, Clock, List, CheckSquare, Users, FolderOpen,
     Megaphone, BarChart3, ChevronLeft, ChevronRight,
-    Timer, ClipboardList, Settings2, ListTodo, AlertCircle
+    Timer, ClipboardList, Settings2, ListTodo, AlertCircle,
+    Banknote, ChevronDown, Shield, Activity, LogOut
 } from 'lucide-react'
+
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useSystemStore } from '@/store/systemStore'
 import { clsx } from 'clsx'
-import { toast } from 'react-hot-toast'
 import { Lock } from 'lucide-react'
+import { authAPI } from '@/services/endpoints'
+
+import { hasPermission } from '@/utils/rbac'
 
 const navSections = [
     {
         label: 'Timesheets',
         items: [
-            { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'employee'], end: true },
-            { to: '/timesheets', icon: Clock, label: 'Timesheet Entry', roles: ['admin', 'manager', 'employee'], end: true },
-            { to: '/timesheets/history', icon: List, label: 'History', roles: ['admin', 'manager', 'employee'] },
-            { to: '/timesheets/manage', icon: CheckSquare, label: 'Manage Timesheets', roles: ['admin', 'manager'] },
-            { to: '/timesheets/compliance', icon: AlertCircle, label: 'Compliance & Locks', roles: ['admin', 'manager'], proFeature: true },
+            { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', permission: { module: 'Timesheets', submodule: 'Dashboard', action: 'view' }, end: true },
+            { to: '/timesheets', icon: Clock, label: 'Timesheet Entry', permission: { module: 'Timesheets', submodule: 'Entry', action: 'view' }, end: true },
+            { to: '/timesheets/history', icon: List, label: 'History', permission: { module: 'Timesheets', submodule: 'History', action: 'view' } },
+            { to: '/timesheets/manage', icon: CheckSquare, label: 'Manage Timesheets', permission: { module: 'Timesheets', submodule: 'Management', action: 'view' } },
+            { to: '/timesheets/compliance', icon: AlertCircle, label: 'Compliance & Locks', permission: { module: 'Settings', submodule: 'Audit Logs', action: 'view' }, proFeature: true },
         ]
     },
     {
         label: 'Workspace',
         items: [
-            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', roles: ['employee', 'manager', 'admin'], proFeature: true, end: true },
-            { to: '/leaves/manage', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager'], proFeature: true },
-            { to: '/announcements', icon: Megaphone, label: 'Announcements', roles: ['admin'] },
-            { to: '/incidents', icon: AlertCircle, label: 'Help & Support', roles: ['admin', 'manager', 'employee'], proFeature: true },
+            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', permission: { module: 'Leave Management', submodule: 'Leave Tracker', action: 'view' }, end: true },
+            { to: '/leaves/manage', icon: ClipboardList, label: 'Leave Management', permission: { module: 'Leave Management', submodule: 'Leave Requests', action: 'view' } },
+            { to: '/my-payslips', icon: Banknote, label: 'My Payslips', permission: { module: 'My Payslip', submodule: 'Payslip View', action: 'view' } },
+            { to: '/announcements', icon: Megaphone, label: 'Announcements', permission: { module: 'Announcements', submodule: 'Announcements', action: 'view' } },
+            { to: '/incidents', icon: AlertCircle, label: 'Help & Support', permission: { module: 'Support', submodule: 'Help & Support', action: 'view' } },
         ]
     },
     {
         label: 'Management',
         items: [
-            { to: '/projects', icon: FolderOpen, label: 'Projects', roles: ['admin', 'manager'] },
-            { to: '/tasks', icon: ListTodo, label: 'Tasks', roles: ['admin'] },
-            { to: '/employees', icon: Users, label: 'Employees', roles: ['admin'] },
-            { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'manager'], proFeature: true },
-            { to: '/settings', icon: Settings2, label: 'Settings', roles: ['admin'] },
+            { to: '/projects', icon: FolderOpen, label: 'Projects', permission: { module: 'Projects', submodule: 'Project List', action: 'view' } },
+            { to: '/tasks', icon: ListTodo, label: 'Tasks', permission: { module: 'Tasks', submodule: 'Task Management', action: 'view' } },
+            { to: '/employees', icon: Users, label: 'Employees', permission: { module: 'Employees', submodule: 'Employee List', action: 'view' } },
+            {
+                label: 'Payroll',
+                icon: Banknote,
+                permission: { module: 'Payroll' },
+                subItems: [
+                    { to: '/payroll/dashboard', label: 'Dashboard', permission: { module: 'Payroll', submodule: 'Dashboard', action: 'view' } },
+                    { to: '/payroll/profiles', label: 'Payroll Profiles', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'view' } },
+                    { to: '/payroll/salary-structures', label: 'Salary Structures', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'view' } },
+                    { to: '/payroll/run', label: 'Payroll Engine', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'view' } },
+                    { to: '/payroll/history', label: 'Execution Ledger', permission: { module: 'Payroll', submodule: 'Execution Ledger', action: 'view' } },
+                    { to: '/payroll/payslip', label: 'Payslip Generation', permission: { module: 'Payroll', submodule: 'Payslip Generation', action: 'view' } },
+                    { to: '/payroll/taxes', label: 'Taxes & Deductions', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'view' } },
+                    { to: '/payroll/reports', label: 'Payroll Reports', permission: { module: 'Payroll', submodule: 'Payroll Reports', action: 'view' } },
+                    { to: '/payroll/export', label: 'Bank Export', permission: { module: 'Payroll', submodule: 'Bank Export', action: 'view' } },
+                ]
+            },
+            { to: '/reports', icon: BarChart3, label: 'Reports', permission: { module: 'Reports', submodule: 'Reports Dashboard', action: 'view' } },
+            { to: '/audit-logs', icon: Shield, label: 'Audit Logs', permission: { module: 'Settings', submodule: 'Audit Logs', action: 'view' } },
+            { to: '/settings', icon: Settings2, label: 'Settings', permission: { module: 'Settings', submodule: 'Users & Roles', action: 'view' } },
         ]
     },
 ]
 
 export default function Sidebar() {
-    const { user } = useAuthStore()
-    const { sidebarOpen, toggleSidebar, setSidebar } = useUIStore()
-    const { general } = useSettingsStore()
+    const { user, logout } = useAuthStore()
+    const { sidebarOpen, setSidebar } = useUIStore()
+    const { general, payroll, fetchGeneralSettings, fetchPayrollSettings } = useSettingsStore()
     const { appVersion } = useSystemStore()
     const navigate = useNavigate()
+    const location = useLocation()
+
+    useEffect(() => {
+        if (!general) fetchGeneralSettings()
+        if (!payroll) fetchPayrollSettings()
+    }, [])
+
+    // Auto-expand Payroll when on any payroll route
+    const isOnPayroll = location.pathname.startsWith('/payroll')
+    const [expandedItem, setExpandedItem] = useState(isOnPayroll ? 'Payroll' : null)
+
+    useEffect(() => {
+        if (isOnPayroll) setExpandedItem('Payroll')
+    }, [isOnPayroll])
 
     const [currentTime, setCurrentTime] = useState(new Date())
-
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000)
         return () => clearInterval(timer)
@@ -61,217 +96,274 @@ export default function Sidebar() {
 
     const formatTime = () => {
         const tz = general?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
-        return new Intl.DateTimeFormat('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true,
-            timeZone: tz
-        }).format(currentTime)
+        return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: tz }).format(currentTime)
     }
 
     const formatDate = () => {
         const tz = general?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
-        return new Intl.DateTimeFormat('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            timeZone: tz
-        }).format(currentTime)
+        return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz }).format(currentTime)
     }
 
-    const companyName = 'CALTIMS'
+    const companyName = general?.companyName || 'CALTIMS'
 
-    // Analog clock degrees
-    const secondsDeg = currentTime.getSeconds() * 6;
-    const minutesDeg = currentTime.getMinutes() * 6;
-    const hoursDeg = (currentTime.getHours() % 12) * 30 + currentTime.getMinutes() * 0.5;
+    // Analog clock
+    const secondsDeg = currentTime.getSeconds() * 6
+    const minutesDeg = currentTime.getMinutes() * 6
+    const hoursDeg = (currentTime.getHours() % 12) * 30 + currentTime.getMinutes() * 0.5
+
+    const fullInitials = user?.name
+        ? user.name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
+        : '?'
+
+    const getRoleColor = (role) => {
+        switch (role) {
+            case 'admin': return 'text-indigo-600 dark:text-indigo-400'
+            case 'manager': return 'text-emerald-600 dark:text-emerald-400'
+            case 'hr': return 'text-violet-600 dark:text-violet-400'
+            case 'finance': return 'text-amber-600 dark:text-amber-400'
+            default: return 'text-slate-500'
+        }
+    }
+
+    const handleLogout = async () => {
+        try {
+            await authAPI.logout()
+            logout()
+        } catch {
+            logout()
+        } finally {
+            navigate('/login', { replace: true })
+        }
+    }
 
     return (
         <aside className={clsx(
-            'fixed inset-y-0 left-0 z-50 flex flex-col bg-white dark:bg-black border-r border-slate-100 dark:border-white/10 transition-all duration-300 shadow-[2px_0_24px_0_rgba(var(--color-primary-rgb),0.06)] group/sidebar',
-            sidebarOpen ? 'w-64 translate-x-0' : 'w-[280px] -translate-x-full md:w-[68px] md:translate-x-0 md:hover:w-64 hover:shadow-2xl hover:shadow-primary-500/10'
+            'fixed inset-y-0 left-0 z-50 flex flex-col bg-white dark:bg-[#080d14] border-r border-slate-100 dark:border-slate-800/60 transition-all duration-300',
+            'shadow-[1px_0_16px_0_rgb(0_0_0/0.04)]',
+            'group/sidebar',
+            sidebarOpen
+                ? 'w-64 translate-x-0'
+                : 'w-[280px] -translate-x-full md:w-[68px] md:translate-x-0 md:hover:w-64 hover:shadow-xl hover:shadow-black/5'
         )}>
             <style>{`
                 @keyframes logo-3d {
-                    0% { transform: perspective(1000px) rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
-                    25% { transform: perspective(1000px) rotateX(5deg) rotateY(10deg) rotateZ(2deg); }
-                    50% { transform: perspective(1000px) rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
-                    75% { transform: perspective(1000px) rotateX(-5deg) rotateY(-10deg) rotateZ(-2deg); }
-                    100% { transform: perspective(1000px) rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+                    0%   { transform: perspective(1000px) rotateX(0deg) rotateY(0deg); }
+                    25%  { transform: perspective(1000px) rotateX(4deg) rotateY(8deg); }
+                    75%  { transform: perspective(1000px) rotateX(-4deg) rotateY(-8deg); }
+                    100% { transform: perspective(1000px) rotateX(0deg) rotateY(0deg); }
                 }
-                .logo-3d-container {
-                    transform-style: preserve-3d;
-                    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-                }
-                .group\\/sidebar:hover .logo-3d-container {
-                    animation: logo-3d 6s infinite ease-in-out;
-                }
-                .logo-3d-card {
-                    transform: translateZ(20px);
-                }
+                .logo-3d-container { transform-style: preserve-3d; transition: all 0.4s cubic-bezier(0.4,0,0.2,1); }
+                .group\\/sidebar:hover .logo-3d-container { animation: logo-3d 5s infinite ease-in-out; }
             `}</style>
-            {/* ── Logo ─────────────────────────────────────── */}
+
+            {/* ─── Logo ───────────────────────────────────────── */}
             <div
                 onClick={() => window.location.href = '/dashboard'}
                 className={clsx(
-                    'flex items-center border-b border-slate-100 dark:border-white/10 flex-shrink-0 transition-all duration-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 logo-3d-container',
-                    sidebarOpen ? 'gap-3 px-5 py-4' : 'justify-center px-0 py-4 group-hover/sidebar:justify-start group-hover/sidebar:px-5 group-hover/sidebar:gap-3'
+                    'flex items-center border-b border-slate-100 dark:border-slate-800/60 flex-shrink-0 transition-all duration-300 cursor-pointer hover:bg-slate-50/80 dark:hover:bg-white/5 active:scale-[0.98] logo-3d-container',
+                    sidebarOpen
+                        ? 'gap-3 px-4 py-3.5'
+                        : 'justify-center px-0 py-3.5 group-hover/sidebar:justify-start group-hover/sidebar:px-4 group-hover/sidebar:gap-3'
                 )}
             >
-                <div className="w-12 h-12 rounded-[1.25rem] bg-black/80 backdrop-blur-xl flex items-center justify-center flex-shrink-0 shadow-2xl shadow-black relative logo-3d-card overflow-hidden border border-white/20 group/logo-inner">
-
-                    {/* Minimalist Clock Markers (Ticks instead of numbers to avoid merging) */}
-                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-[2]">
-                        <div className="absolute top-2 w-[2px] h-[4px] bg-white/40 rounded-full" />
-                        <div className="absolute right-2 w-[4px] h-[2px] bg-white/40 rounded-full" />
-                        <div className="absolute bottom-2 w-[2px] h-[4px] bg-white/40 rounded-full" />
-                        <div className="absolute left-2 w-[4px] h-[2px] bg-white/40 rounded-full" />
+                {/* Clock icon */}
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0 shadow-sm relative overflow-hidden">
+                    {/* Ticks */}
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                        <div className="absolute top-1.5 w-[2px] h-[3px] bg-white/40 rounded-full" />
+                        <div className="absolute right-1.5 w-[3px] h-[2px] bg-white/40 rounded-full" />
+                        <div className="absolute bottom-1.5 w-[2px] h-[3px] bg-white/40 rounded-full" />
+                        <div className="absolute left-1.5 w-[3px] h-[2px] bg-white/40 rounded-full" />
                     </div>
-
-                    {/* Analog Clock Hands Overlay (Ultra-Thin Tech Style) */}
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[3]">
-                        {/* Hour Hand */}
-                        <div
-                            className="absolute w-[2px] h-[7px] bg-white rounded-full origin-bottom"
-                            style={{
-                                transform: `translateY(-3.5px) rotate(${hoursDeg}deg)`,
-                                bottom: '50%'
-                            }}
-                        />
-
-                        {/* Minute Hand */}
-                        <div
-                            className="absolute w-[1.5px] h-[11px] bg-white/70 rounded-full origin-bottom"
-                            style={{
-                                transform: `translateY(-5.5px) rotate(${minutesDeg}deg)`,
-                                bottom: '50%'
-                            }}
-                        />
-
-                        {/* Second Hand (Neon Focal Point) */}
-                        <div
-                            className="absolute w-[1px] h-[15px] bg-primary-400 rounded-full origin-bottom"
-                            style={{
-                                transform: `translateY(-7.5px) rotate(${secondsDeg}deg)`,
-                                bottom: '50%',
-                                filter: 'drop-shadow(0 0 3px rgba(96, 165, 250, 0.8))'
-                            }}
-                        />
-
-                        {/* Center Cap */}
-                        <div className="w-[4px] h-[4px] rounded-full bg-white z-[5] shadow-lg ring-1 ring-primary-500/30" />
+                    {/* Hands */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="absolute w-[2px] h-[6px] bg-white rounded-full origin-bottom" style={{ transform: `translateY(-3px) rotate(${hoursDeg}deg)`, bottom: '50%' }} />
+                        <div className="absolute w-[1.5px] h-[9px] bg-white/75 rounded-full origin-bottom" style={{ transform: `translateY(-4.5px) rotate(${minutesDeg}deg)`, bottom: '50%' }} />
+                        <div className="absolute w-[1px] h-[11px] bg-amber-300 rounded-full origin-bottom" style={{ transform: `translateY(-5.5px) rotate(${secondsDeg}deg)`, bottom: '50%', filter: 'drop-shadow(0 0 2px rgb(252 211 77 / 0.8))' }} />
+                        <div className="w-1 h-1 rounded-full bg-white z-10 ring-1 ring-white/30" />
                     </div>
-
-                    {/* Premium Surface Reflections */}
-                    <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/0 translate-x-[-200%] group-hover/sidebar:translate-x-[200%] transition-transform duration-[2s] z-[4]" />
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/15 to-transparent pointer-events-none z-[5]" />
                 </div>
+
                 {(sidebarOpen) && (
-                    <div className="overflow-hidden">
-                        <span className="font-extrabold text-base text-primary-600 dark:text-primary-400 block leading-tight">{companyName}</span>
-                        <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">Workspace</span>
+                    <div className="overflow-hidden min-w-0">
+                        <span className="font-bold text-sm text-slate-800 dark:text-white block leading-tight truncate">{companyName}</span>
+                        <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">Payroll Suite</span>
                     </div>
                 )}
                 {!sidebarOpen && (
-                    <div className="overflow-hidden w-0 group-hover/sidebar:w-auto transition-all duration-300 opacity-0 group-hover/sidebar:opacity-100 flex flex-col">
-                        <span className="font-extrabold text-base text-primary-600 dark:text-primary-400 block leading-tight whitespace-nowrap">{companyName}</span>
-                        <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase whitespace-nowrap">Workspace</span>
+                    <div className="overflow-hidden w-0 group-hover/sidebar:w-auto transition-all duration-300 opacity-0 group-hover/sidebar:opacity-100 flex flex-col min-w-0">
+                        <span className="font-bold text-sm text-slate-800 dark:text-white block leading-tight whitespace-nowrap">{companyName}</span>
+                        <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase whitespace-nowrap">Payroll Suite</span>
                     </div>
                 )}
             </div>
 
-            {/* ── Navigation ───────────────────────────────── */}
-            <nav className="flex-1 overflow-y-auto py-4 space-y-5 px-3">
+            {/* ─── Navigation ─────────────────────────────────── */}
+            <nav className="flex-1 overflow-y-auto py-3 space-y-4 px-2 no-scrollbar">
                 {navSections.map((section) => {
-                    const visibleItems = section.items.filter(
-                        item => !item.roles || item.roles.includes(user?.role)
-                    )
+                    const sectionItems = section.items.map(item => {
+                        if (item.label === 'Payroll' && item.subItems) {
+                            const isHourly = payroll?.calculationBasis === 'Hourly Rate'
+                            let subs = item.subItems.filter(sub => {
+                                if (isHourly && sub.label === 'Salary Structures') return false
+                                return true
+                            })
+                            if (isHourly) {
+                                const procIdx = subs.findIndex(s => s.label === 'Payroll Engine')
+                                if (!subs.find(s => s.label === 'Hour Management')) {
+                                    subs.splice(procIdx >= 0 ? procIdx : 2, 0, {
+                                        to: '/payroll/hour-management', label: 'Hour Management',
+                                        roles: ['admin', 'manager', 'finance', 'hr']
+                                    })
+                                }
+                            }
+                            return { ...item, subItems: subs }
+                        }
+                        return item
+                    })
+
+                    const visibleItems = sectionItems.filter(item => {
+                        if (!item.permission) return true
+                        return hasPermission(user, item.permission.module, item.permission.submodule, item.permission.action)
+                    })
                     if (visibleItems.length === 0) return null
 
                     return (
                         <div key={section.label}>
-                            {/* Section Label */}
-                            {(sidebarOpen) && (
-                                <p className="px-3 mb-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest select-none">
+                            {/* Section label */}
+                            {sidebarOpen ? (
+                                <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest select-none">
                                     {section.label}
                                 </p>
-                            )}
-                            {!sidebarOpen && (
+                            ) : (
                                 <>
-                                    <div className="h-px bg-slate-100 dark:bg-white/10 mx-2 mb-2 mt-1 group-hover/sidebar:hidden" />
-                                    <p className="px-3 mb-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest select-none hidden group-hover/sidebar:block">
+                                    <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 mb-2 mt-1 group-hover/sidebar:hidden" />
+                                    <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest select-none hidden group-hover/sidebar:block">
                                         {section.label}
                                     </p>
                                 </>
                             )}
 
                             <div className="space-y-0.5">
-                                {visibleItems.map((item) => (
-                                    <NavLink
-                                        key={`${item.to}-${item.label}`}
-                                        to={item.to}
-                                        end={item.end}
-                                        className={({ isActive }) => clsx(
-                                            'group relative flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer',
-                                            sidebarOpen ? 'px-3' : 'px-0 justify-center group-hover/sidebar:justify-start group-hover/sidebar:px-3',
-                                            isActive
-                                                ? 'bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-semibold shadow-sm'
-                                                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-800 dark:hover:text-white',
-                                            item.proFeature && appVersion === 'basic' && 'opacity-60 grayscale cursor-not-allowed'
-                                        )}
-                                        title={!sidebarOpen ? item.label : undefined}
-                                        onClick={(e) => {
-                                            if (item.proFeature && appVersion === 'basic') {
-                                                // Allow navigation so ProGuard can show the upgrade screen
-                                            }
-                                            if (window.innerWidth < 1024) {
-                                                setSidebar(false);
-                                            }
-                                        }}
-                                    >
-                                        {({ isActive }) => (
-                                            <>
-                                                {/* Active left border accent */}
-                                                {isActive && (
-                                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary-600 rounded-r-full" />
-                                                )}
+                                {visibleItems.map((item) => {
+                                    const hasSubItems = item.subItems && item.subItems.length > 0
+                                    const isExpanded = expandedItem === item.label
 
-                                                <item.icon
-                                                    size={18}
+                                    if (hasSubItems) {
+                                        return (
+                                            <div key={item.label} className="space-y-0.5">
+                                                <button
+                                                    onClick={() => setExpandedItem(isExpanded ? null : item.label)}
                                                     className={clsx(
-                                                        'flex-shrink-0 transition-colors pointer-events-none',
-                                                        isActive ? 'text-primary-600 dark:text-primary-400' : 'text-slate-400 group-hover:text-primary-500'
+                                                        'w-full group relative flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer text-left',
+                                                        sidebarOpen
+                                                            ? 'px-2.5'
+                                                            : 'px-0 justify-center group-hover/sidebar:justify-start group-hover/sidebar:px-2.5',
+                                                        isExpanded
+                                                            ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400'
+                                                            : 'text-slate-500 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300'
                                                     )}
-                                                />
-                                                {sidebarOpen && (
-                                                    <span className="truncate flex-1 text-left">{item.label}</span>
-                                                )}
-                                                {sidebarOpen && item.proFeature && (
-                                                    <span
+                                                >
+                                                    <item.icon
+                                                        size={17}
                                                         className={clsx(
-                                                            "flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md self-center border",
-                                                            appVersion === 'basic'
-                                                                ? "bg-[#f3e8ff] text-[#9333ea] border-[#e9d5ff]"
-                                                                : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
-                                                        )}>
-                                                        {appVersion === 'basic' && <Lock size={10} />} PRO
-                                                    </span>
-                                                )}
-                                                {!sidebarOpen && (
-                                                    <span className="truncate hidden group-hover/sidebar:block flex-1 text-left">{item.label}</span>
-                                                )}
+                                                            'flex-shrink-0',
+                                                            isExpanded ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'
+                                                        )}
+                                                    />
+                                                    {sidebarOpen && <span className="flex-1 truncate">{item.label}</span>}
+                                                    {sidebarOpen && (
+                                                        <ChevronDown size={13}
+                                                            className={clsx('text-slate-400 transition-transform duration-200', isExpanded ? 'rotate-180' : '')}
+                                                        />
+                                                    )}
+                                                </button>
 
-                                                {/* Tooltip when collapsed */}
-                                                {!sidebarOpen && (
-                                                    <span className="absolute left-full ml-3 px-2.5 py-1 bg-slate-800 dark:bg-white text-white dark:text-black text-xs font-semibold rounded-lg shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 group-hover/sidebar:hidden">
-                                                        {item.label}
-                                                    </span>
+                                                {isExpanded && sidebarOpen && (
+                                                    <div className="ml-8 space-y-0.5 border-l-2 border-slate-100 dark:border-slate-800 pl-3">
+                                                        {item.subItems
+                                                            .filter(sub => {
+                                                                if (!sub.permission) return true
+                                                                return hasPermission(user, sub.permission.module, sub.permission.submodule, sub.permission.action)
+                                                            })
+                                                            .map(sub => (
+                                                                <NavLink
+                                                                    key={sub.to}
+                                                                    to={sub.to}
+                                                                    className={({ isActive }) => clsx(
+                                                                        'block py-2 text-sm transition-colors rounded-lg px-3 font-medium',
+                                                                        isActive
+                                                                            ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 font-semibold'
+                                                                            : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'
+                                                                    )}
+                                                                    onClick={() => { if (window.innerWidth < 1024) setSidebar(false) }}
+                                                                >
+                                                                    {sub.label}
+                                                                </NavLink>
+                                                            ))}
+                                                    </div>
                                                 )}
-                                            </>
-                                        )}
-                                    </NavLink>
-                                ))}
+                                            </div>
+                                        )
+                                    }
+
+                                    return (
+                                        <NavLink
+                                            key={`${item.to}-${item.label}`}
+                                            to={item.to}
+                                            end={item.end}
+                                            className={({ isActive }) => clsx(
+                                                'group relative flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer',
+                                                sidebarOpen
+                                                    ? 'px-2.5'
+                                                    : 'px-0 justify-center group-hover/sidebar:justify-start group-hover/sidebar:px-2.5',
+                                                isActive
+                                                    ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 font-semibold'
+                                                    : 'text-slate-500 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300',
+                                                item.proFeature && appVersion === 'basic' && 'opacity-50 grayscale cursor-not-allowed'
+                                            )}
+                                            title={!sidebarOpen ? item.label : undefined}
+                                            onClick={() => { if (window.innerWidth < 1024) setSidebar(false) }}
+                                        >
+                                            {({ isActive }) => (
+                                                <>
+                                                    {isActive && (
+                                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-indigo-600 dark:bg-indigo-400 rounded-r-full" />
+                                                    )}
+                                                    <item.icon
+                                                        size={17}
+                                                        className={clsx(
+                                                            'flex-shrink-0',
+                                                            isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'
+                                                        )}
+                                                    />
+                                                    {sidebarOpen && (
+                                                        <span className="truncate flex-1 text-left">{item.label}</span>
+                                                    )}
+                                                    {sidebarOpen && item.proFeature && (
+                                                        <span className={clsx(
+                                                            "text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md border",
+                                                            appVersion === 'basic'
+                                                                ? "bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/20 dark:border-violet-800"
+                                                                : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800"
+                                                        )}>
+                                                            {appVersion === 'basic' && <Lock size={8} className="inline mr-0.5" />}
+                                                            PRO
+                                                        </span>
+                                                    )}
+                                                    {!sidebarOpen && (
+                                                        <span className="hidden group-hover/sidebar:block truncate flex-1 text-left">{item.label}</span>
+                                                    )}
+                                                    {!sidebarOpen && (
+                                                        <span className="absolute left-full ml-2.5 px-2 py-1 bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-xs font-semibold rounded-lg shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 group-hover/sidebar:hidden">
+                                                            {item.label}
+                                                        </span>
+                                                    )}
+                                                </>
+                                            )}
+                                        </NavLink>
+                                    )
+                                })}
                             </div>
                         </div>
                     )

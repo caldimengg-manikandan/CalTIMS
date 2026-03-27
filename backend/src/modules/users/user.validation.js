@@ -14,6 +14,21 @@ const createUserSchema = Joi.object({
   phone: Joi.string().trim().max(20),
   employeeId: Joi.string().trim().max(50),
   joinDate: Joi.date().iso(),
+  bankName: Joi.string().trim().required(),
+  accountNumber: Joi.string().trim().pattern(/^\d+$/).required().messages({
+    'string.pattern.base': 'Account number must be numeric',
+  }),
+  branchName: Joi.string().trim().required(),
+  ifscCode: Joi.string().trim().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).required().messages({
+    'string.pattern.base': 'Invalid IFSC code format',
+  }),
+  uan: Joi.string().trim().required(),
+  pan: Joi.string().trim().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).required().messages({
+    'string.pattern.base': 'Invalid PAN number format',
+  }),
+  aadhaar: Joi.string().trim().pattern(/^\d{12}$/).required().messages({
+    'string.pattern.base': 'Aadhaar number must be 12 digits',
+  }),
 });
 
 const updateUserSchema = Joi.object({
@@ -30,6 +45,13 @@ const updateUserSchema = Joi.object({
     sick: Joi.number().min(0),
     casual: Joi.number().min(0),
   }),
+  bankName: Joi.string().trim(),
+  accountNumber: Joi.string().trim().pattern(/^\d+$/),
+  branchName: Joi.string().trim(),
+  ifscCode: Joi.string().trim().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/),
+  uan: Joi.string().trim(),
+  pan: Joi.string().trim().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/),
+  aadhaar: Joi.string().trim().pattern(/^\d{12}$/),
 }).min(1).unknown(true);
 
 const changeRoleSchema = Joi.object({

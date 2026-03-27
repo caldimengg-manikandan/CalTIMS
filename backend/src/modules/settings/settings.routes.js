@@ -12,6 +12,7 @@ const emailService = require('../../shared/services/email.service');
 const { logAction } = require('../audit/audit.routes');
 const upload = require('../../middleware/upload.middleware');
 const net = require('net');
+const PermissionAuditLog = require('./permissionAuditLog.model');
 
 router.use(authenticate);
 
@@ -26,23 +27,39 @@ async function getOrCreateSettings() {
   }
 
   // Heal settings: If new permissions were added to the schema but are missing in the DB
-  const defaultRoles = Settings.schema.path('roles').options.default;
+  const rolesPath = Settings.schema.path('roles');
+  const defaultRoles = (rolesPath && rolesPath.options) ? rolesPath.options.default : [];
   let needsSync = false;
 
-  s.roles.forEach((role, idx) => {
-    if (role.isSystem) {
-      const defaultRole = defaultRoles.find(dr => dr.name === role.name);
-      if (defaultRole) {
-        // Find if any default permission is missing in the current role
-        for (const [perm, val] of Object.entries(defaultRole.permissions)) {
-          if (role.permissions[perm] === undefined) {
-            role.permissions[perm] = val;
+  if (s.roles && Array.isArray(s.roles) && Array.isArray(defaultRoles)) {
+    s.roles.forEach((role, idx) => {
+      if (role && role.isSystem) {
+        const defaultRole = defaultRoles.find(dr => dr.name === role.name);
+        if (defaultRole && defaultRole.permissions) {
+          // Hierarchical healing: ensure module exists
+          if (!role.permissions) {
+            role.permissions = {};
             needsSync = true;
           }
+          
+          Object.keys(defaultRole.permissions).forEach(module => {
+            if (!role.permissions[module]) {
+              role.permissions[module] = defaultRole.permissions[module];
+              needsSync = true;
+            } else {
+              // Module exists, check submodules
+              Object.keys(defaultRole.permissions[module]).forEach(submodule => {
+                if (!role.permissions[module][submodule]) {
+                  role.permissions[module][submodule] = defaultRole.permissions[module][submodule];
+                  needsSync = true;
+                }
+              });
+            }
+          });
         }
       }
-    }
-  });
+    });
+  }
 
   if (needsSync) {
     s.markModified('roles');
@@ -50,6 +67,86 @@ async function getOrCreateSettings() {
   }
 
   return s.toObject();
+}
+
+/**
+ * Diffs two sets of roles to find permission changes
+ * @param {Array} oldRoles 
+ * @param {Array} newRoles 
+ * @returns {Array} changes
+ */
+function diffRoles(oldRoles, newRoles) {
+  const allChanges = [];
+
+  // 1. Identify Role updates
+  newRoles.forEach(newR => {
+    const oldR = oldRoles.find(r => r.name === newR.name);
+    if (!oldR) {
+      // New Role created
+      allChanges.push({
+        roleName: newR.name,
+        action: 'CREATE_ROLE',
+        changes: [{ module: 'All', submodule: 'Role', action: 'Create', previous: null, current: 'Created' }]
+      });
+      return;
+    }
+
+    // Role exists, diff permissions
+    const roleChanges = [];
+    const oldP = oldR.permissions || {};
+    const newP = newR.permissions || {};
+
+    // Get all modules from both
+    const modules = new Set([...Object.keys(oldP), ...Object.keys(newP)]);
+
+    modules.forEach(mod => {
+      const oldMod = oldP[mod] || {};
+      const newMod = newP[mod] || {};
+      const submodules = new Set([...Object.keys(oldMod), ...Object.keys(newMod)]);
+
+      submodules.forEach(sub => {
+        const oldActions = oldMod[sub] || [];
+        const newActions = newMod[sub] || [];
+        
+        // Find added actions
+        newActions.forEach(act => {
+          if (!oldActions.includes(act)) {
+            roleChanges.push({ module: mod, submodule: sub, action: act, previous: false, current: true });
+          }
+        });
+
+        // Find removed actions
+        oldActions.forEach(act => {
+          if (!newActions.includes(act)) {
+            roleChanges.push({ module: mod, submodule: sub, action: act, previous: true, current: false });
+          }
+        });
+      });
+    });
+
+    if (roleChanges.length > 0) {
+      allChanges.push({
+        roleId: oldR._id,
+        roleName: oldR.name,
+        action: 'UPDATE_PERMISSION',
+        changes: roleChanges
+      });
+    }
+  });
+
+  // 2. Identify Deleted Roles
+  oldRoles.forEach(oldR => {
+    if (!newRoles.find(r => r.name === oldR.name)) {
+      allChanges.push({
+        roleId: oldR._id,
+        roleName: oldR.name,
+        action: 'DELETE_ROLE',
+        changes: [{ module: 'All', submodule: 'Role', action: 'Delete', previous: 'Existing', current: null }]
+      });
+    }
+  });
+
+  return allChanges;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -61,7 +158,7 @@ router.get('/', asyncHandler(async (req, res) => {
   const settings = await getOrCreateSettings();
 
   // Optionally populate recipients
-  if (settings.report?.recipientIds?.length) {
+  if (settings && settings.report && settings.report.recipientIds && settings.report.recipientIds.length) {
     settings.report.recipients = await User.find(
       { _id: { $in: settings.report.recipientIds } },
       'name email employeeId'
@@ -72,7 +169,7 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 // PUT /api/v1/settings
-router.put('/', checkPermission('manageSettings'), asyncHandler(async (req, res) => {
+router.put('/', checkPermission('Settings', 'Users & Roles', 'edit'), asyncHandler(async (req, res) => {
   const updates = req.body;
   const currentSettings = await getOrCreateSettings();
 
@@ -132,7 +229,25 @@ router.put('/', checkPermission('manageSettings'), asyncHandler(async (req, res)
     }
   }
 
-  // Audit Log
+  // ─── Permission Audit Log ──────────────────────────────────────────────────
+  if (updateDoc.roles) {
+    const roleChanges = diffRoles(currentSettings.roles || [], updateDoc.roles);
+    
+    if (roleChanges.length > 0) {
+      const auditEntries = roleChanges.map(change => ({
+        ...change,
+        changedByUserId: req.user._id,
+        changedByName: req.user.name,
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.headers['user-agent'],
+        timestamp: new Date()
+      }));
+
+      await PermissionAuditLog.insertMany(auditEntries);
+    }
+  }
+
+  // Audit Log (General Action Log)
   await logAction({
     userId: req.user._id,
     action: 'UPDATE_SETTINGS',
@@ -145,7 +260,7 @@ router.put('/', checkPermission('manageSettings'), asyncHandler(async (req, res)
 }));
 
 // POST /api/v1/settings/test-hikvision
-router.post('/test-hikvision', checkPermission('manageSettings'), asyncHandler(async (req, res) => {
+router.post('/test-hikvision', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
   const { ipAddress, port, username, password, host, appKey, appSecret } = req.body;
   
   const targetHost = host || ipAddress;
@@ -200,7 +315,7 @@ router.post('/test-hikvision', checkPermission('manageSettings'), asyncHandler(a
 }));
 
 // POST /api/v1/settings/upload-branding
-router.post('/upload-branding', checkPermission('manageSettings'), upload.single('file'), asyncHandler(async (req, res) => {
+router.post('/upload-branding', checkPermission('Settings', 'General', 'edit'), upload.single('file'), asyncHandler(async (req, res) => {
   if (!req.file) {
     return ApiResponse.error(res, { message: 'No file uploaded', statusCode: 400 });
   }
@@ -227,7 +342,7 @@ router.get('/report', asyncHandler(async (req, res) => {
 
   // Populate recipient details
   let recipients = [];
-  if (settings.report?.recipientIds?.length) {
+  if (settings && settings.report && settings.report.recipientIds && settings.report.recipientIds.length) {
     recipients = await User.find(
       { _id: { $in: settings.report.recipientIds } },
       'name email employeeId'
@@ -403,6 +518,65 @@ router.post('/general', authorize('admin', 'manager'), asyncHandler(async (req, 
   ApiResponse.success(res, { message: 'General settings saved', data: settings.general });
 }));
 
+// ════════════════════════════════════════════════════════════════════════════
+// PAYROLL SETTINGS
+// ════════════════════════════════════════════════════════════════════════════
+
+// GET /api/v1/settings/payroll
+router.get('/payroll', asyncHandler(async (req, res) => {
+  const settings = await getOrCreateSettings();
+  ApiResponse.success(res, { data: settings.payroll });
+}));
+
+// POST /api/v1/settings/payroll
+router.post('/payroll', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+  const { 
+    payrollMode, calculationBasis, defaultPaymentType, 
+    payslipHeader, payslipFooter, lopCalculationBasis, 
+    professionalTaxMonths, esiLimit, 
+    payslipTemplateUrl, payslipTemplateType, currencySymbol 
+  } = req.body;
+
+  const settings = await Settings.findOneAndUpdate(
+    {},
+    {
+      $set: {
+        ...(payrollMode !== undefined && { 'payroll.payrollMode': payrollMode }),
+        ...(calculationBasis !== undefined && { 'payroll.calculationBasis': calculationBasis }),
+        ...(defaultPaymentType !== undefined && { 'payroll.defaultPaymentType': defaultPaymentType }),
+        ...(payslipHeader !== undefined && { 'payroll.payslipHeader': payslipHeader }),
+        ...(payslipFooter !== undefined && { 'payroll.payslipFooter': payslipFooter }),
+        ...(lopCalculationBasis !== undefined && { 'payroll.lopCalculationBasis': lopCalculationBasis }),
+        ...(professionalTaxMonths !== undefined && { 'payroll.professionalTaxMonths': professionalTaxMonths }),
+        ...(esiLimit !== undefined && { 'payroll.esiLimit': esiLimit }),
+        ...(payslipTemplateUrl !== undefined && { 'payroll.payslipTemplateUrl': payslipTemplateUrl }),
+        ...(payslipTemplateType !== undefined && { 'payroll.payslipTemplateType': payslipTemplateType }),
+        ...(currencySymbol !== undefined && { 'payroll.currencySymbol': currencySymbol }),
+      },
+    },
+    { upsert: true, new: true }
+  ).lean();
+
+  ApiResponse.success(res, { message: 'Payroll settings saved', data: settings.payroll });
+}));
+
+// POST /api/v1/settings/upload-payslip-template
+router.post('/upload-payslip-template', checkPermission('Settings', 'General', 'edit'), upload.single('file'), asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return ApiResponse.error(res, { message: 'No file uploaded', statusCode: 400 });
+  }
+
+  const protocol = req.protocol;
+  const host = req.get('host');
+  const fileUrl = `${protocol}://${host}/uploads/branding/${req.file.filename}`;
+  // Using 'branding' folder for simplicity as it exists, but could be 'templates'
+
+  ApiResponse.success(res, { 
+    message: 'Payslip template uploaded successfully', 
+    data: { url: fileUrl, type: req.file.mimetype.includes('pdf') ? 'PDF' : 'HTML' } 
+  });
+}));
+
 // ── All employees list (for recipient picker) — admin/manager only ──────────
 router.get('/employees', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
   const q = req.query.q || '';
@@ -413,8 +587,42 @@ router.get('/employees', authorize('admin', 'manager'), asyncHandler(async (req,
       { email: { $regex: q, $options: 'i' } },
     ];
   }
-  const users = await User.find(filter, 'name email employeeId').sort({ name: 1 }).limit(100).lean();
+  const users = await User.find(filter, 'name email employeeId role designation').sort({ name: 1 }).limit(100).lean();
   ApiResponse.success(res, { data: users });
+}));
+
+// ─── Permission Audit Logs API ──────────────────────────────────────────────
+
+// GET /api/v1/settings/permission-audit-logs
+router.get('/permission-audit-logs', checkPermission('Settings', 'Audit Logs', 'view'), asyncHandler(async (req, res) => {
+  const { roleName, changedByName, action, startDate, endDate, search } = req.query;
+  
+  const query = {};
+  
+  if (roleName) query.roleName = roleName;
+  if (changedByName) query.changedByName = changedByName;
+  if (action) query.action = action;
+  
+  if (startDate || endDate) {
+    query.timestamp = {};
+    if (startDate) query.timestamp.$gte = new Date(startDate);
+    if (endDate) query.timestamp.$lte = new Date(endDate);
+  }
+  
+  if (search) {
+    query.$or = [
+      { roleName: { $regex: search, $options: 'i' } },
+      { changedByName: { $regex: search, $options: 'i' } },
+      { 'changes.module': { $regex: search, $options: 'i' } },
+      { 'changes.submodule': { $regex: search, $options: 'i' } }
+    ];
+  }
+
+  const logs = await PermissionAuditLog.find(query)
+    .sort({ timestamp: -1 })
+    .limit(100); // Pagination could be added but 100 for now
+    
+  ApiResponse.success(res, { data: logs });
 }));
 
 module.exports = router;

@@ -11,7 +11,8 @@
         "test:integration": "jest tests/integration --runInBand --forceExit",
         "test:coverage": "jest --coverage --runInBand --forceExit",
         "lint": "eslint src --ext .js",
-        "lint:fix": "eslint src --ext .js --fix"
+        "lint:fix": "eslint src --ext .js --fix",
+        "seed": "node seed.js"
     },
     "dependencies": {
         "axios": "^1.13.6",
@@ -35,6 +36,8 @@
         "node-cron": "^4.2.1",
         "nodemailer": "^6.10.1",
         "pdfkit": "^0.15.0",
+        "puppeteer": "^24.40.0",
+        "socket.io": "^4.8.3",
         "uuid": "^9.0.1",
         "winston": "^3.13.0",
         "winston-daily-rotate-file": "^5.0.0",

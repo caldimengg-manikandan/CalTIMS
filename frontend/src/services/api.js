@@ -5,14 +5,30 @@ import toast from 'react-hot-toast'
 const api = axios.create({
   baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
-  timeout: 10000,
+  timeout: 60000,
 })
 
 // ─── Request Interceptor: Attach access token ─────────────────────────────────
 api.interceptors.request.use(
   (config) => {
-    const token = useAuthStore.getState().accessToken
-    if (token) config.headers.Authorization = `Bearer ${token}`
+    let token = useAuthStore.getState().accessToken
+
+    // Fallback: check localStorage directly if store is out of sync
+    if (!token) {
+      try {
+        const authData = JSON.parse(localStorage.getItem('timesheet-auth'))
+        token = authData?.state?.accessToken
+      } catch (e) {
+        console.error('Failed to parse auth storage', e)
+      }
+    }
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    } else {
+      console.warn(`No auth token found for protected request: ${config.url}`)
+    }
+    
     return config
   },
   (error) => Promise.reject(error)

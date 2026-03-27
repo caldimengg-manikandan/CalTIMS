@@ -30,7 +30,9 @@ const authService = {
    * Login user and return tokens
    */
   async login({ email, password, macAddress }) {
-    const user = await User.findOne({ email, isActive: true }).select('+password');
+    const user = await User.findOne({ email, isActive: true })
+      .select('+password')
+      .populate('roleId');
     if (!user || !(await user.comparePassword(password))) {
       throw new AppError('Invalid email or password', 401);
     }
@@ -65,7 +67,13 @@ const authService = {
     user.refreshTokenHash = hashToken(refreshToken);
     await user.save({ validateBeforeSave: false });
 
-    return { accessToken, refreshToken, user: user.toPublicJSON() };
+    const publicUser = user.toPublicJSON();
+    if (user.roleId && user.roleId.permissions) {
+      publicUser.permissions = user.roleId.permissions;
+      publicUser.roleName = user.roleId.name;
+    }
+
+    return { accessToken, refreshToken, user: publicUser };
   },
 
   /**
@@ -81,7 +89,9 @@ const authService = {
       throw new AppError('Invalid or expired refresh token', 401);
     }
 
-    const user = await User.findById(decoded.sub).select('+refreshTokenHash');
+    const user = await User.findById(decoded.sub)
+      .select('+refreshTokenHash')
+      .populate('roleId');
     if (!user || !user.isActive) {
       throw new AppError('User not found or deactivated', 401);
     }
@@ -99,7 +109,13 @@ const authService = {
     user.refreshTokenHash = hashToken(newRefreshToken);
     await user.save({ validateBeforeSave: false });
 
-    return { accessToken, refreshToken: newRefreshToken };
+    const publicUser = user.toPublicJSON();
+    if (user.roleId && user.roleId.permissions) {
+      publicUser.permissions = user.roleId.permissions;
+      publicUser.roleName = user.roleId.name;
+    }
+
+    return { accessToken, refreshToken: newRefreshToken, user: publicUser };
   },
 
   /**
@@ -121,7 +137,7 @@ const authService = {
     }
 
     user.password = newPassword;
-    await user.save();
+    await user.save({ validateBeforeSave: false });
     return true;
   },
 
@@ -156,7 +172,7 @@ const authService = {
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     user.refreshTokenHash = null;
-    await user.save();
+    await user.save({ validateBeforeSave: false });
     return true;
   },
 };

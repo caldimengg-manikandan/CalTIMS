@@ -30,7 +30,25 @@ const CalendarPage = lazy(() => import('@/features/calendar/pages/CalendarPage')
 const AdminCalendarPage = lazy(() => import('@/features/calendar/pages/AdminCalendarPage'))
 const IncidentList = lazy(() => import('@/pages/incidents/IncidentList'))
 const IncidentDetails = lazy(() => import('@/pages/incidents/IncidentDetails'))
+const LandingPage = lazy(() => import('@/pages/LandingPage'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
+const AuditLogPage = lazy(() => import('@/features/audit/pages/AuditLogPage'))
+
+
+// --- Payroll Pages ---
+const PayrollDashboard = lazy(() => import('@/features/payroll').then(m => ({ default: m.PayrollDashboard })))
+const EmployeePayrollProfiles = lazy(() => import('@/features/payroll').then(m => ({ default: m.EmployeePayrollProfiles })))
+const SalaryStructures = lazy(() => import('@/features/payroll').then(m => ({ default: m.SalaryStructures })))
+const PayrollProcessing = lazy(() => import('@/features/payroll').then(m => ({ default: m.PayrollProcessing })))
+const PayslipGeneration = lazy(() => import('@/features/payroll').then(m => ({ default: m.PayslipGeneration })))
+const TaxesDeductions = lazy(() => import('@/features/payroll').then(m => ({ default: m.TaxesDeductions })))
+const PayrollReports = lazy(() => import('@/features/payroll').then(m => ({ default: m.PayrollReports })))
+const BankTransferExport = lazy(() => import('@/features/payroll').then(m => ({ default: m.BankTransferExport })))
+const HourManagement = lazy(() => import('@/features/payroll').then(m => ({ default: m.HourManagement })))
+const PolicySettings = lazy(() => import('@/features/payroll').then(m => ({ default: m.PolicySettings })))
+const RunPayroll = lazy(() => import('@/features/payroll').then(m => ({ default: m.RunPayroll })))
+const PayrollHistory = lazy(() => import('@/features/payroll').then(m => ({ default: m.PayrollHistory })))
+const MyPayslips = lazy(() => import('@/features/payroll').then(m => ({ default: m.MyPayslips })))
 
 // ─── Protected Route Guard ───────────────────────────────────────────────────
 const ProtectedRoute = ({ children, roles }) => {
@@ -64,6 +82,11 @@ export default function App() {
     return (
         <PageSuspense>
             <Routes>
+                {/* Public Landing Page / Redirect for Authed */}
+                <Route path="/" element={
+                    isAuthenticated ? <Navigate to="/dashboard" replace /> : <PageSuspense><LandingPage /></PageSuspense>
+                } />
+
                 {/* Auth routes */}
                 <Route element={<AuthLayout />}>
                     <Route path="/login" element={<LoginPage />} />
@@ -78,8 +101,6 @@ export default function App() {
                         <AppLayout />
                     </ProtectedRoute>
                 }>
-                    <Route index element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard" element={<PageSuspense><DashboardPage /></PageSuspense>} />
                     <Route path="/profile" element={<PageSuspense><ProfilePage /></PageSuspense>} />
                     <Route path="/timesheets" element={<PageSuspense><TimesheetEntry /></PageSuspense>} />
@@ -92,6 +113,7 @@ export default function App() {
                         </ProtectedRoute>
                     } />
                     <Route path="/incidents" element={<PageSuspense><IncidentList /></PageSuspense>} />
+                    <Route path="/my-payslips" element={<PageSuspense><MyPayslips /></PageSuspense>} />
                     <Route path="/incidents/:id" element={<PageSuspense><IncidentDetails /></PageSuspense>} />
 
                     {/* Manager + Admin */}
@@ -152,6 +174,26 @@ export default function App() {
                             <PageSuspense><SettingsLayout /></PageSuspense>
                         </ProtectedRoute>
                     } />
+                    <Route path="/audit-logs" element={
+                        <ProtectedRoute roles={['admin', 'manager']}>
+                            <PageSuspense><AuditLogPage /></PageSuspense>
+                        </ProtectedRoute>
+                    } />
+
+
+                    {/* Payroll Module */}
+                    <Route path="/payroll/dashboard" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><PayrollDashboard /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/profiles" element={<ProtectedRoute roles={['admin', 'manager', 'finance', 'hr']}><PageSuspense><EmployeePayrollProfiles /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/salary-structures" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><SalaryStructures /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/processing" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><PayrollProcessing /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/payslip" element={<ProtectedRoute roles={['admin', 'manager', 'finance', 'employee']}><PageSuspense><PayslipGeneration /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/taxes" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><TaxesDeductions /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/reports" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><PayrollReports /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/export" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><BankTransferExport /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/hour-management" element={<ProtectedRoute roles={['admin', 'manager', 'finance', 'hr']}><PageSuspense><HourManagement /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/policy" element={<ProtectedRoute roles={['admin', 'hr']}><PageSuspense><PolicySettings /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/run" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><RunPayroll /></PageSuspense></ProtectedRoute>} />
+                    <Route path="/payroll/history" element={<ProtectedRoute roles={['admin', 'manager', 'finance']}><PageSuspense><PayrollHistory /></PageSuspense></ProtectedRoute>} />
                 </Route>
 
                 <Route path="*" element={<PageSuspense><NotFoundPage /></PageSuspense>} />

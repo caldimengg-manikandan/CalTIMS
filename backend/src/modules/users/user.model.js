@@ -6,6 +6,12 @@ const { ROLES } = require('../../constants');
 
 const userSchema = new mongoose.Schema(
   {
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Company',
+      required: false,
+      index: true
+    },
     employeeId: {
       type: String,
       unique: true,
@@ -34,9 +40,15 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: Object.values(ROLES),
       default: ROLES.EMPLOYEE,
     },
+    roleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Role',
+      default: null,
+      index: true
+    },
+
     department: {
       type: String,
       trim: true,
@@ -110,6 +122,36 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Bank Details
+    bankName: {
+      type: String,
+      trim: true,
+    },
+    accountNumber: {
+      type: String,
+      trim: true,
+    },
+    branchName: {
+      type: String,
+      trim: true,
+    },
+    ifscCode: {
+      type: String,
+      trim: true,
+    },
+    uan: {
+      type: String,
+      trim: true,
+    },
+    // Personal Details
+    pan: {
+      type: String,
+      trim: true,
+    },
+    aadhaar: {
+      type: String,
+      trim: true,
+    },
   },
   {
     timestamps: true,
@@ -149,6 +191,7 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 userSchema.methods.toPublicJSON = function () {
   return {
     id: this._id,
+    companyId: this.companyId,
     employeeId: this.employeeId,
     name: this.name,
     email: this.email,
@@ -166,6 +209,13 @@ userSchema.methods.toPublicJSON = function () {
     trialExpiresAt: this.trialExpiresAt,
     passwordChangedAt: this.passwordChangedAt,
     createdAt: this.createdAt,
+    bankName: this.bankName,
+    accountNumber: this.accountNumber,
+    branchName: this.branchName,
+    ifscCode: this.ifscCode,
+    uan: this.uan,
+    pan: this.pan,
+    aadhaar: this.aadhaar,
   };
 };
 

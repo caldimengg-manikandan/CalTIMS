@@ -16,7 +16,9 @@ import Pagination from '@/components/ui/Pagination'
 const INITIAL_FORM = {
     name: '', email: '', password: '', role: 'employee',
     department: '', designation: '', phone: '', employeeId: '',
-    joinDate: new Date().toISOString().split('T')[0]
+    joinDate: new Date().toISOString().split('T')[0],
+    bankName: '', accountNumber: '', branchName: '', ifscCode: '',
+    uan: '', pan: '', aadhaar: ''
 }
 
 /* ─── Shared Modal Shell ─────────────────────────────────────── */
@@ -130,7 +132,10 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Role *</label>
                         <select name="role" className={getInputClass('role')} value={formData.role} onChange={onChange}>
                             <option value="employee">Employee</option>
+                            <option value="intern">Intern</option>
                             <option value="manager">Manager</option>
+                            <option value="hr">HR</option>
+                            <option value="finance">Finance</option>
                             <option value="admin">Admin</option>
                         </select>
                     </div>
@@ -157,6 +162,50 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Joining Date *</label>
                         <input name="joinDate" type="date" max="9999-12-31" className={getInputClass('joinDate')} value={formData.joinDate} onChange={onChange} />
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100 dark:border-slate-700">
+                    Bank Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Bank Name *</label>
+                        <input name="bankName" className={getInputClass('bankName')} placeholder="e.g. HDFC Bank" value={formData.bankName || ''} onChange={onChange} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Account Number *</label>
+                        <input name="accountNumber" className={getInputClass('accountNumber')} placeholder="Numeric only" value={formData.accountNumber || ''} onChange={onChange} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Branch Name *</label>
+                        <input name="branchName" className={getInputClass('branchName')} placeholder="e.g. Mumbai" value={formData.branchName || ''} onChange={onChange} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">IFSC Code *</label>
+                        <input name="ifscCode" className={getInputClass('ifscCode')} placeholder="e.g. HDFC0001234" value={formData.ifscCode || ''} onChange={onChange} maxLength={11} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">UAN Number *</label>
+                        <input name="uan" className={getInputClass('uan')} placeholder="e.g. 123456789012" value={formData.uan || ''} onChange={onChange} />
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100 dark:border-slate-700">
+                    Personal Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">PAN Number *</label>
+                        <input name="pan" className={getInputClass('pan')} placeholder="e.g. ABCDE1234F" value={formData.pan || ''} onChange={onChange} maxLength={10} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Aadhaar Number *</label>
+                        <input name="aadhaar" className={getInputClass('aadhaar')} placeholder="12 digit number" value={formData.aadhaar || ''} onChange={onChange} maxLength={12} />
                     </div>
                 </div>
             </div>
@@ -256,6 +305,18 @@ export default function EmployeesPage() {
         if (!data.designation?.trim() || data.designation.length > 50) errors.designation = true
         if (!data.phone?.trim() || data.phone.replace(/\D/g, '').length !== 10) errors.phone = true
         if (!data.joinDate) errors.joinDate = true
+
+        // Bank Details Validation
+        if (!data.bankName?.trim()) errors.bankName = true
+        if (!data.accountNumber?.trim() || !/^\d+$/.test(data.accountNumber)) errors.accountNumber = true
+        if (!data.branchName?.trim()) errors.branchName = true
+        if (!data.ifscCode?.trim() || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(data.ifscCode)) errors.ifscCode = true
+        if (!data.uan?.trim()) errors.uan = true
+
+        // Personal Details Validation
+        if (!data.pan?.trim() || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(data.pan)) errors.pan = true
+        if (!data.aadhaar?.trim() || !/^\d{12}$/.test(data.aadhaar)) errors.aadhaar = true
+
         return errors
     }
 
@@ -318,7 +379,14 @@ export default function EmployeesPage() {
             designation: emp.designation || '',
             phone: emp.phone || '',
             employeeId: emp.employeeId || '',
-            joinDate: emp.joinDate ? emp.joinDate.split('T')[0] : new Date().toISOString().split('T')[0]
+            joinDate: emp.joinDate ? emp.joinDate.split('T')[0] : new Date().toISOString().split('T')[0],
+            bankName: emp.bankName || '',
+            accountNumber: emp.accountNumber || '',
+            branchName: emp.branchName || '',
+            ifscCode: emp.ifscCode || '',
+            uan: emp.uan || '',
+            pan: emp.pan || '',
+            aadhaar: emp.aadhaar || ''
         })
     }
 
@@ -460,7 +528,10 @@ export default function EmployeesPage() {
                                                         <option value="">All Roles</option>
                                                         <option value="admin">Admin</option>
                                                         <option value="manager">Manager</option>
+                                                        <option value="hr">HR</option>
+                                                        <option value="finance">Finance</option>
                                                         <option value="employee">Employee</option>
+                                                        <option value="intern">Intern</option>
                                                     </select>
                                                 </div>
 
@@ -669,6 +740,13 @@ export default function EmployeesPage() {
                                         { icon: <Briefcase size={15} />, label: 'Designation', value: viewEmp.designation || '—' },
                                         { icon: <CalendarDays size={15} />, label: 'Joining Date', value: viewEmp.joinDate ? format(new Date(viewEmp.joinDate), 'MMM d, yyyy') : '—' },
                                         { icon: <ShieldCheck size={15} />, label: 'Employee ID', value: viewEmp.employeeId },
+                                        { icon: <ShieldCheck size={15} />, label: 'Bank Name', value: viewEmp.bankName || '—' },
+                                        { icon: <ShieldCheck size={15} />, label: 'Account Number', value: viewEmp.accountNumber || '—' },
+                                        { icon: <ShieldCheck size={15} />, label: 'Branch Name', value: viewEmp.branchName || '—' },
+                                        { icon: <ShieldCheck size={15} />, label: 'IFSC Code', value: viewEmp.ifscCode || '—' },
+                                        { icon: <ShieldCheck size={15} />, label: 'UAN', value: viewEmp.uan || '—' },
+                                        { icon: <ShieldCheck size={15} />, label: 'PAN', value: viewEmp.pan || '—' },
+                                        { icon: <ShieldCheck size={15} />, label: 'Aadhaar', value: viewEmp.aadhaar || '—' },
                                     ].map(({ icon, label, value }) => (
                                         <div key={label} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
                                             <span className="text-slate-400 shrink-0">{icon}</span>

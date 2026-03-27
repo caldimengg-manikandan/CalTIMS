@@ -14,6 +14,7 @@ const emailService = require('../../shared/services/email.service');
 const notifier = require('../../shared/services/notifier');
 const Settings = require('../settings/settings.model');
 const { logAction } = require('../audit/audit.routes');
+const policyService = require('../policyEngine/policy.service');
 const PERMISSION_MARKER = '__PERMISSION__';
 
 function calculateWeeklyHours(rows) {
@@ -52,16 +53,16 @@ function calculateWeeklyHours(rows) {
  * Internal helper to fetch weekStartDay from settings
  */
 async function getWeekStartDay() {
-  const settings = await Settings.findOne().select('general.weekStartDay').lean();
-  return settings?.general?.weekStartDay || 'monday';
+  const policy = await policyService.getPolicy();
+  return policy?.attendance?.weekStartDay || 'monday';
 }
 
 /**
  * Internal helper to check if a week should be frozen
  */
 async function getFreezeInfo(weekStartDate) {
-  const settings = await Settings.findOne().select('compliance.timesheetFreezeDay').lean();
-  const freezeDay = settings?.compliance?.timesheetFreezeDay || 28;
+  const policy = await policyService.getPolicy();
+  const freezeDay = policy?.compliance?.timesheetFreezeDay || 28;
   
   const today = new Date();
   const currentDay = today.getDate();
@@ -374,9 +375,10 @@ const timesheetService = {
   },
 
   async validateLimits(timesheet) {
-    const settingsDoc = await Settings.findOne().lean();
-    const limits = settingsDoc?.timesheet || {};
-    const compliance = settingsDoc?.compliance || {};
+    const policy = await policyService.getPolicy();
+    const limits = policy?.attendance || {}; // Map some limits if needed, or keep from settings if not in policy
+    const compliance = policy?.compliance || {};
+    const settingsDoc = await Settings.findOne().lean(); // Fallback for specific limits not yet in policy
 
     // ── Compliance Check: Backdated Entries ──────────────────────────────────
     // Restriction: Cannot fill timesheets for weeks prior to the current week
@@ -770,9 +772,8 @@ const timesheetService = {
       ];
     }
 
-    const Settings = mongoose.model('Settings');
-    const settings = await Settings.findOne().select('general.weekStartDay').lean();
-    const wsd = settings?.general?.weekStartDay || 'monday';
+    const policy = await policyService.getPolicy();
+    const wsd = policy?.attendance?.weekStartDay || 'monday';
     const weekStart = getWeekStart(new Date(weekStartDate), wsd);
 
     const [employees, total] = await Promise.all([

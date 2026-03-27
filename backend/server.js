@@ -12,13 +12,23 @@ const PORT = process.env.PORT || 5000;
 // Drop legacy overly-restrictive unique index on timesheets (one-time migration)
 async function dropLegacyIndexes() {
   try {
-    const col = mongoose.connection.collection('timesheets');
-    await col.dropIndex('userId_1_weekStartDate_1');
-    logger.info('Dropped legacy unique index: userId_1_weekStartDate_1');
+    const timesheetCol = mongoose.connection.collection('timesheets');
+    await timesheetCol.dropIndex('userId_1_weekStartDate_1');
+    logger.info('Dropped core legacy unique index: userId_1_weekStartDate_1');
   } catch (err) {
-    // Error code 27 = IndexNotFound — that's fine, already dropped
     if (err.code !== 27 && !err.message?.includes('index not found')) {
-      logger.warn(`Index drop skipped: ${err.message}`);
+      logger.warn(`Timesheet index drop skipped: ${err.message}`);
+    }
+  }
+
+  try {
+    const structureCol = mongoose.connection.collection('rolesalarystructures');
+    // We try to drop any index that might be on roleName, most likely roleName_1
+    await structureCol.dropIndex('roleName_1');
+    logger.info('Dropped legacy unique index on payroll: roleName_1');
+  } catch (err) {
+    if (err.code !== 27 && !err.message?.includes('index not found')) {
+      logger.warn(`Structure index drop skipped: ${err.message}`);
     }
   }
 }
@@ -69,9 +79,16 @@ const startServer = async () => {
     // Auto-sync any approved leaves that are missing timesheet entries
     await autoBackfillLeaveTimesheets();
 
+    // Seed Payslip Templates
+    const templateService = require('./src/modules/payroll/payslipTemplate.service');
+    await templateService.seedTemplates();
+
     const server = http.createServer(app);
+    const socketService = require('./src/shared/services/socket.service');
+    socketService.init(server);
 
     server.listen(PORT, () => {
+
       logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
     });
 

@@ -20,9 +20,12 @@ const authorize = (...roles) => {
 
 /**
  * Granular permission check middleware factory.
- * Usage: checkPermission('approveTimesheets')
+ * Supports hierarchical checks: checkPermission('Payroll', 'Payroll Engine', 'approve')
+ * @param {string} module - The top-level module (e.g., 'Payroll')
+ * @param {string} submodule - (Optional) The submodule (e.g., 'Payroll Engine')
+ * @param {string} action - (Optional) The specific action (e.g., 'run')
  */
-const checkPermission = (permissionKey) => {
+const checkPermission = (module, submodule, action) => {
   return async (req, res, next) => {
     if (!req.user) {
       return next(new AppError('You must be logged in to access this resource.', 401));
@@ -47,12 +50,27 @@ const checkPermission = (permissionKey) => {
         return next(new AppError(`Role '${req.user.role}' not found in permission profiles.`, 403));
       }
 
-      // Check the specific permission
-      if (userRole.permissions && userRole.permissions[permissionKey]) {
-        return next();
+      const permissions = userRole.permissions || {};
+
+      // Hierarchical validation
+      if (!permissions[module]) {
+        return next(new AppError(`Forbidden: No access to module: ${module}`, 403));
       }
 
-      return next(new AppError('You do not have the required permission to perform this action.', 403));
+      if (submodule) {
+        if (!permissions[module][submodule]) {
+          return next(new AppError(`Forbidden: No access to submodule: ${submodule} in ${module}`, 403));
+        }
+
+        if (action) {
+          const allowedActions = permissions[module][submodule];
+          if (!Array.isArray(allowedActions) || !allowedActions.includes(action)) {
+            return next(new AppError(`Forbidden: Missing action: ${action} in ${module} > ${submodule}`, 403));
+          }
+        }
+      }
+
+      return next();
     } catch (error) {
       next(error);
     }

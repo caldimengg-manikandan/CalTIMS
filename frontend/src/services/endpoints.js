@@ -22,6 +22,12 @@ export const userAPI = {
   delete: (id) => api.delete(`/users/${id}`),
 }
 
+export const roleAPI = {
+  getAll: () => api.get('/roles'),
+  create: (data) => api.post('/roles', data),
+}
+
+
 export const timesheetAPI = {
   getAll: (params) => api.get('/timesheets', { params }),
   getById: (id) => api.get(`/timesheets/${id}`),
@@ -121,12 +127,20 @@ export const settingsAPI = {
   // Full Enterprise Settings
   getSettings: () => api.get('/settings'),
   updateSettings: (data) => api.put('/settings', data),
+  // Payroll Policy
+  getPayrollSettings: () => api.get('/settings/payroll'),
+  savePayrollSettings: (data) => api.post('/settings/payroll', data),
+  uploadPayslipTemplate: (formData) => api.post('/settings/upload-payslip-template', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
   uploadBranding: (formData) => api.post('/settings/upload-branding', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   // Employee list for recipient picker
   getPickerEmployees: (q) => api.get('/settings/employees', { params: { q } }),
   testHikvision: (data) => api.post('/settings/test-hikvision', data),
+  // Permission Audit Logs
+  getPermissionAuditLogs: (params) => api.get('/settings/permission-audit-logs', { params }),
 }
 
 export const auditAPI = {
@@ -161,6 +175,63 @@ export const systemAPI = {
 
 export const attendanceAPI = {
   getAll: (params) => api.get('/attendance', { params }),
+}
+
+export const payrollAPI = {
+  getConfig: () => api.get('/payroll/config'),
+  updateConfig: (data) => api.patch('/payroll/config', data),
+  getRoleStructures: () => api.get('/payroll/role-structures'),
+  updateRoleStructure: (data) => api.post('/payroll/role-structures', data),
+  getProfiles: () => api.get('/payroll/profiles'),
+  getProfile: (userId) => api.get(`/payroll/profiles/${userId}`),
+  updateProfile: (data) => api.post('/payroll/profiles', data),
+  deleteProfile: (id) => api.delete(`/payroll/profiles/${id}`),
+  toggleStructureStatus: (id) => api.patch(`/payroll/role-structures/${id}/toggle`),
+  deleteStructure: (id) => api.delete(`/payroll/role-structures/${id}`),
+  simulate: (data) => api.post('/payroll/process/simulate', data),
+  save: (data) => api.post('/payroll/process/save', data),
+  run: (data) => api.post('/payroll/run', data),
+  submitApproval: (data) => api.post('/payroll/submit-approval', data),
+  approve: (data) => api.post('/payroll/approve', data),
+  lockMonth: (data) => api.post('/payroll/lock', data),
+  finalize: (data) => api.post('/payroll/finalize', data),
+  markPaid: (data) => api.post('/payroll/mark-paid', data),
+  reopen: (data) => api.post('/payroll/reopen', data),
+  hardLock: (data) => api.post('/payroll/hard-lock', data),
+  getHistory: (params) => api.get('/payroll/history', { params }),
+  getMyPayslips: (params) => api.get('/payroll/payslips/my', { params }),
+  getPayslip: (id) => api.get(`/payroll/payslips/${id}`),
+  downloadPayslip: (id) => api.get(`/payroll/payslip/${id}/download`, { responseType: 'blob' }),
+  sendPayslipEmail: (id) => api.post(`/payroll/payslip/${id}/send-email`),
+  bulkSendPayslipEmails: (ids) => api.post('/payroll/payslips/bulk-send-email', { ids }),
+  exportBank: (params) => api.get('/payroll/export-bank', { params }),
+  getSummaryReport: (params) => api.get('/payroll/reports/summary', { params }),
+  getDepartmentAnalysis: (params) => api.get('/payroll/reports/department-analysis', { params }),
+  getDashboard: (params) => api.get('/payroll/dashboard', { params }),
+  getAnalytics: (params) => api.get('/payroll/analytics', { params }),
+  getBatches: () => api.get('/payroll/batches'),
+}
+
+export const policyAPI = {
+  getPolicy: () => api.get('/policy'),
+  updatePolicy: (data) => api.put('/policy', data),
+  createVersion: (data) => api.post('/policy/version', data),
+  preview: (data) => api.post('/policy/preview', data),
+}
+
+export const payslipTemplateAPI = {
+  getAll: () => api.get('/payslip-templates'),
+  getById: (id) => api.get(`/payslip-templates/${id}`),
+  create: (data) => api.post('/payslip-templates', data),
+  update: (id, data) => api.patch(`/payslip-templates/${id}`, data),
+  delete: (id) => api.delete(`/payslip-templates/${id}`),
+  setDefault: (id) => api.post(`/payslip-templates/${id}/set-default`),
+  preview: (data) => api.post('/payslip-templates/preview', data),
+  getRendered: (payrollId) => api.get(`/payslip-templates/render/${payrollId}`),
+  getActive: () => api.get('/payslip-templates/active'),
+  uploadBackground: (formData) => api.post('/payslip-templates/upload-background', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
 }
 
 export default api

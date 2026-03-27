@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import {
     Briefcase, Building2, ShieldCheck, PaintRoller,
-    Clock, Mail, Workflow, FileLock, Users, History
+    Clock, Mail, Workflow, FileLock, Users, History, Banknote, FileText
 } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import OrganizationTab from '../tabs/OrganizationTab'
@@ -14,6 +14,10 @@ import ComplianceLocksTab from '../tabs/ComplianceLocksTab'
 import NotificationsTab from '../tabs/NotificationsTab'
 import UsersAndRolesTab from '../tabs/UsersAndRolesTab'
 import AuditLogsTab from '../tabs/AuditLogsTab'
+import PermissionAuditLogsTab from '../tabs/PermissionAuditLogsTab'
+import PayrollPolicyTab from '../tabs/PayrollPolicyTab'
+import PayslipTemplatesTab from '../tabs/PayslipTemplatesTab'
+import { PolicySettings } from '../../payroll/pages/PolicySettings'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search } from 'lucide-react'
 
@@ -29,14 +33,18 @@ const NAVIGATION_SECTIONS = [
         title: 'Access & Control',
         items: [
             { id: 'roles', label: 'Users & Roles', icon: ShieldCheck },
-            { id: 'audit', label: 'Audit Logs', icon: History },
+            { id: 'permission_audit', label: 'Permission History', icon: History },
+            { id: 'audit', label: 'System Logs', icon: FileLock },
         ]
     },
     {
         title: 'Policies',
         items: [
+    
             { id: 'timesheet_policy', label: 'Timesheet Policy', icon: Clock },
             { id: 'leave_policy', label: 'Leave Policy', icon: Briefcase },
+            { id: 'payroll_policy', label: 'Payroll Policy', icon: Banknote },
+            { id: 'payslip_templates', label: 'Payslip Templates', icon: FileText },
             { id: 'compliance', label: 'Compliance & Locks', icon: FileLock },
         ]
     },
@@ -57,15 +65,19 @@ export default function SettingsLayout() {
     const renderContent = () => {
         switch (activeTab) {
             case 'organization': return <OrganizationTab />
+            case 'core_policy': return <PolicySettings />
             case 'timesheet_policy': return <TimesheetPolicyTab />
             case 'reports': return <ReportsAutomationTab />
             case 'branding': return <BrandingTab />
             case 'roles': return <UsersAndRolesTab />
+            case 'permission_audit': return <PermissionAuditLogsTab />
             case 'audit': return <AuditLogsTab />
             case 'leave_policy': return <LeavePolicyTab />
             case 'compliance': return <ComplianceLocksTab />
             case 'notifications': return <NotificationsTab />
             case 'integrations': return <IntegrationsTab />
+            case 'payroll_policy': return <PayrollPolicyTab />
+            case 'payslip_templates': return <PayslipTemplatesTab />
             default: return <OrganizationTab />
         }
     }

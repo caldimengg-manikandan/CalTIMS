@@ -3,16 +3,21 @@
 const mongoose = require('mongoose');
 
 const roleSchema = new mongoose.Schema({
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Company',
+      required: false,
+      index: true
+    },
   name: { type: String, required: true },
   description: { type: String, default: '' },
+  templateType: { 
+    type: String, 
+    enum: ['Admin', 'HR', 'Finance', 'Employee', 'Custom'], 
+  },
   permissions: {
-    approveTimesheets: { type: Boolean, default: false },
-    viewReports: { type: Boolean, default: false },
-    manageProjects: { type: Boolean, default: false },
-    manageEmployees: { type: Boolean, default: false },
-    manageSettings: { type: Boolean, default: false },
-    viewAuditLogs: { type: Boolean, default: false },
-    manageLeaves: { type: Boolean, default: false },
+    type: Object, // Hierarchical: { Module: { Submodule: [Actions] } }
+    default: {},
   },
   isSystem: { type: Boolean, default: false } // Admin, Manager, Employee, HR can be system default roles
 });
@@ -36,11 +41,11 @@ const settingsSchema = new mongoose.Schema(
     roles: {
       type: [roleSchema],
       default: [
-        { name: 'Admin', isSystem: true, permissions: { approveTimesheets: true, viewReports: true, manageProjects: true, manageEmployees: true, manageSettings: true, viewAuditLogs: true, manageLeaves: true } },
-        { name: 'Manager', isSystem: true, permissions: { approveTimesheets: true, viewReports: true, manageProjects: true, manageEmployees: false, manageSettings: false, viewAuditLogs: true, manageLeaves: true } },
-        { name: 'Employee', isSystem: true, permissions: { approveTimesheets: false, viewReports: false, manageProjects: false, manageEmployees: false, manageSettings: false, viewAuditLogs: false, manageLeaves: false } },
-        { name: 'HR', isSystem: true, permissions: { approveTimesheets: false, viewReports: true, manageProjects: false, manageEmployees: true, manageSettings: false, viewAuditLogs: true, manageLeaves: true } },
-        { name: 'Finance', isSystem: true, permissions: { approveTimesheets: false, viewReports: true, manageProjects: false, manageEmployees: false, manageSettings: false, viewAuditLogs: true, manageLeaves: false } },
+        { name: 'Admin', isSystem: true, permissions: {} },
+        { name: 'Manager', isSystem: true, permissions: {} },
+        { name: 'Employee', isSystem: true, permissions: {} },
+        { name: 'HR', isSystem: true, permissions: {} },
+        { name: 'Finance', isSystem: true, permissions: {} },
       ]
     },
 
@@ -173,6 +178,73 @@ const settingsSchema = new mongoose.Schema(
         enabled: { type: Boolean, default: false },
         ipAddress: { type: String, default: '' },
         port: { type: String, default: '4370' }
+      }
+    },
+
+    // 11. Payroll Settings
+    payroll: {
+      payrollMode: { type: String, enum: ['Role-Based', 'Employee-Based'], default: 'Employee-Based' },
+      calculationBasis: { type: String, enum: ['Monthly', 'Yearly', 'Hourly', 'Weekly'], default: 'Monthly' },
+      defaultPaymentType: { type: String, enum: ['Monthly', 'Hourly'], default: 'Monthly' },
+      payslipHeader: { type: String, default: 'CALTIMS' },
+      payslipFooter: { type: String, default: 'This is a computer-generated payslip.' },
+      lopCalculationBasis: { type: String, enum: ['Standard (30 days)', 'Working Days'], default: 'Standard (30 days)' },
+      workingDaysPerMonth: { type: Number, default: 22 },
+      overtimeEnabled: { type: Boolean, default: false },
+      overtimeRate: { type: Number, default: 1.5 },
+      professionalTaxMonths: { type: [String], default: ['May', 'September'] },
+      esiLimit: { type: Number, default: 21000 },
+      esiRate: { type: Number, default: 0.75 }, // Employee contribution %
+      pfRate: { type: Number, default: 12 }, // Employee contribution %
+      taxToggles: {
+          pf: { type: Boolean, default: true },
+          esi: { type: Boolean, default: true },
+          tds: { type: Boolean, default: true }
+      },
+      tdsThreshold: { type: Number, default: 50000 },
+      // Dynamic Tax Slabs for TDS (Income Tax)
+      taxSlabs: {
+        type: [{
+          min: Number,
+          max: Number,
+          rate: Number // Percentage
+        }],
+        default: [
+          { min: 0, max: 250000, rate: 0 },
+          { min: 250001, max: 500000, rate: 5 },
+          { min: 500001, max: 1000000, rate: 20 },
+          { min: 1000001, max: 999999999, rate: 30 }
+        ]
+      },
+      autoLockPayroll: { type: Boolean, default: false },
+      autoProcessingDay: { type: Number, default: 1 },
+      payslipTemplateUrl: { type: String, default: '' },
+      payslipTemplateType: { type: String, enum: ['PDF', 'HTML', 'Default'], default: 'Default' },
+      currencySymbol: { type: String, default: '₹' },
+      
+      // Compliance Upgrades
+      taxRegime: { type: String, enum: ['OLD', 'NEW'], default: 'OLD' },
+      standardDeduction: { type: Number, default: 50000 },
+      pfWageLimit: { type: Number, default: 15000 },
+      pfEmployerRate: { type: Number, default: 12 },
+      esiEmployerRate: { type: Number, default: 3.25 },
+      country: { type: String, default: 'India' },
+      
+      // Policy Versioning (FY based)
+      policies: {
+        type: [{
+          fy: String, // e.g., "2024-25"
+          version: Number,
+          regime: String,
+          slabs: [{ min: Number, max: Number, rate: Number }],
+          pfRate: Number,
+          pfEmployerRate: Number,
+          esiRate: Number,
+          esiEmployerRate: Number,
+          standardDeduction: Number,
+          isActive: { type: Boolean, default: true }
+        }],
+        default: []
       }
     },
 

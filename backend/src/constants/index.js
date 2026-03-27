@@ -4,6 +4,9 @@ const ROLES = Object.freeze({
   ADMIN: 'admin',
   MANAGER: 'manager',
   EMPLOYEE: 'employee',
+  INTERN: 'intern',
+  HR: 'hr',
+  FINANCE: 'finance',
 });
 
 const TIMESHEET_STATUS = Object.freeze({

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
     Settings2, Mail, LayoutGrid, Palette, Globe,
     Plus, X, Send, Eye, Save, Check, ChevronDown, ClipboardCheck,
-    Sun, Moon, Monitor, Search, Clock, Users
+    Sun, Moon, Monitor, Search, Clock, Users, Banknote
 } from 'lucide-react'
 import { settingsAPI, projectAPI, reportSchedulesAPI } from '@/services/endpoints'
 import Spinner from '@/components/ui/Spinner'
@@ -18,6 +18,7 @@ import PageHeader from '@/components/ui/PageHeader'
 const TABS = [
     { id: 'report', label: 'Report Settings', icon: Mail },
     { id: 'timesheet', label: 'Timesheet', icon: LayoutGrid },
+    { id: 'payroll', label: 'Payroll Policy', icon: Banknote },
     { id: 'attendance', label: 'Attendance Integration', icon: ClipboardCheck },
     { id: 'general', label: 'General', icon: Globe },
 ]
@@ -986,8 +987,7 @@ function GeneralTab() {
                                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.isWeekendWorkable ? 'translate-x-5' : 'translate-x-0'}`} />
                             </button>
                         </div>
-
-                        <div>
+                        <div className="flex flex-col gap-2">
                             <label className="label">Week Start Day</label>
                             <div className="grid grid-cols-2 gap-3">
                                 {['monday', 'sunday'].map(day => (
@@ -1022,6 +1022,266 @@ function GeneralTab() {
     )
 }
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// TAB 6 — PAYROLL POLICY
+// ════════════════════════════════════════════════════════════════════════════
+function PayrollTab() {
+    const qc = useQueryClient()
+    const fileInputRef = useRef(null)
+    const [uploading, setUploading] = useState(false)
+    const [form, setForm] = useState({
+        calculationBasis: 'Monthly',
+        payrollMode: 'Employee-Based',
+        defaultPaymentType: 'Monthly',
+        payslipHeader: 'CALTIMS',
+        payslipFooter: 'This is a computer-generated payslip.',
+        lopCalculationBasis: 'Standard (30 days)',
+        professionalTaxMonths: ['May', 'September'],
+        esiLimit: 21000,
+        payslipTemplateUrl: '',
+        payslipTemplateType: 'Default',
+        currencySymbol: '₹',
+        customSymbol: ''
+    })
+
+    const { data, isLoading } = useQuery({
+        queryKey: ['settings', 'payroll'],
+        queryFn: () => settingsAPI.getPayrollSettings().then(r => r.data.data),
+    })
+
+    useEffect(() => {
+        if (data) {
+            const isCustomCur = !['₹', '$'].includes(data.currencySymbol)
+            setForm(prev => ({ 
+                ...prev, 
+                ...data,
+                customSymbol: isCustomCur ? data.currencySymbol : ''
+            }))
+        }
+    }, [data])
+
+    const saveMutation = useMutation({
+        mutationFn: (payload) => settingsAPI.savePayrollSettings(payload || form),
+        onSuccess: () => {
+            toast.success('Payroll policy updated!')
+            qc.invalidateQueries(['settings', 'payroll'])
+        },
+        onError: e => toast.error(e.response?.data?.message || 'Save failed'),
+    })
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+
+        const formData = new FormData()
+        formData.append('file', file)
+
+        setUploading(true)
+        try {
+            const res = await settingsAPI.uploadPayslipTemplate(formData)
+            const { url, type } = res.data.data
+            setForm(f => ({ ...f, payslipTemplateUrl: url, payslipTemplateType: type }))
+            toast.success('Template uploaded! Click Apply to save.')
+        } catch (err) {
+            toast.error('Upload failed')
+        } finally {
+            setUploading(false)
+        }
+    }
+
+    const upd = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+    if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+
+    const currentSymbol = form.currencySymbol === 'Custom' ? form.customSymbol : form.currencySymbol
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-lg font-bold text-slate-800 dark:text-white uppercase tracking-tight">Payroll Policy Module</h2>
+                    <p className="text-sm text-slate-400">Configure global payroll calculation rules, payslip branding, and currency</p>
+                </div>
+                <button
+                    onClick={() => saveMutation.mutate({
+                        ...form,
+                        currencySymbol: form.currencySymbol === 'Custom' ? form.customSymbol : form.currencySymbol
+                    })}
+                    disabled={saveMutation.isPending}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold shadow-lg shadow-primary/20 transition-all"
+                >
+                    {saveMutation.isPending ? <Spinner size="sm" /> : <Save size={16} />}
+                    Apply Policy Changes
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* 1. CALCULATION BASIS */}
+                <SectionCard
+                    title="1. Calculation Basis (Global)"
+                    subtitle="Applies across Profile, Structure, Processing, and Payslip"
+                    icon={Banknote}
+                >
+                    <div className="grid grid-cols-1 gap-2">
+                        {['Monthly', 'Yearly', 'Hourly', 'Weekly'].map(basis => (
+                            <label key={basis} className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all hover:bg-primary/5 ${form.calculationBasis === basis ? 'border-primary bg-primary/5' : 'border-slate-100 dark:border-white/5'}`}>
+                                <div className="flex items-center gap-3">
+                                    <input 
+                                        type="radio" 
+                                        name="calculationBasis" 
+                                        className="w-4 h-4 accent-primary" 
+                                        checked={form.calculationBasis === basis}
+                                        onChange={() => upd('calculationBasis', basis)}
+                                    />
+                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{basis}</span>
+                                </div>
+                                {form.calculationBasis === basis && <Check size={14} className="text-primary" />}
+                            </label>
+                        ))}
+                    </div>
+                </SectionCard>
+
+                {/* 2. PAYSLIP CUSTOMIZATION */}
+                <SectionCard
+                    title="2. Payslip Customization"
+                    subtitle="Manage and preview your organization's payslip template"
+                    icon={ClipboardCheck}
+                >
+                    <div className="space-y-5">
+                        <div className="p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 group relative">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Default Payslip Preview</p>
+                            <div className="aspect-[3/4] bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-white/10 flex flex-col items-center justify-center p-6 text-center shadow-inner overflow-hidden relative">
+                                {form.payslipTemplateType === 'Default' ? (
+                                    <>
+                                        <div className="w-12 h-1 bg-slate-200 mb-2" />
+                                        <div className="w-20 h-3 bg-primary/20 rounded mb-1" />
+                                        <div className="w-16 h-2 bg-slate-100 rounded mb-8" />
+                                        <div className="w-full space-y-2">
+                                            <div className="flex justify-between w-full border-b pb-1"><div className="w-10 h-1.5 bg-slate-100" /><div className="w-8 h-1.5 bg-slate-100" /></div>
+                                            <div className="flex justify-between w-full border-b pb-1"><div className="w-12 h-1.5 bg-slate-100" /><div className="w-6 h-1.5 bg-slate-100" /></div>
+                                            <div className="flex justify-between w-full pt-4"><div className="w-14 h-2 bg-primary/20" /><div className="w-10 h-2 bg-primary/20" /></div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex flex-col items-center gap-2">
+                                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                                            <Check size={20} />
+                                        </div>
+                                        <p className="text-xs font-bold text-emerald-600">Custom Template Active</p>
+                                        <p className="text-[10px] text-slate-400">Type: {form.payslipTemplateType}</p>
+                                    </div>
+                                )}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                    <span className="text-[10px] font-bold text-white uppercase bg-black/60 px-2 py-1 rounded">Read-Only Preview</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Upload Custom Payslip Template</p>
+                            <input 
+                                type="file" 
+                                ref={fileInputRef} 
+                                className="hidden" 
+                                accept=".pdf,.html"
+                                onChange={handleFileUpload}
+                            />
+                            <button 
+                                onClick={() => fileInputRef.current.click()}
+                                disabled={uploading}
+                                className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-primary/50 hover:bg-primary/5 transition-all text-sm font-semibold text-slate-500"
+                            >
+                                {uploading ? <Spinner size="sm" /> : <Plus size={16} />}
+                                {form.payslipTemplateUrl ? 'Change Template' : 'Upload PDF/HTML Template'}
+                            </button>
+                            <p className="text-[9px] text-slate-400 mt-2 italic">Support placeholders: &#123;&#123;employee_name&#125;&#125;, &#123;&#123;salary&#125;&#125;, &#123;&#123;deductions&#125;&#125;</p>
+                        </div>
+                    </div>
+                </SectionCard>
+
+                {/* 3. CUSTOMIZE AMOUNT SYMBOL */}
+                <SectionCard
+                    title="3. Global Amount Symbol"
+                    subtitle="Applied across Salary Structure, Processing, and Reports"
+                    icon={Globe}
+                >
+                    <div className="space-y-4">
+                        <div>
+                            <label className="label">Currency Symbol</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {['₹ Rupee', '$ Dollar', 'Custom'].map(cur => {
+                                    const sym = cur.split(' ')[0]
+                                    const val = cur === 'Custom' ? 'Custom' : sym
+                                    return (
+                                        <button 
+                                            key={cur}
+                                            onClick={() => upd('currencySymbol', val)}
+                                            className={`py-2 px-1 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${form.currencySymbol === val ? 'border-primary bg-primary/5 text-primary' : 'border-slate-100 dark:border-white/5 text-slate-400'}`}
+                                        >
+                                            {cur}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </div>
+
+                        {form.currencySymbol === 'Custom' && (
+                            <div className="animate-in slide-in-from-top-2">
+                                <label className="label">Enter Custom Symbol</label>
+                                <input 
+                                    className="input w-full text-center font-bold text-lg" 
+                                    placeholder="e.g. €"
+                                    maxLength={3}
+                                    value={form.customSymbol}
+                                    onChange={e => upd('customSymbol', e.target.value)}
+                                />
+                            </div>
+                        )}
+
+                        <div className="p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 flex flex-col items-center">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Live Result Preview</p>
+                            <div className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-1">
+                                <span className={form.currencySymbol === 'Custom' ? 'text-primary' : ''}>
+                                    {form.currencySymbol === 'Custom' ? (form.customSymbol || '?') : form.currencySymbol}
+                                </span>
+                                <span>25,000.00</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-2">Consistent across all payroll modules</p>
+                        </div>
+                    </div>
+                </SectionCard>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <SectionCard title="Deduction Rules" subtitle="ESI and LOP calculation constants" icon={Settings2}>
+                   <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <label className="label">ESI Gross Limit</label>
+                            <div className="flex items-center gap-2 bg-slate-50 dark:bg-white/5 rounded-lg border px-3 py-1">
+                                <span className="text-xs font-bold text-slate-400">{currentSymbol}</span>
+                                <input type="number" className="bg-transparent border-0 w-20 text-right text-xs font-bold focus:ring-0" value={form.esiLimit} onChange={e => upd('esiLimit', Number(e.target.value))} />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="label">LOP Calculation Basis</label>
+                            <select className="input w-full text-xs" value={form.lopCalculationBasis} onChange={e => upd('lopCalculationBasis', e.target.value)}>
+                                <option>Standard (30 days)</option>
+                                <option>Working Days</option>
+                            </select>
+                        </div>
+                   </div>
+                </SectionCard>
+                <SectionCard title="Payslip Branding" subtitle="Header and Footer text" icon={X}>
+                    <div className="space-y-3">
+                        <input className="input w-full text-xs" placeholder="Payslip Header" value={form.payslipHeader} onChange={e => upd('payslipHeader', e.target.value)} />
+                        <textarea className="input w-full min-h-[60px] text-xs py-2" placeholder="Payslip Footer" value={form.payslipFooter} onChange={e => upd('payslipFooter', e.target.value)} />
+                    </div>
+                </SectionCard>
+            </div>
+        </div>
+    )
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // TAB 5 — ATTENDANCE INTEGRATION
@@ -1095,6 +1355,7 @@ export default function SettingsPage() {
     const tabMap = {
         report: <ReportTab />,
         timesheet: <TimesheetTab />,
+        payroll: <PayrollTab />,
         attendance: <AttendanceTab />,
         general: <GeneralTab />,
     }

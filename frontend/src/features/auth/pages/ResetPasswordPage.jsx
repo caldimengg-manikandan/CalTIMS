@@ -22,7 +22,7 @@ export default function ResetPasswordPage() {
     const { register, handleSubmit, formState: { errors } } = useForm({ resolver: zodResolver(schema) })
 
     const { mutate, isPending } = useMutation({
-        mutationFn: (data) => authAPI.resetPassword(token, { password: data.password }),
+        mutationFn: (data) => authAPI.resetPassword(token, { password: data.password, confirmPassword: data.confirm }),
         onSuccess: () => {
             toast.success('Password reset successfully!')
             navigate('/login')

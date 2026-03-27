@@ -6,12 +6,17 @@ const { Parser } = require('json2csv');
 const Timesheet = require('../../modules/timesheets/timesheet.model');
 const { TIMESHEET_STATUS } = require('../../constants');
 
-// ── Transporter ─────────────────────────────────────────────────────────────
-function createTransporter() {
+const logger = require('../utils/logger');
+
+// ── Transporter Singleton ───────────────────────────────────────────────────
+let transporter;
+function getTransporter() {
+  if (transporter) return transporter;
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
-    throw new Error('SMTP credentials not configured. Add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM to .env');
+    logger.error('SMTP credentials not configured.');
+    throw new Error('SMTP credentials not configured.');
   }
-  return nodemailer.createTransport({
+  transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT) || 587,
     secure: parseInt(process.env.SMTP_PORT) === 465,
@@ -20,6 +25,7 @@ function createTransporter() {
       pass: process.env.SMTP_PASS,
     },
   });
+  return transporter;
 }
 
 // ── Report Data Fetcher ──────────────────────────────────────────────────────
@@ -65,9 +71,9 @@ async function buildReportData(reportType, companyName = 'TimesheetPro', project
   // Filter by project if specific projects selected
   if (projectIds && projectIds.length > 0) {
     const mongoose = require('mongoose');
-    const projIdStrings = projectIds.map(id => id.toString());
+    const projIdStrings = projectIds.filter(id => id !== null && id !== undefined).map(id => id.toString());
     timesheets = timesheets.filter(ts =>
-      ts.rows?.some(row => row.projectId && projIdStrings.includes(row.projectId._id?.toString() || row.projectId.toString()))
+      ts.rows?.some(row => row.projectId && projIdStrings.includes(row.projectId._id?.toString() || (row.projectId.toString ? row.projectId.toString() : '')))
     );
   }
 
@@ -254,7 +260,7 @@ const emailService = {
    * @param {string} format
    */
   async sendReportEmail(recipientEmails, reportType, companyName, projectIds = [], format = 'HTML') {
-    const transporter = createTransporter(); // throws if not configured
+    const transporter = getTransporter(); // throws if not configured
     const data = await buildReportData(reportType, companyName, projectIds);
     const html = buildEmailHTML(data);
     const dateStr = new Date().toLocaleDateString('en-IN').replace(/\//g, '-');
@@ -285,7 +291,7 @@ const emailService = {
    * Send password reset email
    */
   async sendPasswordReset(userEmail, userName, resetToken, companyName = 'CALTIMS') {
-    const transporter = createTransporter();
+    const transporter = getTransporter();
     const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
     
     const html = buildResetPasswordHTML({
@@ -308,7 +314,7 @@ const emailService = {
    * Send budget exceeded email to Admin and Project Manager
    */
   async sendBudgetExceededEmail(recipientEmails, projectData, companyName = 'CALTIMS') {
-    const transporter = createTransporter();
+    const transporter = getTransporter();
     
     const html = `
 <!DOCTYPE html>
@@ -497,7 +503,7 @@ const emailService = {
    * Build PDF and send it as an email attachment.
    */
   async sendReportPdfEmail(recipientEmails, reportType, companyName, projectIds = []) {
-    const transporter = createTransporter();
+    const transporter = getTransporter();
     const { buffer, reportTitle, recordCount } = await emailService.buildReportPdf(reportType, companyName, projectIds);
     const dateStr = new Date().toLocaleDateString('en-IN');
     const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${dateStr.replace(/\//g, '-')}.pdf`;
@@ -517,7 +523,7 @@ const emailService = {
    * Generic notification email
    */
   async sendNotificationEmail(recipientEmail, { title, message, actionLink, actionLabel, companyName = 'CALTIMS' }) {
-    const transporter = createTransporter();
+    const transporter = getTransporter();
     const html = buildNotificationHTML({ title, message, companyName, actionLink, actionLabel });
 
     await transporter.sendMail({
@@ -534,7 +540,7 @@ const emailService = {
    * Send welcome email to new employee
    */
   async sendWelcomeEmail(recipientEmail, { name, password, portalLink, companyName = 'CALTIMS' }) {
-    const transporter = createTransporter();
+    const transporter = getTransporter();
     const html = buildWelcomeEmailHTML({ 
       name, 
       email: recipientEmail, 
@@ -552,6 +558,89 @@ const emailService = {
 
     return true;
   },
+
+  /**
+   * Send payslip email to employee
+   */
+  async sendPayslipEmail(recipientEmail, payroll, companyName = 'CALTIMS') {
+    const transporter = getTransporter();
+    const payslipService = require('../../modules/payroll/payslip.service');
+    
+    try {
+        const buffer = await payslipService.generatePayslipBuffer(payroll);
+        const monthName = new Date(payroll.year, payroll.month - 1).toLocaleString('default', { month: 'long' });
+        const fileName = `Payslip_${payroll.employeeInfo?.employeeId || 'NA'}_${monthName}_${payroll.year}.pdf`;
+
+        const html = _getPayslipEmailHtml(payroll, monthName, companyName);
+
+        const info = await transporter.sendMail({
+          from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+          to: recipientEmail,
+          subject: `[${companyName}] Payslip for ${monthName} ${payroll.year}`,
+          html,
+          attachments: [{ filename: fileName, content: buffer, contentType: 'application/pdf' }]
+        });
+
+        logger.info(`[EmailService] Payslip delivered to ${recipientEmail}: ID ${info.messageId}`);
+        return true;
+    } catch (err) {
+        logger.error(`[EmailService] Failed to send payslip to ${recipientEmail}: ${err.message}`, { stack: err.stack });
+        throw err; // bubble up for controller
+    }
+  },
+
+  /**
+   * Bulk Dispatch with Browser Reuse - Strategy 4 (Performance Fix)
+   * This reuses a single browser instance for all PDFs to avoid crashing the server.
+   */
+  async sendPayslipsBulk(payrolls, companyName = 'CALTIMS') {
+    const transporter = getTransporter();
+    const pdfGeneratorService = require('../../modules/reports/pdfGenerator.service');
+    const { getEnterprisePayslipHtml } = require('../../modules/payroll/payslip.template');
+    
+    logger.info(`[EmailService] Initiating bulk dispatch for ${payrolls.length} employees`);
+    
+    const results = { sent: 0, failed: 0, errors: [] };
+
+    for (const item of payrolls) {
+        const { email, data } = item;
+        try {
+            const monthName = new Date(data.year, data.month - 1).toLocaleString('default', { month: 'long' });
+            
+            // Generate PDF buffer using PDFKit-based generator
+            const buffer = await pdfGeneratorService.generatePayslipBuffer(data);
+
+            const fileName = `Payslip_${data.user?.employeeId || data.employeeInfo?.employeeId || 'NA'}_${monthName}_${data.year}.pdf`;
+            
+            // Get premium HTML body for email
+            const html = getEnterprisePayslipHtml(data, { organization: { companyName } });
+
+            await transporter.sendMail({
+                from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+                to: email,
+                subject: `[${companyName}] Payslip for ${monthName} ${data.year}`,
+                html,
+                attachments: [{ filename: fileName, content: buffer, contentType: 'application/pdf' }]
+            });
+
+            results.sent++;
+            logger.debug(`[EmailService] Bulk dispatched: ${email}`);
+        } catch (err) {
+            results.failed++;
+            results.errors.push({ email, error: err.message });
+            logger.error(`[EmailService] Failed bulk dispatch for ${email}: ${err.message}`);
+        }
+    }
+
+    return results;
+  }
 };
+
+/** Internal HTML Helper (Not used if using template) */
+function _getPayslipEmailHtml(payroll, monthName, companyName) {
+  const { getEnterprisePayslipHtml } = require('../../modules/payroll/payslip.template');
+  // Return the full premium template directly
+  return getEnterprisePayslipHtml(payroll, { organization: { companyName } });
+}
 
 module.exports = emailService;

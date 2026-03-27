@@ -4,27 +4,40 @@ const mongoose = require('mongoose');
 
 const auditLogSchema = new mongoose.Schema(
     {
-        userId: {
+        performedBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
-            required: false // some actions might be system actions
+            required: true,
+            index: true
         },
         action: {
             type: String,
             required: true,
             index: true
         },
-        entityType: {
+        role: {
+            type: String, // Snapshot of the role name at the time of execution
+            required: true,
+        },
+        entity: {
             type: String,
-            required: true, // Output like 'Timesheet', 'Settings', 'Project'
+            required: true, // Output like 'Payroll', 'Employee', 'System'
+            index: true
         },
         entityId: {
             type: mongoose.Schema.Types.ObjectId,
-            required: false
+            required: false,
+            index: true
         },
-        details: {
+        metadata: {
             type: mongoose.Schema.Types.Mixed,
             default: {}
+        },
+        status: {
+            type: String,
+            enum: ['SUCCESS', 'FAILED', 'WARNING'],
+            default: 'SUCCESS',
+            index: true
         },
         ipAddress: {
             type: String,
@@ -38,3 +51,4 @@ const auditLogSchema = new mongoose.Schema(
 
 const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 module.exports = AuditLog;
+

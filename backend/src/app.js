@@ -14,6 +14,8 @@ const logger = require('./shared/utils/logger');
 // Route imports
 const authRoutes = require('./modules/auth/auth.routes');
 const userRoutes = require('./modules/users/user.routes');
+const roleRoutes = require('./modules/users/role.routes');
+
 const timesheetRoutes = require('./modules/timesheets/timesheet.routes');
 const projectRoutes = require('./modules/projects/project.routes');
 const leaveRoutes = require('./modules/leaves/leave.routes');
@@ -101,6 +103,8 @@ app.use('/api/v1/auth', authRoutes);
 app.use(trialLock);
 
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/roles', roleRoutes);
+
 app.use('/api/v1/timesheets', timesheetRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/leaves', leaveRoutes);
@@ -116,6 +120,10 @@ app.use('/api/v1/system', systemRoutes);
 app.use('/api/v1/support', supportRoutes);
 app.use('/api/v1/audit', auditRoutes);
 app.use('/api/v1/attendance', attendanceRoutes);
+app.use('/api/v1/payroll', require('./modules/payroll/payroll.routes'));
+app.use('/api/v1/payslip-templates', require('./modules/payroll/payslipTemplate.routes'));
+app.use('/api/v1/policy', require('./modules/policyEngine/policy.routes'));
+
 
 // ─── Start Scheduler ────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
@@ -130,6 +138,10 @@ if (process.env.NODE_ENV !== 'test') {
   // HikCentral Integration Cron
   const hikcentralCron = require('./modules/attendance/hikcentral.cron');
   hikcentralCron.start();
+
+  // Payroll Scheduler
+  const payrollScheduler = require('./modules/payroll/payroll.scheduler');
+  payrollScheduler.start();
 }
 
 // ─── Error Handling ──────────────────────────────────────────────────────────
