@@ -173,7 +173,6 @@ export const attendanceAPI = {
   getAll: (params) => api.get('/attendance', { params }),
 }
 
-<<<<<<< HEAD
 export const payrollAPI = {
   getConfig: () => api.get('/payroll/config'),
   updateConfig: (data) => api.patch('/payroll/config', data),
@@ -229,11 +228,11 @@ export const payslipTemplateAPI = {
   uploadBackground: (formData) => api.post('/payslip-templates/upload-background', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
-=======
+}
+
 export const adminAPI = {
   getDashboardMetrics: () => api.get('/admin/dashboard-metrics'),
   getOrganizations: () => api.get('/admin/organizations'),
->>>>>>> origin/main
 }
 
 export default api
