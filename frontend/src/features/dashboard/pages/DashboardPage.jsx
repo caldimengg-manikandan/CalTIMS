@@ -27,6 +27,8 @@ export default function DashboardPage() {
     const { general } = useSettingsStore()
     const isAdmin = ['admin', 'manager'].includes(user?.role)
     const navigate = useNavigate()
+ 
+
     const today = new Date()
 
     const weekStartsOn = general?.weekStartDay?.toLowerCase() === 'sunday' ? 0 : 1

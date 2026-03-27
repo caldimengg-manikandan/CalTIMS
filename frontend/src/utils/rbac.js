@@ -10,7 +10,7 @@ export const hasPermission = (user, module, submodule, action) => {
   if (!user) return false;
 
   // Admin bypass
-  if (user.role && user.role.toLowerCase() === 'admin') {
+  if (user.role && (user.role.toLowerCase() === 'admin' || user.role.toLowerCase() === 'super_admin')) {
     return true;
   }
 

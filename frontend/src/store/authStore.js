@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { userAPI } from '@/services/endpoints'
+import { userAPI, subscriptionAPI } from '@/services/endpoints'
 
 export const useAuthStore = create(
   persist(
@@ -11,6 +11,7 @@ export const useAuthStore = create(
       refreshToken: null,
       subscription: null,
       isAuthenticated: false,
+      isHydrating: true, // true until checkAuth resolves; prevents premature redirects on refresh
 
       // Actions
       setAuth: (user, accessToken, refreshToken, subscription = null) =>
@@ -23,22 +24,35 @@ export const useAuthStore = create(
         set({ refreshToken }),
 
       logout: () =>
-        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false }),
+        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isHydrating: false }),
 
       updateUser: (userData) =>
         set((state) => ({ user: { ...state.user, ...userData } })),
 
       checkAuth: async () => {
         const { accessToken, isAuthenticated } = get()
-        if (!accessToken || !isAuthenticated) return
+        if (!accessToken || !isAuthenticated) {
+          set({ isHydrating: false })
+          return
+        }
 
         try {
-          const res = await userAPI.getMe()
-          const { user, subscription } = res.data.data
-          set({ user, subscription, isAuthenticated: true })
+          // Fetch user and subscription in parallel for efficiency
+          const [userRes, subRes] = await Promise.all([
+            userAPI.getMe(),
+            subscriptionAPI.getCurrent().catch(err => {
+               console.warn('Failed to fetch subscription during checkAuth:', err)
+               return { data: { data: get().subscription } } // Fallback to persisted subscription
+            })
+          ])
+
+          const user = userRes.data.data
+          const subscription = subRes.data.data
+
+          set({ user, subscription, isAuthenticated: true, isHydrating: false })
         } catch (error) {
           console.error('CheckAuth failed:', error)
-          set({ user: null, accessToken: null, refreshToken: null, subscription: null, isAuthenticated: false })
+          set({ user: null, accessToken: null, refreshToken: null, subscription: null, isAuthenticated: false, isHydrating: false })
           localStorage.removeItem('timesheet-auth')
         }
       },

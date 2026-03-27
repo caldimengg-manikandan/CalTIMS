@@ -8,6 +8,7 @@ const Organization = require('../organizations/organization.model');
 const Subscription = require('../subscriptions/subscription.model');
 const TrialTracking = require('../subscriptions/trialTracking.model');
 const AppError = require('../../shared/utils/AppError');
+const { logActivity } = require('../../shared/utils/activityLogger');
 const { ROLES } = require('../../constants');
 
 /**
@@ -33,7 +34,7 @@ const authService = {
   /**
    * Login user and return tokens
    */
-  async login({ email, password, macAddress }) {
+  async login({ email, password, macAddress, req }) {
     const user = await User.findOne({ email, isActive: true })
       .select('+password')
       .populate('roleId');
@@ -48,6 +49,14 @@ const authService = {
     await user.save({ validateBeforeSave: false });
 
     const subscription = await Subscription.findOne({ organizationId: user.organizationId });
+
+    // Log login activity
+    await logActivity({
+      userId: user._id,
+      organizationId: user.organizationId,
+      action: 'LOGIN',
+      req: req // Need to pass req from controller to service
+    });
 
     return { accessToken, refreshToken, user: user.toPublicJSON(), subscription };
   },
@@ -112,6 +121,18 @@ const authService = {
       publicUser.permissions = user.roleId.permissions;
       publicUser.roleName = user.roleId.name;
     }
+
+    // Log signup activity
+    await logActivity({
+      userId: user._id,
+      organizationId: organization._id,
+      action: 'SIGNUP_TRIAL',
+      details: {
+        plan: 'TRIAL',
+        organizationName
+      },
+      req: { ip: ipAddress, headers: { 'user-agent': deviceFingerprint } } // Simplified req for signup
+    });
 
     return { accessToken, refreshToken, user: publicUser, subscription };
   },

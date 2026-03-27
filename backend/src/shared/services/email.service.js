@@ -633,6 +633,36 @@ const emailService = {
     }
 
     return results;
+  },
+
+  /**
+   * Send trial reminder email
+   */
+  async sendTrialReminder(recipientEmail, userName, daysLeft, companyName = 'CALTIMS') {
+    const transporter = getTransporter();
+    const isExpired = daysLeft === 0;
+    
+    const title = isExpired ? 'Your Trial Has Expired' : `Trial Reminder: ${daysLeft} Days Left`;
+    const message = isExpired 
+      ? `Hello ${userName}, your 28-day free trial of ${companyName} has expired. Please upgrade your plan to continue using our services.`
+      : `Hello ${userName}, your free trial of ${companyName} will expire in ${daysLeft} days. Upgrade now to ensure uninterrupted access to your data.`;
+    
+    const html = buildNotificationHTML({ 
+      title, 
+      message, 
+      companyName, 
+      actionLink: `${process.env.CLIENT_URL}/settings?tab=subscription`,
+      actionLabel: isExpired ? 'Upgrade Now' : 'View Plans'
+    });
+
+    await transporter.sendMail({
+      from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+      to: recipientEmail,
+      subject: `[${companyName}] ${title}`,
+      html,
+    });
+
+    return true;
   }
 };
 

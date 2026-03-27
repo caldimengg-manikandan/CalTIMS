@@ -95,9 +95,9 @@ const AdminDashboard = () => {
         <MetricCard title="Total Users" value={metrics.total_users} icon={Users} color="blue" />
         <MetricCard title="Organizations" value={metrics.total_organizations} icon={Building2} color="indigo" />
         <MetricCard title="Active Today" value={metrics.active_users_today} icon={Activity} color="green" />
-        <MetricCard title="Trial Users" value={metrics.trial_users} icon={Zap} color="orange" />
-        <MetricCard title="Basic Users" value={metrics.basic_users} icon={ShieldCheck} color="purple" />
-        <MetricCard title="Pro Users" value={metrics.pro_users} icon={Crown} color="rose" />
+        <MetricCard title="Trial Plans" value={metrics.trial_users} icon={Zap} color="orange" />
+        <MetricCard title="Basic Plans" value={metrics.basic_users} icon={ShieldCheck} color="purple" />
+        <MetricCard title="Pro Plans" value={metrics.pro_users} icon={Crown} color="rose" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

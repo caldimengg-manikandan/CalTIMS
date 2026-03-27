@@ -209,7 +209,8 @@ export default function TimesheetEntryPage() {
 
     // Sync existing timesheets to rows if available
     useEffect(() => {
-        if (existingTimesheets === undefined) return
+        // Only run when all critical data is loaded to avoid partial mapping race conditions
+        if (existingTimesheets === undefined || projects === undefined || allTasks === undefined) return
 
         // If we have data from a specific editId and it's not in our current view, 
         // jump the calendar to where the data is.
@@ -380,7 +381,7 @@ export default function TimesheetEntryPage() {
         });
 
         setRows(finalRows)
-    }, [existingTimesheets, weekLeaves, weekStart, weekDays, editId])
+    }, [existingTimesheets, weekLeaves, weekStart, weekDays, editId, projects, allTasks, tsSettings])
 
 
     const bulkSaveMutation = useMutation({

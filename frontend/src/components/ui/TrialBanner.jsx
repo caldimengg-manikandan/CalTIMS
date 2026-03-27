@@ -1,46 +1,59 @@
 import React from 'react';
-import { Zap, Clock, ChevronRight } from 'lucide-react';
+import { Sparkles, ArrowRight, X } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const TrialBanner = () => {
-  const { subscription, isTrial, user } = useAuthStore();
+  const { isTrial, subscription } = useAuthStore();
+  const navigate = useNavigate();
+  const [isVisible, setIsVisible] = React.useState(true);
 
-  if (!isTrial() || !subscription || subscription.status !== 'ACTIVE' || user?.role === 'super_admin') {
+  if (!isTrial || !subscription || subscription.status === 'EXPIRED' || !isVisible) {
     return null;
   }
 
   const trialEndDate = new Date(subscription.trialEndDate);
   const now = new Date();
-  const diffTime = Math.ceil((trialEndDate - now) / (1000 * 60 * 60 * 24));
-  const daysRemaining = Math.max(0, diffTime);
+  const diffTime = trialEndDate - now;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-  // Don't show if more than 28 days (shouldn't happen but for safety)
-  if (daysRemaining > 28) return null;
+  if (diffDays < 0) return null;
 
   return (
-    <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 bg-[length:200%_auto] animate-gradient-x text-white py-2 px-4 shadow-lg flex items-center justify-center gap-6 text-sm font-medium transition-all">
-      <div className="flex items-center gap-2">
-        <div className="bg-white/20 p-1 rounded-md">
-          <Zap size={14} className="fill-white" />
-        </div>
-        <span>
-          Trial active: <span className="font-bold">{daysRemaining} days</span> remaining
-        </span>
-      </div>
+    <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 text-white relative overflow-hidden group">
+      {/* Decorative blobs */}
+      <div className="absolute top-0 left-1/4 w-32 h-32 bg-white/10 rounded-full blur-3xl -translate-y-1/2 pointer-events-none" />
+      <div className="absolute top-0 right-1/4 w-32 h-32 bg-indigo-400/20 rounded-full blur-3xl -translate-y-1/2 pointer-events-none" />
       
-      <div className="hidden md:flex items-center gap-1.5 opacity-80">
-        <Clock size={14} />
-        <span>Upgrade to Pro for unlimited employees & advanced reports</span>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex w-8 h-8 bg-white/10 backdrop-blur-md rounded-lg items-center justify-center">
+              <Sparkles size={16} className="text-indigo-200" />
+            </div>
+            <p className="text-sm font-medium tracking-wide">
+              Your free trial expires in <span className="font-black text-indigo-100 italic">{diffDays} days</span>. 
+              <span className="hidden md:inline ml-1 text-white/80">Upgrade to a Pro plan to unlock all features including Payroll and AI.</span>
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => navigate('/settings?tab=subscription')}
+              className="px-4 py-1.5 bg-white text-indigo-600 rounded-full text-xs font-black uppercase tracking-widest hover:bg-indigo-50 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
+            >
+              Upgrade Now
+              <ArrowRight size={14} />
+            </button>
+            <button 
+              onClick={() => setIsVisible(false)}
+              className="p-1 text-white/60 hover:text-white transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
       </div>
-
-      <Link 
-        to="/settings?tab=subscription" 
-        className="bg-white text-indigo-600 px-3 py-1 rounded-full text-xs font-bold hover:bg-slate-50 transition-colors flex items-center gap-1 group shadow-sm"
-      >
-        Upgrade Now
-        <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-      </Link>
     </div>
   );
 };

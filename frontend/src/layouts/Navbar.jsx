@@ -122,7 +122,7 @@ export default function Navbar() {
                         )}
 
                         <Link
-                            to="/dashboard"
+                            to={user?.role === 'super_admin' ? '/admin/dashboard' : '/dashboard'}
                             className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors whitespace-nowrap shrink-0"
                         >
                             Home

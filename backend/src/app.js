@@ -78,14 +78,10 @@ if (process.env.NODE_ENV !== 'test') {
 // ─── Static Files ────────────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// ─── Health Check ────────────────────────────────────────────────────────────
-app.get('/', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Timesheet API is live',
-  });
-});
+const frontendPath = path.join(__dirname, '../../frontend/dist');
+app.use(express.static(frontendPath));
 
+// ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({
     success: true,
@@ -118,7 +114,19 @@ app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/payroll', require('./modules/payroll/payroll.routes'));
 app.use('/api/v1/payslip-templates', require('./modules/payroll/payslipTemplate.routes'));
 app.use('/api/v1/policy', require('./modules/policyEngine/policy.routes'));
+app.use('/api/v1/subscriptions', require('./modules/subscriptions/subscription.routes'));
 app.use('/api/v1/admin', adminRoutes);
+
+// ─── SPA Fallback ───────────────────────────────────────────────────────────
+// This must be after API routes and static files, but before error handlers
+app.get('*', (req, res, next) => {
+  // If it's an API request that wasn't handled, pass to 404 handler
+  if (req.originalUrl.startsWith('/api/')) {
+    return next();
+  }
+  // Otherwise, serve index.html for React Router to handle
+  res.sendFile(path.join(frontendPath, 'index.html'));
+});
 
 // ─── Start Scheduler ────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {

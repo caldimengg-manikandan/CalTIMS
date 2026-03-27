@@ -235,4 +235,9 @@ export const adminAPI = {
   getOrganizations: () => api.get('/admin/organizations'),
 }
 
+export const subscriptionAPI = {
+  getCurrent: () => api.get('/subscriptions/current'),
+  upgrade: (data) => api.post('/subscriptions/upgrade', data),
+}
+
 export default api

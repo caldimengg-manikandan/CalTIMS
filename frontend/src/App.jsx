@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import AppLayout from '@/layouts/AppLayout'
 import AuthLayout from '@/layouts/AuthLayout'
 import Spinner from '@/components/ui/Spinner'
@@ -55,7 +56,17 @@ const MyPayslips = lazy(() => import('@/features/payroll').then(m => ({ default:
 
 // ─── Protected Route Guard ───────────────────────────────────────────────────
 const ProtectedRoute = ({ children, roles }) => {
-    const { isAuthenticated, user, subscription } = useAuthStore()
+    const { isAuthenticated, isHydrating, user, subscription } = useAuthStore()
+
+    // Wait for checkAuth to finish before making any redirect decisions.
+    // Without this guard, the app redirects before the token is validated on refresh.
+    if (isHydrating) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <Spinner size="lg" />
+            </div>
+        )
+    }
     
     if (!isAuthenticated) return <Navigate to="/login" replace />
 
@@ -81,19 +92,42 @@ const PageSuspense = ({ children }) => (
 )
 
 export default function App() {
-    const { checkAuth, isTrial, subscription, user, isAuthenticated } = useAuthStore()
+    const { checkAuth, isAuthenticated, isHydrating: authHydrating, user } = useAuthStore()
+    const { fetchGeneralSettings, general, isLoading: settingsLoading } = useSettingsStore()
     const { sidebarOpen } = useUIStore()
 
     useEffect(() => {
-        checkAuth()
-    }, [checkAuth])
+        const init = async () => {
+            // First check auth
+            await checkAuth()
+            // Then fetch settings if we are authenticated
+            if (useAuthStore.getState().isAuthenticated) {
+                await fetchGeneralSettings()
+            }
+        }
+        init()
+    }, [checkAuth, fetchGeneralSettings])
+
+    // Block ALL route rendering until auth check AND settings fetch have settled.
+    // This prevents components from mounting with null settings (and thus wrong defaults).
+    const isAppHydrating = authHydrating || (isAuthenticated && !general && settingsLoading)
+
+    if (isAppHydrating) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-gray-950">
+                <Spinner size="lg" />
+            </div>
+        )
+    }
 
     return (
         <PageSuspense>
             <Routes>
                 {/* Public Landing Page / Redirect for Authed */}
                 <Route path="/" element={
-                    isAuthenticated ? <Navigate to="/dashboard" replace /> : <PageSuspense><LandingPage /></PageSuspense>
+                    isAuthenticated 
+                        ? (user?.role === 'super_admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />)
+                        : <PageSuspense><LandingPage /></PageSuspense>
                 } />
 
                 {/* Auth routes */}

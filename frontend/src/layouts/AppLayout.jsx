@@ -13,13 +13,12 @@ import TrialBanner from '@/components/ui/TrialBanner'
 export default function AppLayout() {
     useInactivityTimer()
     const { sidebarOpen } = useUIStore()
-    const { fetchGeneralSettings, general } = useSettingsStore()
+    const { general } = useSettingsStore()
     const { applyTheme } = useThemeStore()
 
     useEffect(() => {
         applyTheme()
-        fetchGeneralSettings()
-    }, [])
+    }, [applyTheme])
 
     useEffect(() => {
         if (general?.companyName) {

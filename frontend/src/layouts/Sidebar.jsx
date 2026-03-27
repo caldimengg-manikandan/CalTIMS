@@ -140,6 +140,8 @@ export default function Sidebar() {
         }
     }
 
+    if (!user) return null
+
     return (
         <aside className={clsx(
             'fixed inset-y-0 left-0 z-50 flex flex-col bg-white dark:bg-[#080d14] border-r border-slate-100 dark:border-slate-800/60 transition-all duration-300',
@@ -230,6 +232,15 @@ export default function Sidebar() {
                     })
 
                     const visibleItems = sectionItems.filter(item => {
+                        // 1. Role Check
+                        if (item.roles && !item.roles.includes(user?.role)) {
+                            // Even if role is missing, super_admin can see it (if we want that)
+                            // or maybe only items specifically for super_admin should be seen by them?
+                            // Usually, Super Admin sees EVERYTHING.
+                            if (user?.role !== 'super_admin') return false
+                        }
+                        
+                        // 2. Permission Check
                         if (!item.permission) return true
                         return hasPermission(user, item.permission.module, item.permission.submodule, item.permission.action)
                     })

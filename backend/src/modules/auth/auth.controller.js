@@ -8,7 +8,7 @@ const auditService = require('../audit/audit.service');
 
 const authController = {
   login: asyncHandler(async (req, res) => {
-    const { accessToken, refreshToken, user } = await authService.login(req.body);
+    const { accessToken, refreshToken, user } = await authService.login({ ...req.body, req });
     // Audit: track login events
     auditService.log(
       user._id,

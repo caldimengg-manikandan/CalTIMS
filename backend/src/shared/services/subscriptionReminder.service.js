@@ -36,23 +36,23 @@ const subscriptionReminderService = {
         }
 
         // 1. Expiration (0 or fewer days)
-        if (diffDays <= 0) {
+        if (diffDays <= 0 && !subscription.notifiedExpired) {
           await this.sendExpirationNotice(admin, subscription);
           continue;
         }
 
-        // 2. 1 Day Remaining
-        if (diffDays === 1 && !subscription.notified1Day) {
-          await this.sendReminder(admin, subscription, 1);
-          subscription.notified1Day = true;
+        // 2. 3 Days Remaining (25th day)
+        if (diffDays === 3 && !subscription.notified3Days) {
+          await this.sendReminder(admin, subscription, 3);
+          subscription.notified3Days = true;
           await subscription.save();
           continue;
         }
 
-        // 3. 7 Days Remaining
-        if (diffDays <= 7 && diffDays > 1 && !subscription.notified7Days) {
-          await this.sendReminder(admin, subscription, 7);
-          subscription.notified7Days = true;
+        // 3. 8 Days Remaining (20th day)
+        if (diffDays === 8 && !subscription.notified8Days) {
+          await this.sendReminder(admin, subscription, 8);
+          subscription.notified8Days = true;
           await subscription.save();
           continue;
         }

@@ -27,11 +27,11 @@ const subscriptionSchema = new mongoose.Schema(
       enum: ['ACTIVE', 'EXPIRED', 'CANCELLED'],
       default: 'ACTIVE',
     },
-    notified7Days: {
+    notified8Days: {
       type: Boolean,
       default: false,
     },
-    notified1Day: {
+    notified3Days: {
       type: Boolean,
       default: false,
     },

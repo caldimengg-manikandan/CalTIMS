@@ -92,6 +92,7 @@ async function ensureSuperAdmin() {
   try {
     const User = require('./src/modules/users/user.model');
     const Organization = require('./src/modules/organizations/organization.model');
+    const Subscription = require('./src/modules/subscriptions/subscription.model');
     
     const adminEmail = 'superadmin@timesheetpro.com';
     const adminPassword = 'SuperAdmin@1234';
@@ -123,6 +124,19 @@ async function ensureSuperAdmin() {
         employeeId: 'SA-0001'
       });
       
+      // 3. Ensure a Subscription exists for the system organization
+      let sub = await Subscription.findOne({ organizationId: org._id });
+      if (!sub) {
+        await Subscription.create({
+          organizationId: org._id,
+          planType: 'PRO',
+          status: 'ACTIVE',
+          trialStartDate: new Date(),
+          trialEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year for system org
+        });
+        logger.info(`[Seed] System Subscription created for ${org.name}`);
+      }
+      
       logger.info(`[Seed] Super Admin created successfully: ${adminEmail}`);
     } else {
       // Ensure role is correct even if user exists
@@ -130,6 +144,21 @@ async function ensureSuperAdmin() {
         superAdmin.role = 'super_admin';
         await superAdmin.save();
         logger.info('[Seed] Updated existing service user to super_admin role');
+      }
+
+      // Check if system org needs a subscription even if admin existed
+      if (superAdmin.organizationId) {
+        let sub = await Subscription.findOne({ organizationId: superAdmin.organizationId });
+        if (!sub) {
+          await Subscription.create({
+            organizationId: superAdmin.organizationId,
+            planType: 'PRO',
+            status: 'ACTIVE',
+            trialStartDate: new Date(),
+            trialEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          });
+          logger.info('[Seed] System Subscription created for existing organization');
+        }
       }
     }
   } catch (err) {

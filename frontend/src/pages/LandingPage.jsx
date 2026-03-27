@@ -16,9 +16,11 @@ import {
   Calendar,
   Lock
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button, Container, SectionHeader, FeatureCard, StepIcon, Badge } from './LandingComponents';
 
 const LandingPage = () => {
+  const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
       {/* Navigation */}
@@ -35,8 +37,8 @@ const LandingPage = () => {
             <a href="#enterprise" className="hover:text-indigo-600 transition-colors">Enterprise</a>
           </div>
           <div className="flex items-center gap-4">
-            <Button variant="ghost" className="hidden sm:flex">Login</Button>
-            <Button>Start Free</Button>
+            <Button onClick={() => navigate('/login')} variant="ghost" className="hidden sm:flex">Login</Button>
+            <Button onClick={() => navigate('/signup')}>Start Free</Button>
           </div>
         </Container>
       </nav>
@@ -80,7 +82,7 @@ const LandingPage = () => {
                 transition={{ delay: 0.3, duration: 0.5 }}
                 className="flex flex-col sm:flex-row gap-4 mb-20"
               >
-                <Button className="px-10 h-14 text-lg">Start Free</Button>
+                <Button onClick={() => navigate('/signup')} className="px-10 h-14 text-lg">Start Free</Button>
                 <Button variant="secondary" className="px-10 h-14 text-lg">
                   <Play size={18} className="fill-current" />
                   See Demo
@@ -472,7 +474,7 @@ const LandingPage = () => {
               Start managing your <br />team better today.
             </h2>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button className="bg-dark text-indigo-600 hover:bg-dark-900 border-white px-12 h-16 text-xl">
+              <Button onClick={() => navigate('/signup')} className="bg-dark text-indigo-600 hover:bg-dark-900 border-white px-12 h-16 text-xl">
                 Get Started
               </Button>
             </div>

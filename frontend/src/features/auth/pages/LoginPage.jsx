@@ -50,7 +50,10 @@ export default function LoginPage() {
             const { accessToken, refreshToken, user, subscription } = res.data.data
             setAuth(user, accessToken, refreshToken, subscription)
             toast.success(`Welcome back, ${user.name.split(' ')[0]}!`)
-            navigate('/dashboard', { replace: true })
+            
+            // Redirect based on role
+            const target = user.role === 'super_admin' ? '/admin/dashboard' : '/dashboard'
+            navigate(target, { replace: true })
         },
         onError: (err) => {
             const message = err.response?.data?.message || 'Invalid email or password'

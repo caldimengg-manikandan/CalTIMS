@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import {
     Briefcase, Building2, ShieldCheck, PaintRoller,
-    Clock, Mail, Workflow, FileLock, Users, History, Banknote, FileText
+    Clock, Mail, Workflow, FileLock, Users, History, Banknote, FileText,
+    Crown
 } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import OrganizationTab from '../tabs/OrganizationTab'
@@ -18,7 +19,9 @@ import PermissionAuditLogsTab from '../tabs/PermissionAuditLogsTab'
 import PayrollPolicyTab from '../tabs/PayrollPolicyTab'
 import PayslipTemplatesTab from '../tabs/PayslipTemplatesTab'
 import { PolicySettings } from '../../payroll/pages/PolicySettings'
+import SubscriptionPage from '../../subscriptions/pages/SubscriptionPage'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useSearchParams } from 'react-router-dom'
 import { Search } from 'lucide-react'
 
 const NAVIGATION_SECTIONS = [
@@ -27,6 +30,7 @@ const NAVIGATION_SECTIONS = [
         items: [
             { id: 'organization', label: 'General & Organization', icon: Building2 },
             { id: 'branding', label: 'Branding & Theme', icon: PaintRoller },
+            { id: 'subscription', label: 'Plan & Subscription', icon: Crown },
         ]
     },
     {
@@ -61,6 +65,14 @@ const NAVIGATION_SECTIONS = [
 export default function SettingsLayout() {
     const [activeTab, setActiveTab] = useState('organization')
     const [searchQuery, setSearchQuery] = useState('')
+    const [searchParams] = useSearchParams()
+
+    React.useEffect(() => {
+        const tab = searchParams.get('tab')
+        if (tab) {
+            setActiveTab(tab)
+        }
+    }, [searchParams])
 
     const renderContent = () => {
         switch (activeTab) {
@@ -78,6 +90,7 @@ export default function SettingsLayout() {
             case 'integrations': return <IntegrationsTab />
             case 'payroll_policy': return <PayrollPolicyTab />
             case 'payslip_templates': return <PayslipTemplatesTab />
+            case 'subscription': return <SubscriptionPage />
             default: return <OrganizationTab />
         }
     }
