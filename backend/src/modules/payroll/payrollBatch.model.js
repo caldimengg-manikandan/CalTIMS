@@ -8,10 +8,10 @@ const mongoose = require('mongoose');
  */
 const payrollBatchSchema = new mongoose.Schema(
   {
-    companyId: {
+    organizationId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Company',
-      required: false,
+      ref: 'Organization',
+      required: true,
       index: true
     },
     month: {
@@ -135,8 +135,8 @@ const payrollBatchSchema = new mongoose.Schema(
   }
 );
 
-// Unique per month/year — upsert will update in-place on re-runs
-payrollBatchSchema.index({ month: 1, year: 1 }, { unique: true });
+// Unique per month/year per organization — upsert will update in-place on re-runs
+payrollBatchSchema.index({ organizationId: 1, month: 1, year: 1 }, { unique: true });
 
 const PayrollBatch = mongoose.model('PayrollBatch', payrollBatchSchema);
 

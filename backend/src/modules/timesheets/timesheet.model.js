@@ -125,6 +125,12 @@ const timesheetSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -133,10 +139,10 @@ const timesheetSchema = new mongoose.Schema(
 );
 
 // ─── Indexes ──────────────────────────────────────────────────────────────────
-// Enforce ONE document per user per week
-timesheetSchema.index({ userId: 1, weekStartDate: 1 }, { unique: true });
-timesheetSchema.index({ status: 1, weekStartDate: -1 });
-timesheetSchema.index({ weekStartDate: -1 });
+// Enforce ONE document per user per week per organization
+timesheetSchema.index({ userId: 1, weekStartDate: 1, organizationId: 1 }, { unique: true });
+timesheetSchema.index({ organizationId: 1, status: 1, weekStartDate: -1 });
+timesheetSchema.index({ organizationId: 1, weekStartDate: -1 });
 
 // ─── Helper: resolve effective hours for a timesheet entry ───────────────────
 function resolveEntryHours(entry, workingHoursPerDay = 8) {
@@ -155,7 +161,7 @@ function resolveEntryHours(entry, workingHoursPerDay = 8) {
 // ─── Pre-save: Calculate totals ──────────────────────────────────────────────
 timesheetSchema.pre('save', async function (next) {
   try {
-    const settings = await Settings.findOne().lean();
+    const settings = await mongoose.model('Settings').findOne({ organizationId: this.organizationId }).lean();
     const workingHoursPerDay = settings?.general?.workingHoursPerDay || 8;
     const workingDaysCount = settings?.general?.isWeekendWorkable ? 7 : 5;
     const targetHours = workingHoursPerDay * workingDaysCount;

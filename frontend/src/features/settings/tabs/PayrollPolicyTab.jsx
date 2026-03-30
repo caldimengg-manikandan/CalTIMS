@@ -104,7 +104,7 @@ const PayrollPolicyTab = () => {
     <div className="max-w-[1400px] mx-auto p-2">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-700 to-violet-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary-700 to-primary-600 bg-clip-text text-transparent">
             Policy Settings
           </h1>
           

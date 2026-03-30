@@ -31,8 +31,9 @@ const authenticate = asyncHandler(async (req, res, next) => {
     return next(new AppError('Your account has been deactivated. Please contact an administrator.', 403));
   }
 
-  // Attach user to request
+  // Attach user and organizationId to request
   req.user = currentUser;
+  req.organizationId = currentUser.organizationId;
   next();
 });
 

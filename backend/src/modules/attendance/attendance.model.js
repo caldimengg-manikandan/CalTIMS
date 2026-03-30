@@ -28,15 +28,21 @@ const attendanceLogSchema = new mongoose.Schema(
     },
     rawLog: {
       type: Object,
-    }
+    },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Prevent duplicates
-attendanceLogSchema.index({ userId: 1, timestamp: 1, type: 1 }, { unique: true });
+// Prevent duplicates per organization
+attendanceLogSchema.index({ organizationId: 1, userId: 1, timestamp: 1, type: 1 }, { unique: true });
 
 const AttendanceLog = mongoose.model('AttendanceLog', attendanceLogSchema);
 module.exports = AttendanceLog;

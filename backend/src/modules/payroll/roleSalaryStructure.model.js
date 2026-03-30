@@ -3,10 +3,10 @@
 const mongoose = require('mongoose');
 
 const salaryComponentSchema = new mongoose.Schema({
-    companyId: {
+    organizationId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Company',
-      required: false,
+      ref: 'Organization',
+      required: true,
       index: true
     },
   name: { type: String, required: true },
@@ -25,7 +25,6 @@ const salaryStructureSchema = new mongoose.Schema(
     name: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
     description: {
@@ -48,11 +47,20 @@ const salaryStructureSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true
+    },
   },
   {
     timestamps: true,
   }
 );
+
+// Unique name per organization
+salaryStructureSchema.index({ organizationId: 1, name: 1 }, { unique: true });
 
 const RoleSalaryStructure = mongoose.model('RoleSalaryStructure', salaryStructureSchema);
 

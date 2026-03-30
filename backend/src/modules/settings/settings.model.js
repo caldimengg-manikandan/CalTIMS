@@ -3,9 +3,9 @@
 const mongoose = require('mongoose');
 
 const roleSchema = new mongoose.Schema({
-    companyId: {
+    organizationId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Company',
+      ref: 'Organization',
       required: false,
       index: true
     },
@@ -13,7 +13,6 @@ const roleSchema = new mongoose.Schema({
   description: { type: String, default: '' },
   templateType: { 
     type: String, 
-    enum: ['Admin', 'HR', 'Finance', 'Employee', 'Custom'], 
   },
   permissions: {
     type: Object, // Hierarchical: { Module: { Submodule: [Actions] } }
@@ -258,12 +257,22 @@ const settingsSchema = new mongoose.Schema(
       weekStartDay: { type: String, enum: ['monday', 'sunday'], default: 'monday' },
       dateFormat: { type: String, enum: ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'], default: 'DD/MM/YYYY' },
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      unique: true,
+      index: true
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Singleton: only one settings document per app
+/* 
+ * Multi-tenant Settings: Each organization has its own settings document.
+ * Enforced by unique index on organizationId above.
+ */
 const Settings = mongoose.model('Settings', settingsSchema);
 module.exports = Settings;

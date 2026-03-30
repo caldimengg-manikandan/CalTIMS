@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import {
     Briefcase, Building2, ShieldCheck, PaintRoller,
     Clock, Mail, Workflow, FileLock, Users, History, Banknote, FileText,
-    Crown
+    Crown, HelpCircle
 } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import OrganizationTab from '../tabs/OrganizationTab'
@@ -18,6 +18,7 @@ import AuditLogsTab from '../tabs/AuditLogsTab'
 import PermissionAuditLogsTab from '../tabs/PermissionAuditLogsTab'
 import PayrollPolicyTab from '../tabs/PayrollPolicyTab'
 import PayslipTemplatesTab from '../tabs/PayslipTemplatesTab'
+import OnboardingTab from '../tabs/OnboardingTab'
 import { PolicySettings } from '../../payroll/pages/PolicySettings'
 import SubscriptionPage from '../../subscriptions/pages/SubscriptionPage'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -38,7 +39,6 @@ const NAVIGATION_SECTIONS = [
         items: [
             { id: 'roles', label: 'Users & Roles', icon: ShieldCheck },
             { id: 'permission_audit', label: 'Permission History', icon: History },
-            { id: 'audit', label: 'System Logs', icon: FileLock },
         ]
     },
     {
@@ -59,7 +59,13 @@ const NAVIGATION_SECTIONS = [
             { id: 'notifications', label: 'Notifications', icon: Users },
             { id: 'integrations', label: 'Integrations', icon: Workflow },
         ]
-    }
+    },
+    // {
+    //     title: 'Help & Support',
+    //     items: [
+    //         { id: 'onboarding', label: 'Onboarding Tour', icon: HelpCircle },
+    //     ]
+    // }
 ]
 
 export default function SettingsLayout() {
@@ -91,6 +97,7 @@ export default function SettingsLayout() {
             case 'payroll_policy': return <PayrollPolicyTab />
             case 'payslip_templates': return <PayslipTemplatesTab />
             case 'subscription': return <SubscriptionPage />
+            case 'onboarding': return <OnboardingTab />
             default: return <OrganizationTab />
         }
     }

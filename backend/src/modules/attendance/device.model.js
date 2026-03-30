@@ -40,7 +40,13 @@ const deviceSchema = new mongoose.Schema(
     enabled: {
       type: Boolean,
       default: true
-    }
+    },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true

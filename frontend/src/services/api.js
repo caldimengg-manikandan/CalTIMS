@@ -23,9 +23,13 @@ api.interceptors.request.use(
       }
     }
 
+    // Skip warning for public routes
+    const publicRoutes = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password', '/health'];
+    const isPublic = publicRoutes.some(route => config.url?.includes(route));
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
-    } else {
+    } else if (!isPublic) {
       console.warn(`No auth token found for protected request: ${config.url}`)
     }
     

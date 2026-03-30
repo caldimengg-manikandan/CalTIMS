@@ -175,6 +175,7 @@ export default function DashboardPage() {
 
             {/* 1️⃣ WELCOME HERO */}
             <motion.section
+                id="tour-hero"
                 initial="hidden" animate="visible" variants={fadeUp} transition={{ duration: 0.4 }}
                 className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 text-white p-8 md:p-10 shadow-2xl shadow-slate-900/20"
             >
@@ -397,7 +398,7 @@ export default function DashboardPage() {
                 >
                     {/* Weekly Productivity Chart */}
                     {prefs.chart && (
-                        <div className="card p-6 flex flex-col h-96">
+                        <div id="tour-productivity-chart" className="card p-6 flex flex-col h-96">
                             <div className="flex items-center justify-between xl:justify-start gap-4 mb-6">
                                 <div>
                                     <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
@@ -665,7 +666,7 @@ export default function DashboardPage() {
             </div>
 
             {/* 5️⃣ ACTIVITY FEED */}
-            {prefs.feed && (
+            {/* {prefs.feed && (
                 <motion.section
                     initial="hidden" animate="visible" variants={fadeUp} transition={{ duration: 0.4, delay: 0.4 }}
                     className="card p-6"
@@ -700,7 +701,7 @@ export default function DashboardPage() {
                         )}
                     </div>
                 </motion.section>
-            )}
+            )} */}
 
             {/* Dashboard Settings Modal */}
             <Modal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} title="Dashboard Settings" maxWidth="max-w-md">
@@ -713,7 +714,7 @@ export default function DashboardPage() {
                         { key: 'projects', label: 'Top Active Projects' },
                         { key: 'announcements', label: 'Announcements Hub' },
                         { key: 'calendar', label: 'Calendar Widget' },
-                        { key: 'feed', label: 'Recent Activity Feed' },
+                        // { key: 'feed', label: 'Recent Activity Feed' },
                     ].map(widget => (
                         <div key={widget.key} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50">
                             <span className="text-sm font-bold text-slate-700">{widget.label}</span>

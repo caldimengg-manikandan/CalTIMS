@@ -128,37 +128,6 @@ export default function LeavePolicyTab() {
                             </div>
                         </div>
                     </SectionCard>
-
-                    <SectionCard title="Entitlement Workflow" subtitle="Governance for leave processing and approvals" icon={Settings2}>
-                        <div className="space-y-6">
-                            <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3 block">Approval Routing</label>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {[
-                                        { id: 'Employee -> Manager', sub: 'Standard two-tier oversight', tier: '2-TIER' },
-                                        { id: 'Employee -> Manager -> HR', sub: 'Strict triple-verification policy', tier: '3-TIER' }
-                                    ].map(flow => (
-                                        <button
-                                            key={flow.id}
-                                            onClick={() => upd('approvalWorkflow', flow.id)}
-                                            className={`relative group p-6 rounded-[2rem] border-2 text-left transition-all ${policy.approvalWorkflow === flow.id
-                                                ? 'border-primary bg-primary/10 dark:bg-primary/10'
-                                                : 'border-slate-100 dark:border-white/5 bg-slate-50/30 dark:bg-white/5 hover:border-slate-200'
-                                                }`}
-                                        >
-                                            <div className="flex justify-between items-start mb-2">
-                                                <p className={`text-sm font-black tracking-tight ${policy.approvalWorkflow === flow.id ? 'text-primary' : 'text-slate-700 dark:text-slate-200'}`}>{flow.id}</p>
-                                                {policy.approvalWorkflow === flow.id && (
-                                                    <div className="px-2 py-0.5 rounded-lg bg-primary text-white text-[8px] font-black uppercase">{flow.tier}</div>
-                                                )}
-                                            </div>
-                                            <p className="text-xs text-slate-500 font-medium">{flow.sub}</p>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </SectionCard>
                 </div>
 
                 {/* Right Column: Allowances & Rules */}

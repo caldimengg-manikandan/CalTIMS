@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
 
 const PayslipDesignSchema = new mongoose.Schema({
-  companyId: {
+  organizationId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company',
-    required: true
+    ref: 'Organization',
+    required: true,
+    index: true
   },
   templateId: {
     type: String, // Can be layout name like 'CORPORATE' or a Template ID
@@ -24,7 +25,7 @@ const PayslipDesignSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// Ensure only one active design per company
-PayslipDesignSchema.index({ companyId: 1, isActive: 1 }, { unique: true, partialFilterExpression: { isActive: true } });
+// Ensure only one active design per organization
+PayslipDesignSchema.index({ organizationId: 1, isActive: 1 }, { unique: true, partialFilterExpression: { isActive: true } });
 
 module.exports = mongoose.model('PayslipDesign', PayslipDesignSchema);

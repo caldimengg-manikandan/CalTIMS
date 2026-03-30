@@ -6,7 +6,6 @@ const asyncHandler = require('../../shared/utils/asyncHandler');
 const ApiResponse = require('../../shared/utils/apiResponse');
 const CalendarEvent = require('./calendar.model');
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorize } = require('../../middleware/rbac.middleware');
 
 router.use(authenticate);
 
@@ -14,11 +13,11 @@ router.use(authenticate);
 router.get('/', asyncHandler(async (req, res) => {
   const { _id } = req.user;
   const { month, from, to, eventType } = req.query;
+  const organizationId = req.organizationId;
 
-  let filter = {};
+  // Base filter: events belonging to this organization AND (Global for org OR created by user)
+  let filter = { organizationId };
 
-  // Base filter: global events OR events created by user
-  // Also include events user has access to via targetRoles (optional based on existing logic)
   filter.$or = [
     { isGlobal: true },
     { createdBy: _id }
@@ -29,15 +28,11 @@ router.get('/', asyncHandler(async (req, res) => {
     const startOfMonth = new Date(Date.UTC(year, m - 1, 1));
     const endOfMonth = new Date(Date.UTC(year, m, 0, 23, 59, 59));
 
-    filter.$and = filter.$and || [];
-    filter.$and.push({
-      startDate: { $lte: endOfMonth },
-      endDate: { $gte: startOfMonth }
-    });
+    filter.startDate = { $lte: endOfMonth };
+    filter.endDate = { $gte: startOfMonth };
   } else if (from || to) {
-    filter.$and = filter.$and || [];
-    if (from) filter.$and.push({ startDate: { $gte: new Date(from) } });
-    if (to) filter.$and.push({ startDate: { $lte: new Date(to) } });
+    if (from) filter.startDate = { $gte: new Date(from) };
+    if (to) filter.endDate = { $lte: new Date(to) };
   }
 
   if (eventType) {
@@ -57,6 +52,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const payload = {
     ...req.body,
     createdBy: req.user._id,
+    organizationId: req.organizationId,
     isGlobal: req.user.role === 'admin' ? (req.body.isGlobal ?? false) : false,
   };
   const event = await CalendarEvent.create(payload);
@@ -64,7 +60,7 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 router.put('/:id', asyncHandler(async (req, res) => {
-  const event = await CalendarEvent.findById(req.params.id);
+  const event = await CalendarEvent.findOne({ _id: req.params.id, organizationId: req.organizationId });
   if (!event) return ApiResponse.notFound(res);
 
   // Only admin or the creator can update
@@ -85,7 +81,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 }));
 
 router.delete('/:id', asyncHandler(async (req, res) => {
-  const event = await CalendarEvent.findById(req.params.id);
+  const event = await CalendarEvent.findOne({ _id: req.params.id, organizationId: req.organizationId });
   if (!event) return ApiResponse.notFound(res);
 
   // Only admin or the creator can delete

@@ -60,12 +60,12 @@ const defaultPolicy = {
 /**
  * Migrates data from legacy Settings and OrganizationPolicy to the new PayrollPolicy.
  */
-const migrateToUnifiedPolicy = async (companyId = null) => {
+const migrateToUnifiedPolicy = async (organizationId = null) => {
   try {
-    const settings = await Settings.findOne().lean();
-    const orgPolicy = await OrganizationPolicy.findOne(companyId ? { companyId } : {}).lean();
+    const settings = await Settings.findOne(organizationId ? { organizationId } : {}).lean();
+    const orgPolicy = await OrganizationPolicy.findOne(organizationId ? { organizationId } : {}).lean();
     
-    if (!settings && !orgPolicy) return defaultPolicy;
+    if (!settings && !orgPolicy) return { ...defaultPolicy, organizationId };
 
     const legacyPayroll = settings?.payroll || {};
     
@@ -113,7 +113,8 @@ const migrateToUnifiedPolicy = async (companyId = null) => {
       leave: {
         types: orgPolicy?.leave?.types || defaultPolicy.leave.types,
         allowNegativeBalance: orgPolicy?.leave?.allowNegativeBalance || false
-      }
+      },
+      organizationId
     };
 
     return migratedPolicy;
@@ -126,14 +127,14 @@ const migrateToUnifiedPolicy = async (companyId = null) => {
 /**
  * Retrieves the active payroll policy.
  */
-const getPolicy = async (companyId = null) => {
+const getPolicy = async (organizationId = null) => {
   try {
     const query = { isActive: true };
-    if (companyId) query.companyId = companyId;
+    if (organizationId) query.organizationId = organizationId;
     
     let policy = await PayrollPolicy.findOne(query).lean();
     if (!policy) {
-      const migratedData = await migrateToUnifiedPolicy(companyId);
+      const migratedData = await migrateToUnifiedPolicy(organizationId);
       policy = await PayrollPolicy.create(migratedData);
     }
     
@@ -147,13 +148,13 @@ const getPolicy = async (companyId = null) => {
 /**
  * Creates a new policy version.
  */
-const createPolicyVersion = async (policyData, companyId = null) => {
-  const latestPolicy = await PayrollPolicy.findOne(companyId ? { companyId } : {}).sort({ version: -1 });
+const createPolicyVersion = async (policyData, organizationId = null) => {
+  const latestPolicy = await PayrollPolicy.findOne(organizationId ? { organizationId } : {}).sort({ version: -1 });
   const nextVersion = latestPolicy ? latestPolicy.version + 1 : 1;
 
   const newPolicy = new PayrollPolicy({
     ...policyData,
-    companyId,
+    organizationId,
     version: nextVersion,
     isActive: true
   });
@@ -165,17 +166,26 @@ const createPolicyVersion = async (policyData, companyId = null) => {
 /**
  * Updates the existing active policy.
  */
-const updatePolicy = async (policyData, companyId = null) => {
+const updatePolicy = async (policyData, organizationId = null) => {
   const query = { isActive: true };
-  if (companyId) query.companyId = companyId;
+  if (organizationId) query.organizationId = organizationId;
 
   let policy = await PayrollPolicy.findOne(query);
   if (!policy) {
-    return await createPolicyVersion(policyData, companyId);
+    return await createPolicyVersion(policyData, organizationId);
   }
 
-  // Update fields
-  Object.assign(policy, policyData);
+  // Update fields with a shallow merge for top level, but handle common nested objects
+  const nestedKeys = ['compliance', 'attendance', 'statutory', 'leave', 'overtime'];
+  
+  Object.keys(policyData).forEach(key => {
+    if (nestedKeys.includes(key) && typeof policyData[key] === 'object' && policyData[key] !== null) {
+      policy[key] = { ...policy[key], ...policyData[key] };
+    } else {
+      policy[key] = policyData[key];
+    }
+  });
+
   await policy.save();
   return policy;
 };

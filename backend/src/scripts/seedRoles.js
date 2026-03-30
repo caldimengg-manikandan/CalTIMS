@@ -97,7 +97,7 @@ const roles = [
     permissions: {
       "Payroll": {
         "Dashboard": ["view"],
-        "Payroll Engine": ["view", "approve", "disburse"],
+        "Payroll Engine": ["view", "approve"],
         "Execution Ledger": ["view"],
         "Bank Export": ["view", "export"],
         "Payroll Reports": ["view", "export"]

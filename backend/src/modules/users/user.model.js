@@ -20,9 +20,9 @@ const userSchema = new mongoose.Schema(
     },
     employeeId: {
       type: String,
-      unique: true,
       sparse: true,
       trim: true,
+      // No unique: true here to allow same IDs in different organizations
     },
     name: {
       type: String,
@@ -52,7 +52,8 @@ const userSchema = new mongoose.Schema(
     organizationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Organization',
-      default: null,
+      required: [true, 'Organization is required for all users'],
+      index: true
     },
     phoneNumber: {
       type: String,
@@ -195,6 +196,7 @@ userSchema.index({ role: 1 });
 userSchema.index({ managerId: 1 });
 userSchema.index({ department: 1 });
 userSchema.index({ isActive: 1 });
+userSchema.index({ organizationId: 1, employeeId: 1 }, { unique: true, sparse: true });
 
 // ─── Pre-save: Hash password ───────────────────────────────────────────────
 userSchema.pre('save', async function (next) {
@@ -244,10 +246,14 @@ userSchema.methods.toPublicJSON = function () {
   };
 };
 
-// Auto-generate employeeId before save if not set
+// Auto-generate employeeId before save if not set (scoped to organization)
 userSchema.pre('save', async function (next) {
-  if (this.employeeId || !this.isNew) return next();
-  const count = await mongoose.model('User').countDocuments();
+  if (this.employeeId || !this.isNew || !this.organizationId) return next();
+  
+  const count = await mongoose.model('User').countDocuments({ 
+    organizationId: this.organizationId 
+  });
+  
   this.employeeId = `EMP${String(count + 1).padStart(4, '0')}`;
   next();
 });

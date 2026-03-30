@@ -74,6 +74,12 @@ const incidentSchema = new mongoose.Schema(
             ref: 'User',
             default: null,
         },
+        organizationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Organization',
+            required: true,
+            index: true,
+        },
     },
     {
         timestamps: true,
@@ -82,11 +88,11 @@ const incidentSchema = new mongoose.Schema(
     }
 );
 
-// Auto-generate incidentId before save if not set
+// Auto-generate incidentId before save if not set (scoped to organization)
 incidentSchema.pre('save', async function (next) {
-    if (this.incidentId || !this.isNew) return next();
+    if (this.incidentId || !this.isNew || !this.organizationId) return next();
     try {
-        const count = await this.constructor.countDocuments();
+        const count = await this.constructor.countDocuments({ organizationId: this.organizationId });
         // INC-1001 onwards
         this.incidentId = `INC-${1001 + count}`;
         next();
@@ -96,10 +102,10 @@ incidentSchema.pre('save', async function (next) {
 });
 
 // Indexes for common queries
-incidentSchema.index({ employee: 1 });
-incidentSchema.index({ status: 1 });
-incidentSchema.index({ priority: 1 });
-incidentSchema.index({ assignedTo: 1 });
+incidentSchema.index({ organizationId: 1, employee: 1 });
+incidentSchema.index({ organizationId: 1, status: 1 });
+incidentSchema.index({ organizationId: 1, priority: 1 });
+incidentSchema.index({ organizationId: 1, assignedTo: 1 });
 
 const Incident = mongoose.model('Incident', incidentSchema);
 

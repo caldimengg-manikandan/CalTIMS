@@ -35,14 +35,20 @@ const auditLogSchema = new mongoose.Schema(
         },
         status: {
             type: String,
-            enum: ['SUCCESS', 'FAILED', 'WARNING'],
+            enum: ['SUCCESS', 'FAILED', 'WARNING', 'SECURITY_WARNING', 'SECURITY_ALERT'],
             default: 'SUCCESS',
             index: true
         },
         ipAddress: {
             type: String,
             default: ''
-        }
+        },
+        organizationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Organization',
+            required: true,
+            index: true,
+        },
     },
     {
         timestamps: true

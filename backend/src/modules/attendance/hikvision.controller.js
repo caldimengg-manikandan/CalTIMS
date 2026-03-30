@@ -27,10 +27,10 @@ const hikvisionController = {
     let results;
 
     if (deviceId) {
-      const result = await hikvisionService.syncDevice(deviceId);
+      const result = await hikvisionService.syncDevice(deviceId, { organizationId: req.organizationId });
       results = [{ deviceId, ...result }];
     } else {
-      results = await hikvisionService.syncAllDevices();
+      results = await hikvisionService.syncAllDevices({ organizationId: req.organizationId });
     }
 
     ApiResponse.success(res, { message: 'Manual sync completed', data: results });
@@ -40,23 +40,23 @@ const hikvisionController = {
    * CRUD for Devices
    */
   getDevices: asyncHandler(async (req, res) => {
-    const devices = await Device.find();
+    const devices = await Device.find({ organizationId: req.organizationId });
     ApiResponse.success(res, { data: devices });
   }),
 
   createDevice: asyncHandler(async (req, res) => {
-    const device = await Device.create(req.body);
+    const device = await Device.create({ ...req.body, organizationId: req.organizationId });
     ApiResponse.success(res, { message: 'Device created successfully', data: device });
   }),
 
   updateDevice: asyncHandler(async (req, res) => {
-    const device = await Device.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const device = await Device.findOneAndUpdate({ _id: req.params.id, organizationId: req.organizationId }, req.body, { new: true });
     if (!device) throw new AppError('Device not found', 404);
     ApiResponse.success(res, { message: 'Device updated successfully', data: device });
   }),
 
   deleteDevice: asyncHandler(async (req, res) => {
-    const device = await Device.findByIdAndDelete(req.params.id);
+    const device = await Device.findOneAndDelete({ _id: req.params.id, organizationId: req.organizationId });
     if (!device) throw new AppError('Device not found', 404);
     ApiResponse.success(res, { message: 'Device deleted successfully' });
   })

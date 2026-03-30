@@ -15,14 +15,14 @@ router.use(authenticate);
 router.use(authorize('admin', 'manager'));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-async function getCompanyName() {
-  const s = await Settings.findOne().lean();
+async function getCompanyName(organizationId) {
+  const s = await Settings.findOne({ organizationId }).lean();
   return s?.general?.companyName || 'TimesheetPro';
 }
 
 // ── GET /api/v1/report-schedules — list all ──────────────────────────────────
 router.get('/', asyncHandler(async (req, res) => {
-  const schedules = await ReportSchedule.find()
+  const schedules = await ReportSchedule.find({ organizationId: req.organizationId })
     .populate('recipientIds', 'name email')
     .sort({ createdAt: -1 })
     .lean();
@@ -49,6 +49,7 @@ router.post('/', asyncHandler(async (req, res) => {
     projectIds: projectIds || [],
     isActive: isActive !== false,
     createdBy: req.user._id,
+    organizationId: req.organizationId,
   });
 
   ApiResponse.success(res, { message: 'Schedule created', data: schedule, statusCode: 201 });
@@ -58,8 +59,8 @@ router.post('/', asyncHandler(async (req, res) => {
 router.put('/:id', asyncHandler(async (req, res) => {
   const { name, frequency, scheduledTime, reportType, recipientIds, projectIds, isActive } = req.body;
 
-  const schedule = await ReportSchedule.findByIdAndUpdate(
-    req.params.id,
+  const schedule = await ReportSchedule.findOneAndUpdate(
+    { _id: req.params.id, organizationId: req.organizationId },
     {
       $set: {
         ...(name !== undefined && { name: name.trim() }),
@@ -83,34 +84,34 @@ router.put('/:id', asyncHandler(async (req, res) => {
 
 // ── DELETE /api/v1/report-schedules/:id — delete (stops auto-send) ───────────
 router.delete('/:id', asyncHandler(async (req, res) => {
-  const schedule = await ReportSchedule.findByIdAndDelete(req.params.id);
+  const schedule = await ReportSchedule.findOneAndDelete({ _id: req.params.id, organizationId: req.organizationId });
   if (!schedule) return ApiResponse.notFound(res, 'Schedule not found');
   ApiResponse.success(res, { message: 'Schedule deleted. Auto-send has been stopped.' });
 }));
 
 // ── POST /api/v1/report-schedules/:id/send-now — manual fire ─────────────────
 router.post('/:id/send-now', asyncHandler(async (req, res) => {
-  const schedule = await ReportSchedule.findById(req.params.id).lean();
+  const schedule = await ReportSchedule.findOne({ _id: req.params.id, organizationId: req.organizationId }).lean();
   if (!schedule) return ApiResponse.notFound(res, 'Schedule not found');
 
-  const users = await User.find({ _id: { $in: schedule.recipientIds } }, 'email name').lean();
+  const users = await User.find({ _id: { $in: schedule.recipientIds }, organizationId: req.organizationId }, 'email name').lean();
   const emails = users.map(u => u.email).filter(Boolean);
 
   if (!emails.length) {
     return ApiResponse.error(res, { message: 'No valid email recipients found', statusCode: 400 });
   }
 
-  const companyName = await getCompanyName();
+  const companyName = await getCompanyName(req.organizationId);
   
-  const settings = await Settings.findOne().lean();
+  const settings = await Settings.findOne({ organizationId: req.organizationId }).lean();
   const format = settings?.report?.defaultFormat || 'PDF';
 
   let result;
   try {
-    result = await emailService.sendReportEmail(emails, schedule.reportType, companyName, schedule.projectIds || [], format);
+    result = await emailService.sendReportEmail(emails, schedule.reportType, companyName, schedule.projectIds || [], format, req.organizationId);
   } catch (err) {
     // Save failed history
-    const doc = await ReportSchedule.findById(schedule._id);
+    const doc = await ReportSchedule.findOne({ _id: schedule._id, organizationId: req.organizationId });
     if (doc) await doc.addHistory({ status: 'failed', recipientCount: 0, reportTitle: schedule.reportType, error: err.message });
     return ApiResponse.error(res, {
       message: err.message.includes('SMTP') ? 'SMTP not configured. Check .env file.' : `Email failed: ${err.message}`,
@@ -119,7 +120,7 @@ router.post('/:id/send-now', asyncHandler(async (req, res) => {
   }
 
   // Save success history
-  const doc = await ReportSchedule.findById(schedule._id);
+  const doc = await ReportSchedule.findOne({ _id: schedule._id, organizationId: req.organizationId });
   if (doc) await doc.addHistory({ status: 'success', recipientCount: result.sent, reportTitle: result.reportTitle });
 
   ApiResponse.success(res, { message: `Report sent to ${result.sent} recipient(s)`, data: result });
@@ -127,7 +128,7 @@ router.post('/:id/send-now', asyncHandler(async (req, res) => {
 
 // ── GET /api/v1/report-schedules/:id/history — history for one schedule ──────
 router.get('/:id/history', asyncHandler(async (req, res) => {
-  const schedule = await ReportSchedule.findById(req.params.id, 'name history').lean();
+  const schedule = await ReportSchedule.findOne({ _id: req.params.id, organizationId: req.organizationId }, 'name history').lean();
   if (!schedule) return ApiResponse.notFound(res, 'Schedule not found');
   ApiResponse.success(res, { data: schedule.history });
 }));
@@ -135,9 +136,9 @@ router.get('/:id/history', asyncHandler(async (req, res) => {
 // ── POST /api/v1/report-schedules/preview — preview HTML ─────────────────────
 router.post('/preview', asyncHandler(async (req, res) => {
   const { reportType = 'approved', projectIds = [] } = req.body;
-  const companyName = await getCompanyName();
+  const companyName = await getCompanyName(req.organizationId);
   try {
-    const preview = await emailService.buildPreview(reportType, companyName, projectIds);
+    const preview = await emailService.buildPreview(reportType, companyName, projectIds, req.organizationId);
     ApiResponse.success(res, { data: preview });
   } catch (err) {
     ApiResponse.error(res, { message: `Preview failed: ${err.message}`, statusCode: 500 });
@@ -147,9 +148,9 @@ router.post('/preview', asyncHandler(async (req, res) => {
 // ── POST /api/v1/report-schedules/preview/pdf — download PDF ─────────────────
 router.post('/preview/pdf', asyncHandler(async (req, res) => {
   const { reportType = 'approved', projectIds = [] } = req.body;
-  const companyName = await getCompanyName();
+  const companyName = await getCompanyName(req.organizationId);
   try {
-    const { buffer, reportTitle } = await emailService.buildReportPdf(reportType, companyName, projectIds);
+    const { buffer, reportTitle } = await emailService.buildReportPdf(reportType, companyName, projectIds, req.organizationId);
     const dateStr = new Date().toLocaleDateString('en-IN').replace(/\//g, '-');
     const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${dateStr}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
@@ -167,9 +168,9 @@ router.post('/preview/send-pdf', asyncHandler(async (req, res) => {
   if (!recipientEmails.length) {
     return ApiResponse.error(res, { message: 'At least one recipient email is required', statusCode: 400 });
   }
-  const companyName = await getCompanyName();
+  const companyName = await getCompanyName(req.organizationId);
   try {
-    const result = await emailService.sendReportPdfEmail(recipientEmails, reportType, companyName, projectIds);
+    const result = await emailService.sendReportPdfEmail(recipientEmails, reportType, companyName, projectIds, req.organizationId);
     ApiResponse.success(res, { message: `PDF report sent to ${result.sent} recipient(s)`, data: result });
   } catch (err) {
     const msg = err.message.includes('SMTP') ? 'SMTP not configured. Check .env file.' : `Send failed: ${err.message}`;

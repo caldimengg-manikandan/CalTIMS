@@ -41,13 +41,19 @@ const notificationSchema = new mongoose.Schema(
       enum: ['Leave', 'Timesheet', 'Incident', null],
       default: null,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
+notificationSchema.index({ organizationId: 1, userId: 1, isRead: 1, createdAt: -1 });
 
 const Notification = mongoose.model('Notification', notificationSchema);
 module.exports = Notification;

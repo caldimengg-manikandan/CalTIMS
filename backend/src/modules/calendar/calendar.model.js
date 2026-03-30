@@ -51,6 +51,12 @@ const calendarEventSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -58,9 +64,9 @@ const calendarEventSchema = new mongoose.Schema(
   }
 );
 
-calendarEventSchema.index({ startDate: 1, endDate: 1 });
-calendarEventSchema.index({ eventType: 1 });
-calendarEventSchema.index({ isGlobal: 1 });
+calendarEventSchema.index({ organizationId: 1, startDate: 1, endDate: 1 });
+calendarEventSchema.index({ organizationId: 1, eventType: 1 });
+calendarEventSchema.index({ organizationId: 1, isGlobal: 1 });
 
 const CalendarEvent = mongoose.model('CalendarEvent', calendarEventSchema);
 module.exports = CalendarEvent;

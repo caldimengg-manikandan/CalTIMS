@@ -40,6 +40,12 @@ const reportScheduleSchema = new mongoose.Schema(
     // ring-buffer: last 50 history entries
     history:      { type: [historyEntrySchema], default: [] },
     createdBy:    { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
   },
   { timestamps: true }
 );

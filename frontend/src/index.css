@@ -6,6 +6,8 @@
 :root {
   --color-primary: #6366f1;
   --color-primary-rgb: 99 102 241;
+  --color-primary-hover: #4f46e5;
+  --color-primary-light: #eef2ff;
 
   --header-height: 56px;
   --footer-height: 48px;
@@ -52,7 +54,7 @@
   html { scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
 
   *:focus         { outline: none; }
-  *:focus-visible { outline: 2px solid #6366f1 !important; outline-offset: 2px !important; }
+  *:focus-visible { outline: 2px solid var(--color-primary) !important; outline-offset: 2px !important; }
 
   body {
     @apply bg-slate-50 text-slate-800 font-sans antialiased;
@@ -120,12 +122,12 @@
 
   .btn-primary {
     @apply btn text-white active:scale-[0.97];
-    background-color: #6366f1;
-    box-shadow: 0 1px 3px 0 rgb(99 102 241 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.1);
-    --tw-ring-color: #6366f1;
+    background-color: var(--color-primary);
+    box-shadow: 0 1px 3px 0 rgb(var(--color-primary-rgb) / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.1);
+    --tw-ring-color: var(--color-primary);
   }
-  .btn-primary:hover { background-color: #4f46e5; box-shadow: 0 4px 12px 0 rgb(99 102 241 / 0.4); }
-  .btn-primary:active { background-color: #4338ca; }
+  .btn-primary:hover { background-color: var(--color-primary-hover); box-shadow: 0 4px 12px 0 rgb(var(--color-primary-rgb) / 0.4); }
+  .btn-primary:active { background-color: var(--color-primary-hover); opacity: 0.9; }
 
   .btn-secondary {
     @apply btn bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 active:scale-[0.97] focus-visible:ring-slate-400;
@@ -169,7 +171,7 @@
     color: #e2e8f0;
   }
   .dark .input::placeholder { color: #64748b; }
-  .dark .input:focus { border-color: #6366f1; }
+  .dark .input:focus { border-color: var(--color-primary); }
 
   .input-error   { @apply border-red-400 focus:ring-red-500/30 focus:border-red-500; }
   .input-success { @apply border-emerald-400 focus:ring-emerald-500/30 focus:border-emerald-500; }
@@ -279,10 +281,11 @@
     @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-500 transition-all duration-150 cursor-pointer hover:bg-slate-50 hover:text-slate-700;
   }
   .sidebar-link.active {
-    @apply bg-primary-50 text-primary-700 font-semibold;
+    background-color: var(--color-primary-light);
+    color: var(--color-primary);
+    font-weight: 600;
   }
-  .dark .sidebar-link            { @apply text-slate-400 hover:bg-white/5 hover:text-slate-200; }
-  .dark .sidebar-link.active     { background-color: rgba(99, 102, 241, 0.12); color: #a5b4fc; }
+  .dark .sidebar-link.active     { background-color: rgb(var(--color-primary-rgb) / 0.12); color: var(--color-primary); }
 
   /* ── Page Structure ─────────────────────────────────────── */
   .page-title {
@@ -391,7 +394,7 @@
 /* ─── Utility Layer ──────────────────────────────────────────────────────────── */
 @layer utilities {
   .text-gradient {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -401,7 +404,7 @@
   .shadow-card-hover { box-shadow: 0 8px 20px -4px rgb(0 0 0 / 0.1), 0 4px 8px -4px rgb(0 0 0 / 0.06); }
 
   .gradient-primary {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
     color: white;
   }
 

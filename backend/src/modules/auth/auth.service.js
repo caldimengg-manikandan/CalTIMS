@@ -9,6 +9,8 @@ const Subscription = require('../subscriptions/subscription.model');
 const TrialTracking = require('../subscriptions/trialTracking.model');
 const AppError = require('../../shared/utils/AppError');
 const { logActivity } = require('../../shared/utils/activityLogger');
+const Role = require('../users/role.model');
+const Settings = require('../settings/settings.model');
 const { ROLES } = require('../../constants');
 
 /**
@@ -85,6 +87,56 @@ const authService = {
       name: organizationName
     });
 
+    // 2.1 Create Default Settings for Organization
+    await Settings.create({
+      organizationId: organization._id,
+      organization: {
+        companyName: organizationName
+      },
+      branding: {
+        organizationName: organizationName
+      }
+    });
+
+    // 2.2 Create Default Roles for Organization
+    const defaultRoles = [
+      {
+        name: 'Admin',
+        permissions: { all: { all: ['all'] } },
+        isSystemRole: true,
+      },
+      {
+        name: 'Employee',
+        permissions: { timesheets: { all: ['view', 'create', 'edit'] } },
+        isSystemRole: false,
+      },
+      {
+        name: 'Finance',
+        permissions: { payroll: { all: ['view', 'approve'] } },
+        isSystemRole: false,
+      }
+    ];
+
+    let adminRole;
+    for (const roleDef of defaultRoles) {
+      try {
+        const r = await Role.create({
+          ...roleDef,
+          organizationId: organization._id
+        });
+        if (roleDef.name === 'Admin') adminRole = r;
+      } catch (err) {
+        if (err.code !== 11000) throw err;
+        if (roleDef.name === 'Admin') {
+           adminRole = await Role.findOne({ name: 'Admin', organizationId: organization._id });
+        }
+      }
+    }
+
+    if (!adminRole) {
+      throw new AppError('Admin role could not be created or found during signup.', 500);
+    }
+
     // 3. Create Admin User
     const user = await User.create({
       email,
@@ -93,6 +145,7 @@ const authService = {
       phoneNumber,
       organizationId: organization._id,
       role: ROLES.ADMIN,
+      roleId: adminRole._id,
       isActive: true,
       lastLogin: new Date()
     });

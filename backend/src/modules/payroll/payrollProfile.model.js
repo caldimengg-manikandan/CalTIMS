@@ -4,17 +4,16 @@ const mongoose = require('mongoose');
 
 const payrollProfileSchema = new mongoose.Schema(
   {
-    companyId: {
+    organizationId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Company',
-      required: false,
+      ref: 'Organization',
+      required: true,
       index: true
     },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      unique: true,
     },
     payrollType: {
       type: String,
@@ -62,6 +61,9 @@ const payrollProfileSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// One payroll profile per user per organization
+payrollProfileSchema.index({ organizationId: 1, user: 1 }, { unique: true });
 
 const PayrollProfile = mongoose.model('PayrollProfile', payrollProfileSchema);
 

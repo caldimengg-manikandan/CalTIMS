@@ -42,7 +42,6 @@ const projectSchema = new mongoose.Schema(
     code: {
       type: String,
       required: [true, 'Project code is required'],
-      unique: true,
       uppercase: true,
       trim: true,
       maxlength: [20, 'Project code cannot exceed 20 characters'],
@@ -97,6 +96,12 @@ const projectSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -105,10 +110,11 @@ const projectSchema = new mongoose.Schema(
 );
 
 // ─── Indexes ──────────────────────────────────────────────────────────────────
-projectSchema.index({ managerId: 1 });
-projectSchema.index({ status: 1 });
-projectSchema.index({ 'allocatedEmployees.userId': 1 });
-projectSchema.index({ isActive: 1 });
+projectSchema.index({ organizationId: 1, managerId: 1 });
+projectSchema.index({ organizationId: 1, status: 1 });
+projectSchema.index({ organizationId: 1, 'allocatedEmployees.userId': 1 });
+projectSchema.index({ organizationId: 1, isActive: 1 });
+projectSchema.index({ organizationId: 1, code: 1 }, { unique: true });
 
 const Project = mongoose.model('Project', projectSchema);
 module.exports = Project;

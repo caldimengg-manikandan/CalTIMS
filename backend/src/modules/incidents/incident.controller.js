@@ -1,6 +1,7 @@
 'use strict';
 
 const incidentService = require('./incident.service');
+const AppError = require('../../shared/utils/AppError');
 
 /**
  * Controller to handle Incident routes
@@ -18,7 +19,8 @@ class IncidentController {
                 return next(new AppError('Authentication failed. User not found.', 401));
             }
 
-            const incident = await incidentService.createIncident(employeeId, req.body);
+            const organizationId = req.organizationId;
+            const incident = await incidentService.createIncident(employeeId, req.body, organizationId);
 
             res.status(201).json({
                 success: true,
@@ -38,8 +40,9 @@ class IncidentController {
         try {
             const userId = req.user._id;
             const role = req.user.role;
+            const organizationId = req.organizationId;
 
-            const result = await incidentService.getIncidents(userId, role, req.query);
+            const result = await incidentService.getIncidents(userId, role, req.query, organizationId);
 
             res.status(200).json({
                 success: true,
@@ -60,8 +63,9 @@ class IncidentController {
             const { id } = req.params;
             const userId = req.user._id;
             const role = req.user.role;
+            const organizationId = req.organizationId;
 
-            const incident = await incidentService.getIncidentById(id, userId, role);
+            const incident = await incidentService.getIncidentById(id, userId, role, organizationId);
 
             res.status(200).json({
                 success: true,
@@ -81,8 +85,9 @@ class IncidentController {
             const { id } = req.params;
             const userId = req.user._id;
             const role = req.user.role;
+            const organizationId = req.organizationId;
 
-            const incident = await incidentService.addResponse(id, userId, role, req.body.message);
+            const incident = await incidentService.addResponse(id, userId, role, req.body.message, organizationId);
 
             res.status(200).json({
                 success: true,
@@ -104,8 +109,9 @@ class IncidentController {
             const updates = req.body;
             const userId = req.user._id;
             const role = req.user.role;
+            const organizationId = req.organizationId;
 
-            const incident = await incidentService.updateIncident(id, userId, role, updates);
+            const incident = await incidentService.updateIncident(id, userId, role, updates, organizationId);
 
             res.status(200).json({
                 success: true,

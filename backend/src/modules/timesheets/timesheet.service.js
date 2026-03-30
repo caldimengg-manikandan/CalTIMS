@@ -8,7 +8,7 @@ const CalendarEvent = require('../calendar/calendar.model');
 const AppError = require('../../shared/utils/AppError');
 const { TIMESHEET_STATUS, ROLES, CALENDAR_EVENT_TYPES } = require('../../constants');
 const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
-const { getWeekStart, getWeekEnd } = require('../../shared/utils/dateHelpers');
+const { getWeekStart, getWeekEnd, formatDuration } = require('../../shared/utils/dateHelpers');
 const notificationService = require('../notifications/notification.service');
 const emailService = require('../../shared/services/email.service');
 const notifier = require('../../shared/services/notifier');
@@ -52,16 +52,16 @@ function calculateWeeklyHours(rows) {
 /**
  * Internal helper to fetch weekStartDay from settings
  */
-async function getWeekStartDay() {
-  const policy = await policyService.getPolicy();
+async function getWeekStartDay(organizationId) {
+  const policy = await policyService.getPolicy(organizationId);
   return policy?.attendance?.weekStartDay || 'monday';
 }
 
 /**
  * Internal helper to check if a week should be frozen
  */
-async function getFreezeInfo(weekStartDate) {
-  const policy = await policyService.getPolicy();
+async function getFreezeInfo(weekStartDate, organizationId) {
+  const policy = await policyService.getPolicy(organizationId);
   const freezeDay = policy?.compliance?.timesheetFreezeDay || 28;
   
   const today = new Date();
@@ -83,17 +83,18 @@ async function getFreezeInfo(weekStartDate) {
 
 const timesheetService = {
   // ─── Core CRUD ──────────────────────────────────────────────────────────────
-  async create(data, userId) {
-    const wsd = await getWeekStartDay();
+  async create(data, userId, organizationId) {
+    const wsd = await getWeekStartDay(organizationId);
     const weekStart = getWeekStart(data.weekStartDate, wsd);
     const weekEnd = getWeekEnd(weekStart, wsd);
 
     // Ensure no existing timesheet for this week
-    const existing = await Timesheet.findOne({ userId, weekStartDate: weekStart });
+    const existing = await Timesheet.findOne({ userId, weekStartDate: weekStart, organizationId });
     if (existing) throw new AppError('Timesheet already exists for this week', 400);
 
     const ts = await Timesheet.create({
       userId,
+      organizationId,
       weekStartDate: weekStart,
       weekEndDate: weekEnd,
       status: TIMESHEET_STATUS.DRAFT,
@@ -111,12 +112,12 @@ const timesheetService = {
     return ts;
   },
 
-  async update(id, data, userId) {
-    const ts = await Timesheet.findById(id);
+  async update(id, data, userId, organizationId) {
+    const ts = await Timesheet.findOne({ _id: id, organizationId });
     if (!ts) throw new AppError('Timesheet not found', 404);
     if (ts.userId.toString() !== userId.toString()) throw new AppError('Unauthorized', 403);
     
-    const { isFrozen } = await getFreezeInfo(ts.weekStartDate);
+    const { isFrozen } = await getFreezeInfo(ts.weekStartDate, organizationId);
     if (ts.status === TIMESHEET_STATUS.FROZEN || isFrozen) {
       if (ts.status !== TIMESHEET_STATUS.FROZEN) {
         ts.status = TIMESHEET_STATUS.FROZEN;
@@ -147,8 +148,8 @@ const timesheetService = {
     return ts;
   },
 
-  async getById(id, requestor) {
-    const timesheet = await Timesheet.findById(id)
+  async getById(id, requestor, organizationId) {
+    const timesheet = await Timesheet.findOne({ _id: id, organizationId })
       .populate('userId', 'name email employeeId department')
       .populate('rows.projectId', 'name code')
       .populate('approvedBy', 'name email');
@@ -162,10 +163,10 @@ const timesheetService = {
     return timesheet;
   },
 
-  async getAll(query, requestor) {
+  async getAll(query, requestor, organizationId) {
     const { page, limit, skip } = parsePagination(query);
     const sort = buildSort(query, { weekStartDate: -1 });
-    const filter = {};
+    const filter = { organizationId };
 
     // Allow admins/managers to specify a userId, otherwise default to self
     if ((requestor.role === ROLES.ADMIN || requestor.role === ROLES.MANAGER) && query.userId) {
@@ -176,7 +177,7 @@ const timesheetService = {
 
     if (query.status) filter.status = query.status;
     if (query.from || query.to) {
-      const wsd = await getWeekStartDay();
+      const wsd = await getWeekStartDay(organizationId);
       filter.weekStartDate = {};
       // Use getWeekStart to normalize inputs to UTC midnight if possible, 
       // or at least use Date.UTC to avoid server TZ issues.
@@ -199,11 +200,12 @@ const timesheetService = {
     // Fetch holidays if a specific week is targeted
     let holidays = [];
     if (query.weekStartDate) {
-      const wsd = await getWeekStartDay();
+      const wsd = await getWeekStartDay(organizationId);
       const ws = getWeekStart(new Date(query.weekStartDate), wsd);
       const we = getWeekEnd(ws, wsd);
 
       holidays = await CalendarEvent.find({
+        organizationId,
         eventType: CALENDAR_EVENT_TYPES.HOLIDAY,
         isGlobal: true,
         $or: [
@@ -226,11 +228,11 @@ const timesheetService = {
 
   // ─── Bulk Operations (Merging into One Document per Week) ─────────────────
 
-  async bulkUpsert(dataArray, userId) {
+  async bulkUpsert(dataArray, userId, organizationId) {
     if (!dataArray.length) return [];
 
     // 1. Group input by week (redundant since usually one week is sent, but safe)
-    const wsd = await getWeekStartDay();
+    const wsd = await getWeekStartDay(organizationId);
     const weeksMap = new Map();
     for (const data of dataArray) {
       const ws = getWeekStart(data.weekStartDate, wsd).toISOString();
@@ -243,13 +245,14 @@ const timesheetService = {
       const weekStart = new Date(wsIso);
       const weekEnd = getWeekEnd(weekStart, wsd);
 
-      let timesheet = await Timesheet.findOne({ userId, weekStartDate: weekStart });
+      let timesheet = await Timesheet.findOne({ userId, weekStartDate: weekStart, organizationId });
 
       const { isFrozen } = await getFreezeInfo(weekStart);
 
       if (!timesheet) {
         timesheet = new Timesheet({
           userId,
+          organizationId,
           weekStartDate: weekStart,
           weekEndDate: weekEnd,
           status: isFrozen ? TIMESHEET_STATUS.FROZEN : TIMESHEET_STATUS.DRAFT,
@@ -305,10 +308,10 @@ const timesheetService = {
     return results;
   },
 
-  async adminFill(dataArray, targetUserId, adminId) {
+  async adminFill(dataArray, targetUserId, adminId, organizationId) {
     if (!dataArray.length) return [];
 
-    const wsd = await getWeekStartDay();
+    const wsd = await getWeekStartDay(organizationId);
     const weeksMap = new Map();
     for (const data of dataArray) {
       const ws = getWeekStart(data.weekStartDate, wsd).toISOString();
@@ -321,11 +324,12 @@ const timesheetService = {
       const weekStart = new Date(wsIso);
       const weekEnd = getWeekEnd(weekStart, wsd);
 
-      let timesheet = await Timesheet.findOne({ userId: targetUserId, weekStartDate: weekStart });
+      let timesheet = await Timesheet.findOne({ userId: targetUserId, weekStartDate: weekStart, organizationId });
 
       if (!timesheet) {
         timesheet = new Timesheet({
           userId: targetUserId,
+          organizationId,
           weekStartDate: weekStart,
           weekEndDate: weekEnd,
           rows: []
@@ -355,7 +359,7 @@ const timesheetService = {
       await this.validateLimits(timesheet);
       await timesheet.save();
 
-      const targetUser = await User.findById(targetUserId).select('name');
+      const targetUser = await User.findOne({ _id: targetUserId, organizationId }).select('name');
 
       logAction({
           userId: adminId,
@@ -375,10 +379,10 @@ const timesheetService = {
   },
 
   async validateLimits(timesheet) {
-    const policy = await policyService.getPolicy();
+    const policy = await policyService.getPolicy(timesheet.organizationId);
     const limits = policy?.attendance || {}; // Map some limits if needed, or keep from settings if not in policy
     const compliance = policy?.compliance || {};
-    const settingsDoc = await Settings.findOne().lean(); // Fallback for specific limits not yet in policy
+    const settingsDoc = await Settings.findOne({ organizationId: timesheet.organizationId }).lean(); // Fallback for specific limits not yet in policy
 
     // ── Compliance Check: Backdated Entries ──────────────────────────────────
     // Restriction: Cannot fill timesheets for weeks prior to the current week
@@ -502,12 +506,12 @@ const timesheetService = {
     }
   },
 
-  async bulkSubmit(dataArray, userId) {
+  async bulkSubmit(dataArray, userId, organizationId) {
     // Reuses bulkUpsert to save, then sets status to SUBMITTED
-    const savedTimesheets = await this.bulkUpsert(dataArray, userId);
+    const savedTimesheets = await this.bulkUpsert(dataArray, userId, organizationId);
 
     // ── Daily Hours Guardrail Enforcement on Submit ────────────────────────────
-    const settingsDoc = await Settings.findOne().lean();
+    const settingsDoc = await Settings.findOne({ organizationId }).lean();
     const tsPolicy = settingsDoc?.timesheet || {};
     const { minHoursPerDay = 0, maxHoursPerDay = 24, enforceMinHoursOnSubmit = false } = tsPolicy;
     const isWeekendWorkable = settingsDoc?.general?.isWeekendWorkable || false;
@@ -534,13 +538,13 @@ const timesheetService = {
           // Only validate days where hours were actually entered
           if (hours > 0 && hours < minHoursPerDay) {
             throw new AppError(
-              `On ${date}, total logged hours (${hours.toFixed(2)}h) are below the required minimum of ${minHoursPerDay}h per day.`,
+              `On ${date}, total logged hours ${formatDuration(hours)} are below the required minimum of ${minHoursPerDay}h per day.`,
               400
             );
           }
           if (hours > maxHoursPerDay) {
             throw new AppError(
-              `On ${date}, total logged hours (${hours.toFixed(2)}h) exceed the maximum of ${maxHoursPerDay}h per day.`,
+              `On ${date}, total logged hours ${formatDuration(hours)} exceed the maximum of ${maxHoursPerDay}h per day.`,
               400
             );
           }
@@ -548,9 +552,9 @@ const timesheetService = {
       }
     }
 
-    const user = await User.findById(userId).select('name employeeId managerId');
-    const systemApprovers = await User.find({ role: ROLES.ADMIN, isActive: true }).select('_id email');
-    const directManager = user.managerId ? await User.findById(user.managerId).select('_id email') : null;
+    const user = await User.findOne({ _id: userId, organizationId }).select('name employeeId managerId');
+    const systemApprovers = await User.find({ role: ROLES.ADMIN, isActive: true, organizationId }).select('_id email');
+    const directManager = user.managerId ? await User.findOne({ _id: user.managerId, organizationId }).select('_id email') : null;
 
     for (const ts of savedTimesheets) {
       ts.status = TIMESHEET_STATUS.SUBMITTED;
@@ -559,7 +563,7 @@ const timesheetService = {
 
       // Gather Project Managers for this specific week
       const projectIds = [...new Set(ts.rows.map(r => r.projectId?.toString()))].filter(Boolean);
-      const projectManagers = await Project.find({ _id: { $in: projectIds } }).select('managerId').populate('managerId', '_id email');
+      const projectManagers = await Project.find({ _id: { $in: projectIds }, organizationId }).select('managerId').populate('managerId', '_id email');
       
       const approverMap = new Map();
       // Add system admins
@@ -593,8 +597,8 @@ const timesheetService = {
     return savedTimesheets;
   },
 
-  async submit(id, requestor) {
-    const ts = await Timesheet.findById(id);
+  async submit(id, requestor, organizationId) {
+    const ts = await Timesheet.findOne({ _id: id, organizationId });
     if (!ts) throw new AppError('Timesheet not found', 404);
 
     // Allow owner or Admin/Manager to submit
@@ -610,12 +614,12 @@ const timesheetService = {
     await ts.save();
 
     // Notify Admins, Direct Manager, and Project Managers
-    const user = await User.findById(ts.userId).select('name employeeId managerId');
-    const systemApprovers = await User.find({ role: ROLES.ADMIN, isActive: true }).select('_id email');
-    const directManager = user.managerId ? await User.findById(user.managerId).select('_id email') : null;
+    const user = await User.findOne({ _id: ts.userId, organizationId }).select('name employeeId managerId');
+    const systemApprovers = await User.find({ role: ROLES.ADMIN, isActive: true, organizationId }).select('_id email');
+    const directManager = user.managerId ? await User.findOne({ _id: user.managerId, organizationId }).select('_id email') : null;
     
     const projectIds = [...new Set(ts.rows.map(r => r.projectId?.toString()))].filter(Boolean);
-    const projectManagers = await Project.find({ _id: { $in: projectIds } }).select('managerId').populate('managerId', '_id email');
+    const projectManagers = await Project.find({ _id: { $in: projectIds }, organizationId }).select('managerId').populate('managerId', '_id email');
     
     const approverMap = new Map();
     systemApprovers.forEach(a => approverMap.set(a._id.toString(), a));
@@ -647,8 +651,8 @@ const timesheetService = {
 
   // ─── Workflow ──────────────────────────────────────────────────────────────
 
-  async approve(id, approverId) {
-    const timesheet = await Timesheet.findById(id).populate('userId', 'name');
+  async approve(id, approverId, organizationId) {
+    const timesheet = await Timesheet.findOne({ _id: id, organizationId }).populate('userId', 'name');
     if (!timesheet) throw new AppError('Timesheet not found', 404);
     if (timesheet.status !== TIMESHEET_STATUS.SUBMITTED) {
       throw new AppError('Only submitted timesheets can be approved', 400);
@@ -695,9 +699,9 @@ const timesheetService = {
     return timesheet;
   },
 
-  async reject(id, approverId, reason) {
+  async reject(id, approverId, reason, organizationId) {
     if (!reason) throw new AppError('Rejection reason is required', 400);
-    const timesheet = await Timesheet.findById(id).populate('userId', 'name');
+    const timesheet = await Timesheet.findOne({ _id: id, organizationId }).populate('userId', 'name');
     if (!timesheet) throw new AppError('Timesheet not found', 404);
 
     timesheet.status = TIMESHEET_STATUS.REJECTED;
@@ -734,8 +738,8 @@ const timesheetService = {
     return timesheet;
   },
 
-  async delete(id, requestor) {
-    const timesheet = await Timesheet.findById(id).populate('userId', 'name');
+  async delete(id, requestor, organizationId) {
+    const timesheet = await Timesheet.findOne({ _id: id, organizationId }).populate('userId', 'name');
     if (!timesheet) throw new AppError('Timesheet not found', 404);
     if (requestor.role !== ROLES.ADMIN && timesheet.userId?._id.toString() !== requestor._id.toString()) {
       throw new AppError('Unauthorized', 403);
@@ -759,12 +763,12 @@ const timesheetService = {
 
   // ─── Reporting ─────────────────────────────────────────────────────────────
 
-  async getCompliance(query) {
+  async getCompliance(query, organizationId) {
     const { page, limit, skip } = parsePagination(query);
     const { weekStartDate, search } = query;
     if (!weekStartDate) throw new AppError('Week start date is required', 400);
 
-    const userFilter = { role: ROLES.EMPLOYEE, isActive: true };
+    const userFilter = { role: ROLES.EMPLOYEE, isActive: true, organizationId };
     if (search) {
       userFilter.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -772,7 +776,7 @@ const timesheetService = {
       ];
     }
 
-    const policy = await policyService.getPolicy();
+    const policy = await policyService.getPolicy(organizationId);
     const wsd = policy?.attendance?.weekStartDay || 'monday';
     const weekStart = getWeekStart(new Date(weekStartDate), wsd);
 
@@ -787,11 +791,12 @@ const timesheetService = {
 
     const timesheets = await Timesheet.find({ 
       weekStartDate: weekStart, 
-      userId: { $in: employees.map(e => e._id) } 
+      userId: { $in: employees.map(e => e._id) },
+      organizationId 
     }).lean();
     
     const tsMap = new Map(timesheets.map(ts => [ts.userId.toString(), ts]));
-    const { isFrozen } = await getFreezeInfo(weekStart);
+    const { isFrozen } = await getFreezeInfo(weekStart, organizationId);
 
     const complianceData = employees.map(emp => {
       const ts = tsMap.get(emp._id.toString());
@@ -833,13 +838,13 @@ const timesheetService = {
 
       if (totalHours > project.budgetHours) {
         const Settings = mongoose.model('Settings');
-        const settings = await Settings.findOne().lean();
+        const settings = await Settings.findOne({ organizationId }).lean();
         const notifSettings = settings?.notifications || {};
         const companyName = settings?.organization?.companyName || 'CALTIMS';
 
         // 1. In-App Notifications
         if (notifSettings.inAppEnabled !== false) {
-          const admins = await User.find({ role: ROLES.ADMIN, isActive: true }).select('_id email');
+          const admins = await User.find({ role: ROLES.ADMIN, isActive: true, organizationId }).select('_id email');
           
           const notificationPromises = admins.map(admin =>
             notificationService.create({
@@ -869,7 +874,7 @@ const timesheetService = {
 
         // 2. Email Notifications
         if (notifSettings.emailEnabled !== false) {
-          const admins = await User.find({ role: ROLES.ADMIN, isActive: true }).select('email');
+          const admins = await User.find({ role: ROLES.ADMIN, isActive: true, organizationId }).select('email');
           const recipientEmails = [...new Set([
             ...admins.map(a => a.email),
             project.managerId?.email
@@ -890,9 +895,9 @@ const timesheetService = {
     }
   },
 
-  async getHistory(query, requestor) {
+  async getHistory(query, requestor, organizationId) {
     const { page, limit, skip } = parsePagination(query);
-    const filter = {};
+    const filter = { organizationId: new mongoose.Types.ObjectId(organizationId) };
 
     // Strictly restrict to the current user for history view
     filter.userId = new mongoose.Types.ObjectId(requestor._id);
@@ -909,6 +914,7 @@ const timesheetService = {
 
       // Also search by project name/code if possible
       const projects = await Project.find({
+        organizationId,
         $or: [{ name: searchRegex }, { code: searchRegex }]
       }).distinct('_id');
 
@@ -989,8 +995,8 @@ const timesheetService = {
     };
   },
 
-  async getDashboardSummary(userId, role, query = {}) {
-    const wsd = await getWeekStartDay();
+  async getDashboardSummary(userId, role, organizationId, query = {}) {
+    const wsd = await getWeekStartDay(organizationId);
     const isAllWeeks = query.weekStartDate === 'all';
     const weekStart = isAllWeeks ? null : (query.weekStartDate ? getWeekStart(new Date(query.weekStartDate), wsd) : getWeekStart(new Date(), wsd));
     const projectId = query.projectId && query.projectId !== 'all' ? query.projectId : null;
@@ -1008,7 +1014,7 @@ const timesheetService = {
     let personalStatus = null;
 
     // Use a range to find potentially overlapping timesheets if a setting was changed
-    const personalFilter = { userId };
+    const personalFilter = { userId, organizationId };
     if (projectId) personalFilter['rows.projectId'] = new mongoose.Types.ObjectId(projectId);
     
     if (!isAllWeeks) {
@@ -1095,7 +1101,7 @@ const timesheetService = {
       let activeUsers = [];
       if (projectId) {
         const Project = mongoose.model('Project');
-        const projectDoc = await Project.findById(projectId)
+        const projectDoc = await Project.findOne({ _id: projectId, organizationId })
           .populate('allocatedEmployees.userId', 'name employeeId department isActive role')
           .lean();
         if (projectDoc) {
@@ -1104,13 +1110,13 @@ const timesheetService = {
             .filter(u => u && u.isActive !== false && [ROLES.EMPLOYEE, ROLES.MANAGER].includes(u.role));
         }
       } else {
-        activeUsers = await User.find({ isActive: true, role: { $in: [ROLES.EMPLOYEE, ROLES.MANAGER] } }).select('name employeeId department').lean();
+        activeUsers = await User.find({ organizationId, isActive: true, role: { $in: [ROLES.EMPLOYEE, ROLES.MANAGER] } }).select('name employeeId department').lean();
       }
 
-      const totalManagers = await User.countDocuments({ isActive: true, role: ROLES.MANAGER });
-      const totalAdmins = await User.countDocuments({ isActive: true, role: ROLES.ADMIN });
+      const totalManagers = await User.countDocuments({ organizationId, isActive: true, role: ROLES.MANAGER });
+      const totalAdmins = await User.countDocuments({ organizationId, isActive: true, role: ROLES.ADMIN });
 
-      const timesheetFilter = {};
+      const timesheetFilter = { organizationId };
       if (!isAllWeeks) {
         const rangeStart = new Date(weekStart);
         rangeStart.setUTCDate(rangeStart.getUTCDate() - 7);
@@ -1281,23 +1287,24 @@ const timesheetService = {
       };
     }
 
-      const settingsDoc = await mongoose.model('Settings').findOne().select('timesheet.submissionDeadline').lean();
+      const settingsDoc = await mongoose.model('Settings').findOne({ organizationId }).select('timesheet.submissionDeadline').lean();
       return {
         ...baseStats,
         pendingTimesheets: personalPending,
         approvedTimesheets: personalApproved,
         rejectedTimesheets: personalRejected,
-        totalEmployees: await User.countDocuments({ isActive: true, role: ROLES.EMPLOYEE }),
-        totalManagers: await User.countDocuments({ isActive: true, role: ROLES.MANAGER }),
-        totalAdmins: await User.countDocuments({ isActive: true, role: ROLES.ADMIN }),
+        totalEmployees: await User.countDocuments({ organizationId, isActive: true, role: ROLES.EMPLOYEE }),
+        totalManagers: await User.countDocuments({ organizationId, isActive: true, role: ROLES.MANAGER }),
+        totalAdmins: await User.countDocuments({ organizationId, isActive: true, role: ROLES.ADMIN }),
         submissionDeadline: settingsDoc?.timesheet?.submissionDeadline || 'Friday 18:00'
       };
     },
 
-  async getAdminKpiSummary(kpi) {
+  async getAdminKpiSummary(kpi, organizationId) {
     if (kpi === 'project-hours') {
       // Hours logged per project
       const data = await Timesheet.aggregate([
+        { $match: { organizationId: new mongoose.Types.ObjectId(organizationId) } },
         { $unwind: '$rows' },
         {
           $addFields: {
@@ -1394,6 +1401,7 @@ const timesheetService = {
     if (kpi === 'status-overview') {
       // Breakdown of timesheet statuses
       const data = await Timesheet.aggregate([
+        { $match: { organizationId: new mongoose.Types.ObjectId(organizationId) } },
         {
           $group: {
             _id: '$status',
@@ -1409,6 +1417,7 @@ const timesheetService = {
     if (kpi === 'employee-activity') {
       // Top employees by hours logged
       const data = await Timesheet.aggregate([
+        { $match: { organizationId: new mongoose.Types.ObjectId(organizationId) } },
         {
           $group: {
             _id: '$userId',
@@ -1428,8 +1437,10 @@ const timesheetService = {
         {
           $lookup: {
             from: 'users',
-            localField: '_id',
-            foreignField: '_id',
+            let: { userId: '$_id' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$_id', '$$userId'] }, organizationId: new mongoose.Types.ObjectId(organizationId) } }
+            ],
             as: 'user',
           },
         },
@@ -1454,14 +1465,14 @@ const timesheetService = {
 
     // Default: return combined overview
     const [projectHours, statusBreakdown] = await Promise.all([
-      this.getAdminKpiSummary('project-hours'),
-      this.getAdminKpiSummary('status-overview'),
+      this.getAdminKpiSummary('project-hours', organizationId),
+      this.getAdminKpiSummary('status-overview', organizationId),
     ]);
     return { kpi: 'overview', projectHours: projectHours.data, statusBreakdown: statusBreakdown.data };
   },
 
-  async getAdminSummary(query = {}) {
-    const filter = { status: { $nin: [TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.FROZEN] } };
+  async getAdminSummary(organizationId, query = {}) {
+    const filter = { organizationId: new mongoose.Types.ObjectId(organizationId), status: { $nin: [TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.FROZEN] } };
     if (query.userId) filter.userId = new mongoose.Types.ObjectId(query.userId);
 
     const stats = await Timesheet.aggregate([
@@ -1479,7 +1490,7 @@ const timesheetService = {
       }
     ]);
 
-    const activeUsers = await User.countDocuments({ isActive: true });
+    const activeUsers = await User.countDocuments({ organizationId, isActive: true });
 
     return {
       totalTimesheets: stats[0]?.totalTimesheets || 0,
@@ -1492,9 +1503,9 @@ const timesheetService = {
     };
   },
 
-  async getAdminTimesheets(query) {
+  async getAdminTimesheets(query, organizationId) {
     const { page, limit, skip } = parsePagination(query);
-    const filter = {};
+    const filter = { organizationId };
 
     if (query.userId) filter.userId = query.userId;
     if (query.status) {
@@ -1509,8 +1520,8 @@ const timesheetService = {
     if (query.search && query.search.trim().length >= 2) {
       const searchRegex = new RegExp(query.search.trim(), 'i');
       const [userIds, projectIds] = await Promise.all([
-        User.find({ $or: [{ name: searchRegex }, { employeeId: searchRegex }] }).distinct('_id'),
-        Project.find({ $or: [{ name: searchRegex }, { code: searchRegex }] }).distinct('_id')
+        User.find({ organizationId, $or: [{ name: searchRegex }, { employeeId: searchRegex }] }).distinct('_id'),
+        Project.find({ organizationId, $or: [{ name: searchRegex }, { code: searchRegex }] }).distinct('_id')
       ]);
 
       filter.$or = [
@@ -1524,6 +1535,7 @@ const timesheetService = {
     // Search by division or location
     if (query.division || query.location) {
       const userIds = await User.find({
+        organizationId,
         ...(query.division && { division: query.division }),
         ...(query.location && { location: query.location }),
         isActive: true
@@ -1561,13 +1573,13 @@ const timesheetService = {
     };
   },
 
-  async getAdminFilterOptions() {
+  async getAdminFilterOptions(organizationId) {
     const [projects, employees, locations, divisions, timeframes] = await Promise.all([
-      Project.find({ isActive: true, code: { $ne: 'LEAVE-SYS' } }).select('name code').sort('name').lean(),
-      User.find({ isActive: true }).select('name employeeId').sort('name').lean(),
-      User.distinct('location', { location: { $ne: null } }),
-      User.distinct('division', { division: { $ne: null } }),
-      Timesheet.distinct('weekStartDate')
+      Project.find({ organizationId, isActive: true, code: { $ne: 'LEAVE-SYS' } }).select('name code').sort('name').lean(),
+      User.find({ organizationId, isActive: true }).select('name employeeId').sort('name').lean(),
+      User.distinct('location', { organizationId, location: { $ne: null } }),
+      User.distinct('division', { organizationId, division: { $ne: null } }),
+      Timesheet.distinct('weekStartDate', { organizationId })
     ]);
 
     // Extract unique years

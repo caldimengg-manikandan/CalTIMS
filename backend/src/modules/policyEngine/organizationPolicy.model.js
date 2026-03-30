@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
 
 const OrganizationPolicySchema = new mongoose.Schema({
-  companyId: {
+  organizationId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company',
-    required: false
+    ref: 'Organization',
+    required: true,
+    index: true
   },
   payroll: {
     workingDaysPerMonth: { type: Number, default: 22 },

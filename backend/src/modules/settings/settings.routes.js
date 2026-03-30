@@ -13,6 +13,7 @@ const { logAction } = require('../audit/audit.routes');
 const upload = require('../../middleware/upload.middleware');
 const net = require('net');
 const PermissionAuditLog = require('./permissionAuditLog.model');
+const policyService = require('../policyEngine/policy.service');
 
 router.use(authenticate);
 
@@ -244,6 +245,25 @@ router.put('/', checkPermission('Settings', 'Users & Roles', 'edit'), asyncHandl
       }));
 
       await PermissionAuditLog.insertMany(auditEntries);
+    }
+  }
+
+  // ─── Synchronize to Unified Payroll Policy ──────────────────────────────────
+  if (updateDoc.compliance || updateDoc.attendance || updateDoc.overtime || updateDoc.leavePolicy) {
+    const policyUpdates = {};
+    if (updateDoc.compliance) policyUpdates.compliance = updateDoc.compliance;
+    if (updateDoc.attendance) policyUpdates.attendance = updateDoc.attendance;
+    if (updateDoc.overtime) policyUpdates.overtime = updateDoc.overtime;
+    
+    // Note: leavePolicy in Settings maps to 'leave' in PayrollPolicy
+    if (updateDoc.leavePolicy) {
+       policyUpdates.leave = {
+         types: updateDoc.leavePolicy.eligibleLeaveTypes?.map(t => ({ name: t, paid: t.toLowerCase() !== 'lop' })) || []
+       };
+    }
+
+    if (Object.keys(policyUpdates).length > 0) {
+      await policyService.updatePolicy(policyUpdates);
     }
   }
 

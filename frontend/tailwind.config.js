@@ -7,19 +7,20 @@ export default {
       colors: {
         // Real indigo hex values for proper hover/shadow/gradient composition
         primary: {
-          DEFAULT: '#6366f1',
-          50:  '#eef2ff',
-          100: '#e0e7ff',
-          200: '#c7d2fe',
-          300: '#a5b4fc',
-          400: '#818cf8',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
-          950: '#1e1b4b',
+          DEFAULT: 'var(--color-primary)',
+          50:  'var(--color-primary-light)',
+          100: 'rgb(var(--color-primary-rgb) / 0.1)',
+          200: 'rgb(var(--color-primary-rgb) / 0.2)',
+          300: 'rgb(var(--color-primary-rgb) / 0.3)',
+          400: 'rgb(var(--color-primary-rgb) / 0.4)',
+          500: 'var(--color-primary)',
+          600: 'var(--color-primary-hover)',
+          700: 'rgb(var(--color-primary-rgb) / 0.8)',
+          800: 'rgb(var(--color-primary-rgb) / 0.9)',
+          900: 'var(--color-primary-hover)',
+          950: 'rgb(var(--color-primary-rgb) / 0.95)',
         },
+
         surface: {
           50:  '#f8fafc',
           100: '#f1f5f9',

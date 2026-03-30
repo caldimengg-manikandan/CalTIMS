@@ -4,7 +4,6 @@ const PayslipTemplateSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    unique: true,
     trim: true
   },
   description: {
@@ -35,21 +34,22 @@ const PayslipTemplateSchema = new mongoose.Schema({
   htmlContent: {
     type: String
   },
-  createdBy: {
+  organizationId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  companyId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company'
+    ref: 'Organization',
+    required: true,
+    index: true
   }
 }, { timestamps: true });
+
+// Unique name per organization
+PayslipTemplateSchema.index({ organizationId: 1, name: 1 }, { unique: true });
 
 // Ensure only one system default per company (or globally)
 PayslipTemplateSchema.pre('save', async function(next) {
   if (this.isSystemDefault) {
     await this.constructor.updateMany(
-      { companyId: this.companyId, _id: { $ne: this._id } },
+      { organizationId: this.organizationId, _id: { $ne: this._id } },
       { $set: { isSystemDefault: false } }
     );
   }

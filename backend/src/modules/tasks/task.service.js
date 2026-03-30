@@ -5,10 +5,10 @@ const Project = require('../projects/project.model');
 const { parsePagination, buildPaginationMeta } = require('../../shared/utils/pagination');
 
 class TaskService {
-  async getAll(query = {}) {
+  async getAll(query = {}, organizationId) {
     const { page, limit, skip } = parsePagination(query);
     const { search, projectId, status, isActive } = query;
-    const filter = {};
+    const filter = { organizationId };
 
     if (search) {
       filter.name = { $regex: search, $options: 'i' };
@@ -41,24 +41,26 @@ class TaskService {
     };
   }
 
-  async getById(id) {
-    return await Task.findById(id).populate('projectId', 'name code');
+  async getById(id, organizationId) {
+    return await Task.findOne({ _id: id, organizationId }).populate('projectId', 'name code');
   }
 
   async create(data) {
+    // Note: organizationId check handled by controller passing it in data
     return await Task.create(data);
   }
 
-  async bulkCreate(tasks) {
-    return await Task.insertMany(tasks);
+  async bulkCreate(tasks, organizationId) {
+    const tasksWithOrg = tasks.map(t => ({ ...t, organizationId }));
+    return await Task.insertMany(tasksWithOrg);
   }
 
-  async update(id, data) {
-    return await Task.findByIdAndUpdate(id, data, { new: true, runValidators: true });
+  async update(id, data, organizationId) {
+    return await Task.findOneAndUpdate({ _id: id, organizationId }, data, { new: true, runValidators: true });
   }
 
-  async delete(id) {
-    return await Task.findByIdAndDelete(id);
+  async delete(id, organizationId) {
+    return await Task.findOneAndDelete({ _id: id, organizationId });
   }
 }
 

@@ -16,7 +16,7 @@ const logger = require('../../shared/utils/logger');
 // ─── Settings & Config ────────────────────────────────────────────────────────
 exports.getConfig = async (req, res, next) => {
   try {
-    const settings = await Settings.findOne();
+    const settings = await Settings.findOne({ organizationId: req.organizationId });
     res.status(200).json({
       success: true,
       data: settings?.payroll || {}
@@ -28,7 +28,7 @@ exports.getConfig = async (req, res, next) => {
 
 exports.updateConfig = async (req, res, next) => {
   try {
-    const settings = await Settings.findOne();
+    const settings = await Settings.findOne({ organizationId: req.organizationId });
     if (!settings) return res.status(404).json({ success: false, message: 'Settings not found' });
     
     settings.payroll = { ...settings.payroll, ...req.body };
@@ -49,7 +49,7 @@ exports.updateConfig = async (req, res, next) => {
 // ─── Salary Structures (CRUD) ────────────────────────────────────────────────
 exports.getAllRoleStructures = async (req, res, next) => {
   try {
-    const structures = await RoleSalaryStructure.find().sort({ isActive: -1, createdAt: -1 });
+    const structures = await RoleSalaryStructure.find({ organizationId: req.organizationId }).sort({ isActive: -1, createdAt: -1 });
     res.status(200).json({ success: true, data: structures });
   } catch (err) {
     next(err);
@@ -58,7 +58,7 @@ exports.getAllRoleStructures = async (req, res, next) => {
 
 exports.getStructureById = async (req, res, next) => {
   try {
-    const structure = await RoleSalaryStructure.findById(req.params.id);
+    const structure = await RoleSalaryStructure.findOne({ _id: req.params.id, organizationId: req.organizationId });
     if (!structure) return res.status(404).json({ success: false, message: 'Structure not found' });
     res.status(200).json({ success: true, data: structure });
   } catch (err) {
@@ -80,11 +80,11 @@ exports.createOrUpdateRoleStructure = async (req, res, next) => {
     
     let structure;
     if (_id) {
-       structure = await RoleSalaryStructure.findByIdAndUpdate(_id, structureData, { new: true });
-       await auditService.log(req.user?.id, 'STRUCTURE_UPDATE', 'SalaryStructure', structure._id, structureData, 'SUCCESS', req.ip);
+       structure = await RoleSalaryStructure.findOneAndUpdate({ _id, organizationId: req.organizationId }, structureData, { new: true });
+       await auditService.log(req.user?.id, 'STRUCTURE_UPDATE', 'SalaryStructure', structure._id, structureData, 'SUCCESS', req.ip, req.organizationId);
     } else {
-       structure = await RoleSalaryStructure.create(structureData);
-       await auditService.log(req.user?.id, 'STRUCTURE_CREATE', 'SalaryStructure', structure._id, structureData, 'SUCCESS', req.ip);
+       structure = await RoleSalaryStructure.create({ ...structureData, organizationId: req.organizationId });
+       await auditService.log(req.user?.id, 'STRUCTURE_CREATE', 'SalaryStructure', structure._id, structureData, 'SUCCESS', req.ip, req.organizationId);
     }
     res.status(200).json({ success: true, data: structure });
   } catch (err) {
@@ -94,12 +94,12 @@ exports.createOrUpdateRoleStructure = async (req, res, next) => {
 
 exports.toggleStructureStatus = async (req, res, next) => {
   try {
-    const structure = await RoleSalaryStructure.findById(req.params.id);
+    const structure = await RoleSalaryStructure.findOne({ _id: req.params.id, organizationId: req.organizationId });
     if (!structure) return res.status(404).json({ success: false, message: 'Structure not found' });
 
     // If we're deactivating, check if anyone is using it
     if (structure.isActive) {
-      const assignedProfiles = await PayrollProfile.countDocuments({ salaryStructureId: req.params.id });
+      const assignedProfiles = await PayrollProfile.countDocuments({ salaryStructureId: req.params.id, organizationId: req.organizationId });
       if (assignedProfiles > 0) {
         return res.status(400).json({ 
           success: false, 
@@ -141,7 +141,7 @@ exports.hardDeleteStructure = async (req, res, next) => {
 // ─── Employee Profiles ───────────────────────────────────────────────────────
 exports.getAllProfiles = async (req, res, next) => {
   try {
-    const profiles = await PayrollProfile.find().populate('user', 'name employeeId department designation');
+    const profiles = await PayrollProfile.find({ organizationId: req.organizationId }).populate('user', 'name employeeId department designation');
     res.status(200).json({ success: true, data: profiles });
   } catch (err) {
     next(err);
@@ -150,7 +150,7 @@ exports.getAllProfiles = async (req, res, next) => {
 
 exports.getProfile = async (req, res, next) => {
   try {
-    const profile = await PayrollProfile.findOne({ user: req.params.userId }).populate('user', 'name employeeId department designation');
+    const profile = await PayrollProfile.findOne({ user: req.params.userId, organizationId: req.organizationId }).populate('user', 'name employeeId department designation');
     res.status(200).json({ success: true, data: profile });
   } catch (err) {
     next(err);
@@ -177,7 +177,7 @@ exports.createOrUpdateProfile = async (req, res, next) => {
       }
     });
 
-    let profile = await PayrollProfile.findOne({ user: targetUserId });
+    let profile = await PayrollProfile.findOne({ user: targetUserId, organizationId: req.organizationId });
     
     if (profile) {
       // Update existing
@@ -187,6 +187,7 @@ exports.createOrUpdateProfile = async (req, res, next) => {
       // Create new
       profile = await PayrollProfile.create({ 
         user: targetUserId, 
+        organizationId: req.organizationId,
         ...updateData 
       });
     }
@@ -206,7 +207,7 @@ exports.createOrUpdateProfile = async (req, res, next) => {
 exports.deleteProfile = async (req, res, next) => {
   try {
     const { id } = req.params;
-    await PayrollProfile.findByIdAndDelete(id);
+    await PayrollProfile.findOneAndDelete({ _id: id, organizationId: req.organizationId });
     res.status(200).json({ success: true, message: 'Profile deleted successfully' });
   } catch (err) {
     next(err);
@@ -216,13 +217,14 @@ exports.deleteProfile = async (req, res, next) => {
 // ─── Processing & Simulation ─────────────────────────────────────────────────
 exports.runPayrollExecution = async (req, res, next) => {
   try {
-    const { month, year, companyId, payslipTemplateId } = req.body;
+    const { month, year, payslipTemplateId } = req.body;
+    const organizationId = req.organizationId;
     if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are mandatory' });
 
     const executionStats = await payrollService.runPayroll({ 
       month: parseInt(month), 
       year: parseInt(year), 
-      companyId,
+      organizationId,
       processedBy: req.user?.id,
       payslipTemplateId
     });
@@ -235,7 +237,8 @@ exports.runPayrollExecution = async (req, res, next) => {
       null,
       { month, year, successCount: executionStats.successCount, failedCount: executionStats.failedCount },
       executionStats.failedCount > 0 ? 'WARNING' : 'SUCCESS',
-      req.ip
+      req.ip,
+      req.organizationId
     ).catch(() => {});
 
     // HARD VALIDATION: Prevents false success responses
@@ -261,6 +264,7 @@ exports.runPayrollExecution = async (req, res, next) => {
 exports.simulatePayroll = async (req, res, next) => {
   try {
     const { month, year, department, branch, designation, employeeId, bankName, location } = req.body;
+    const organizationId = req.organizationId;
     
     if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are mandatory' });
 
@@ -272,18 +276,19 @@ exports.simulatePayroll = async (req, res, next) => {
     if (employeeId) userQuery.employeeId = employeeId;
     if (bankName) userQuery.bankName = bankName;
     userQuery.isActive = true;
+    userQuery.organizationId = organizationId;
 
     const users = await User.find(userQuery).select('_id name email employeeId department designation branch role bankName accountNumber ifscCode uan pan aadhaar').lean();
     
     const simulations = [];
-    const profiles = await PayrollProfile.find({ user: { $in: users.map(u => u._id) } }).lean();
+    const profiles = await PayrollProfile.find({ user: { $in: users.map(u => u._id) }, organizationId }).lean();
     
     for (const u of users) {
       const profile = profiles.find(p => p.user.toString() === u._id.toString());
       if (profile && profile.isActive === false) continue; // Skip disabled profiles
 
       try {
-        const simulation = await payrollService.simulateUserPayroll(u._id, parseInt(month), parseInt(year));
+        const simulation = await payrollService.simulateUserPayroll(u._id, parseInt(month), parseInt(year), organizationId);
         simulations.push(simulation);
       } catch (err) {
         simulations.push({ 
@@ -309,7 +314,7 @@ exports.savePayroll = async (req, res, next) => {
 
     for (const p of payrolls) {
       try {
-        const saved = await payrollService.saveProcessedPayroll(p);
+        const saved = await payrollService.saveProcessedPayroll(p, req.organizationId);
         results.push(saved._id);
       } catch (err) {
         errors.push({ employeeId: p.user?.employeeId, error: err.message });
@@ -339,17 +344,18 @@ exports.finalizePayroll = async (req, res, next) => {
 
 exports.submitForApproval = async (req, res, next) => {
     try {
-        const { month, year, companyId } = req.body;
+        const { month, year } = req.body;
+        const organizationId = req.organizationId;
         if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year required' });
 
         const result = await payrollService.submitForApproval({
             month: parseInt(month),
             year: parseInt(year),
-            companyId,
+            organizationId,
             userId: req.user.id
         });
 
-        await auditService.log(req.user?.id, 'SUBMIT_PAYROLL', 'Payroll', null, { month, year }, 'SUCCESS', req.ip);
+        await auditService.log(req.user?.id, 'SUBMIT_PAYROLL', 'Payroll', null, { month, year }, 'SUCCESS', req.ip, req.organizationId);
         
         res.status(200).json({ 
             success: true, 
@@ -363,15 +369,16 @@ exports.submitForApproval = async (req, res, next) => {
 
 exports.approvePayroll = async (req, res, next) => {
     try {
-        const { month, year, companyId } = req.body;
+        const { month, year } = req.body;
+        const organizationId = req.organizationId;
         const result = await payrollService.approvePayroll({
             month: parseInt(month),
             year: parseInt(year),
-            companyId,
+            organizationId,
             userId: req.user.id
         });
 
-        await auditService.log(req.user?.id, 'APPROVE_PAYROLL', 'Payroll', null, { month, year }, 'SUCCESS', req.ip);
+        await auditService.log(req.user?.id, 'APPROVE_PAYROLL', 'Payroll', null, { month, year }, 'SUCCESS', req.ip, organizationId);
 
         res.status(200).json({ 
             success: true, 
@@ -385,15 +392,16 @@ exports.approvePayroll = async (req, res, next) => {
 
 exports.reopenPayroll = async (req, res, next) => {
     try {
-        const { month, year, companyId } = req.body;
+        const { month, year } = req.body;
+        const organizationId = req.organizationId;
         const result = await payrollService.reopenPayroll({
             month: parseInt(month),
             year: parseInt(year),
-            companyId,
+            organizationId,
             userId: req.user.id
         });
 
-        await auditService.log(req.user?.id, 'REOPEN_PAYROLL', 'Payroll', null, { month, year }, 'SUCCESS', req.ip);
+        await auditService.log(req.user?.id, 'REOPEN_PAYROLL', 'Payroll', null, { month, year }, 'SUCCESS', req.ip, organizationId);
 
         res.status(200).json({ 
             success: true, 
@@ -407,15 +415,31 @@ exports.reopenPayroll = async (req, res, next) => {
 
 exports.markAsPaid = async (req, res, next) => {
     try {
-        const { month, year, companyId } = req.body;
+        const { month, year } = req.body;
+        const organizationId = req.organizationId;
+        
+        // 🛡️ DEFENSIVE VALIDATION: Explicitly check for 'disburse' permission as a backstop
+        const settings = await Settings.findOne({ organizationId }).lean();
+        const userRole = settings?.roles?.find(r => r.name.toLowerCase() === req.user.role?.toLowerCase());
+        const hasDisbursePerm = userRole?.permissions?.['Payroll']?.['Payroll Engine']?.includes('disburse');
+        const isAdmin = ['admin', 'super_admin'].includes(req.user.role?.toLowerCase());
+
+        if (!isAdmin && !hasDisbursePerm) {
+            await auditService.log(req.user.id, 'UNAUTHORIZED_PAYMENT_ATTEMPT', 'Payroll', null, { month, year, role: req.user.role }, 'SECURITY_WARNING', req.ip, organizationId);
+            return res.status(403).json({ 
+                success: false, 
+                message: 'Access Denied: You do not have the required "disburse" authority to mark payroll as paid.' 
+            });
+        }
+
         const result = await payrollService.markAsPaid({
             month: parseInt(month),
             year: parseInt(year),
-            companyId,
+            organizationId,
             processedBy: req.user.id
         });
 
-        await auditService.log(req.user?.id, 'MARK_AS_PAID', 'Payroll', null, { month, year }, 'SUCCESS', req.ip);
+        await auditService.log(req.user?.id, 'MARK_AS_PAID', 'Payroll', null, { month, year }, 'SUCCESS', req.ip, organizationId);
 
         res.status(200).json({ 
             success: true, 
@@ -429,15 +453,16 @@ exports.markAsPaid = async (req, res, next) => {
 
 exports.hardLock = async (req, res, next) => {
     try {
-        const { month, year, companyId } = req.body;
+        const { month, year } = req.body;
+        const organizationId = req.organizationId;
         const result = await payrollService.hardLockMonth({
             month: parseInt(month),
             year: parseInt(year),
-            companyId,
+            organizationId,
             lockedBy: req.user.id
         });
 
-        await auditService.log(req.user?.id, 'HARD_LOCK', 'Payroll', null, { month, year }, 'SUCCESS', req.ip);
+        await auditService.log(req.user?.id, 'HARD_LOCK', 'Payroll', null, { month, year }, 'SUCCESS', req.ip, organizationId);
 
         res.status(200).json({ 
             success: true, 
@@ -457,7 +482,7 @@ exports.processBulk = async (req, res, next) => {
 exports.getPayrollHistory = async (req, res, next) => {
   try {
     const { month, year, userId, department } = req.query;
-    let query = {};
+    let query = { organizationId: req.organizationId };
     if (month) query.month = parseInt(month);
     if (year) query.year = parseInt(year);
     if (userId) query.user = userId;
@@ -480,7 +505,8 @@ exports.getPayrollHistory = async (req, res, next) => {
 exports.getMyPayslips = async (req, res, next) => {
   try {
     const { month, year } = req.query;
-    let query = { user: req.user.id };
+    const organizationId = req.organizationId;
+    let query = { user: req.user.id, organizationId };
     
     if (month) query.month = parseInt(month);
     if (year) query.year = parseInt(year);
@@ -496,7 +522,7 @@ exports.getMyPayslips = async (req, res, next) => {
 
 exports.getPayslip = async (req, res, next) => {
   try {
-    const payslip = await ProcessedPayroll.findById(req.params.id)
+    const payslip = await ProcessedPayroll.findOne({ _id: req.params.id, organizationId: req.organizationId })
        .populate('user', 'name employeeId department designation branch email bankName accountNumber ifscCode uan pan aadhaar');
     res.status(200).json({ success: true, data: payslip });
   } catch (err) {
@@ -508,11 +534,12 @@ exports.getPayslipByUserId = async (req, res, next) => {
     try {
         const { employeeId } = req.params; // This matches both mongoId or employeeCode depending on front-end logic
         const { month, year } = req.query;
+        const organizationId = req.organizationId;
 
-        let query = { user: employeeId };
+        let query = { user: employeeId, organizationId };
         // If employeeId is NOT a mongoId, try matching by employeeCode via join
-        if (!mongoose.Types.ObjectId.isValid(employeeId)) {
-            const user = await User.findOne({ employeeId: employeeId });
+        if (!mongoose.Types.isValidObjectId(employeeId)) {
+            const user = await User.findOne({ employeeId: employeeId, organizationId });
             if (!user) return res.status(404).json({ success: false, message: 'Employee not found' });
             query.user = user._id;
         }
@@ -534,7 +561,7 @@ exports.getPayslipByUserId = async (req, res, next) => {
 exports.exportBankFile = async (req, res, next) => {
   try {
     const { month, year } = req.query;
-    const history = await ProcessedPayroll.find({ month, year, status: 'Completed' }).populate('user');
+    const history = await ProcessedPayroll.find({ month, year, organizationId: req.organizationId, status: 'Completed' }).populate('user');
     
     const exportData = history.map(p => ({
       employeeId: p.user.employeeId,
@@ -555,8 +582,9 @@ exports.exportBankFile = async (req, res, next) => {
 exports.getPayrollSummaryReport = async (req, res, next) => {
   try {
     const { month, year } = req.query;
+    const organizationId = req.organizationId;
     if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are required' });
-    const summary = await payrollService.getPayrollSummary(parseInt(month), parseInt(year));
+    const summary = await payrollService.getPayrollSummary(parseInt(month), parseInt(year), organizationId);
     res.status(200).json({ success: true, data: summary });
   } catch (err) {
     next(err);
@@ -566,8 +594,9 @@ exports.getPayrollSummaryReport = async (req, res, next) => {
 exports.getDepartmentAnalysisReport = async (req, res, next) => {
   try {
     const { month, year } = req.query;
+    const organizationId = req.organizationId;
     if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are required' });
-    const analysis = await payrollService.getDepartmentCostAnalysis(parseInt(month), parseInt(year));
+    const analysis = await payrollService.getDepartmentCostAnalysis(parseInt(month), parseInt(year), organizationId);
     res.status(200).json({ success: true, data: analysis });
   } catch (err) {
     next(err);
@@ -577,7 +606,8 @@ exports.getDepartmentAnalysisReport = async (req, res, next) => {
 exports.downloadPayslipPDF = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const payroll = await ProcessedPayroll.findById(id).populate('user');
+    const organizationId = req.organizationId;
+    const payroll = await ProcessedPayroll.findOne({ _id: id, organizationId }).populate('user');
     
     if (!payroll) {
         return res.status(404).json({ success: false, message: 'Payslip record not found' });
@@ -609,7 +639,8 @@ exports.downloadPayslipPDF = async (req, res, next) => {
 exports.sendPayslipEmail = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const payroll = await ProcessedPayroll.findById(id).populate('user');
+    const organizationId = req.organizationId;
+    const payroll = await ProcessedPayroll.findOne({ _id: id, organizationId }).populate('user');
     
     if (!payroll) return res.status(404).json({ success: false, message: 'Payslip record not found' });
     
@@ -618,7 +649,7 @@ exports.sendPayslipEmail = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Employee email address is missing. Please update employee profile.' });
     }
 
-    const settings = await Settings.findOne();
+    const settings = await Settings.findOne({ organizationId });
     const mappedData = _mapPayrollToReportData(payroll, settings);
 
     // Call internal email service
@@ -641,8 +672,9 @@ exports.bulkSendPayslipEmails = async (req, res, next) => {
     const { ids } = req.body;
     if (!ids || !ids.length) return res.status(400).json({ success: false, message: 'No payslips selected' });
 
-    const payrolls = await ProcessedPayroll.find({ _id: { $in: ids } }).populate('user');
-    const settings = await Settings.findOne();
+    const organizationId = req.organizationId;
+    const payrolls = await ProcessedPayroll.find({ _id: { $in: ids }, organizationId }).populate('user');
+    const settings = await Settings.findOne({ organizationId });
     
     const bulkData = payrolls.map(p => ({
         email: p.user?.email || p.employeeInfo?.email,
@@ -727,7 +759,7 @@ exports.getDashboardData = async (req, res, next) => {
   try {
     const month = parseInt(req.query.month) || (new Date().getMonth() + 1);
     const year = parseInt(req.query.year) || new Date().getFullYear();
-    const data = await payrollService.getPayrollDashboard(month, year);
+    const data = await payrollService.getPayrollDashboard(month, year, req.organizationId);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
@@ -739,7 +771,8 @@ exports.getAnalytics = async (req, res, next) => {
     const filters = {
         month: req.query.month,
         year: req.query.year,
-        department: req.query.department
+        department: req.query.department,
+        organizationId: req.organizationId
     };
     const data = await payrollService.getPayrollAnalytics(filters);
     res.status(200).json({ success: true, data });
@@ -755,7 +788,7 @@ exports.getAnalytics = async (req, res, next) => {
  */
 exports.getPayrollBatchHistory = async (req, res, next) => {
   try {
-    const batches = await payrollService.getPayrollBatches();
+    const batches = await payrollService.getPayrollBatches(req.organizationId);
     res.status(200).json({ success: true, data: batches });
   } catch (err) {
     next(err);

@@ -18,6 +18,12 @@ export const useUIStore = create((set) => {
     toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
     setSidebar: (val) => set({ sidebarOpen: val }),
 
+    // Unsaved Changes Tracking
+    hasUnsavedChanges: false,
+    pendingNavTarget: null,
+    setUnsavedChanges: (val) => set({ hasUnsavedChanges: val }),
+    setPendingNavTarget: (val) => set({ pendingNavTarget: val }),
+
     toggleDarkMode: () =>
       set((s) => {
         const nextTheme = s.theme === 'light' ? 'dark' : 'light';

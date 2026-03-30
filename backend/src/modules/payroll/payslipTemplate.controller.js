@@ -8,7 +8,7 @@ const asyncHandler = require('../../shared/utils/asyncHandler');
 
 exports.getAllTemplates = asyncHandler(async (req, res, next) => {
   const templates = await PayslipTemplate.find({ 
-    $or: [{ companyId: req.user.companyId }, { type: 'DEFAULT' }],
+    $or: [{ organizationId: req.organizationId }, { type: 'DEFAULT' }],
     isActive: true 
   }).sort({ type: 1, name: 1 });
   
@@ -16,28 +16,31 @@ exports.getAllTemplates = asyncHandler(async (req, res, next) => {
 });
 
 exports.getTemplate = asyncHandler(async (req, res, next) => {
-  const template = await PayslipTemplate.findById(req.params.id);
-  if (!template) throw new AppError('Template not found', 404);
+  const template = await PayslipTemplate.findOne({ 
+    _id: req.params.id,
+    $or: [{ organizationId: req.organizationId }, { type: 'DEFAULT' }]
+  });
+  if (!template) throw new AppError('Template not found or unauthorized', 404);
   
   res.status(200).json({ status: 'success', data: { template } });
 });
 
 exports.createTemplate = asyncHandler(async (req, res, next) => {
   const { templateId, backgroundImageUrl, isDesignOnly } = req.body;
-  const companyId = req.user.companyId;
+  const organizationId = req.organizationId;
 
-  if (!companyId) {
-    return next(new AppError('Unauthorized: Company context missing from session. Please re-login.', 401));
+  if (!organizationId) {
+    return next(new AppError('Unauthorized: Organization context missing from session. Please re-login.', 401));
   }
 
-  // Single Active Design Rule: Only one design is active per company
+  // Single Active Design Rule: Only one design is active per organization
   await PayslipDesign.updateMany(
-    { companyId },
+    { organizationId },
     { isActive: false }
   );
 
   const design = await PayslipDesign.create({
-    companyId,
+    organizationId,
     templateId: templateId || req.body.layoutType || 'CORPORATE',
     backgroundImageUrl: backgroundImageUrl || req.body.backgroundImageUrl,
     isActive: true,
@@ -51,7 +54,7 @@ exports.createTemplate = asyncHandler(async (req, res, next) => {
       ...req.body,
       type: 'CUSTOM',
       createdBy: req.user.id,
-      companyId,
+      organizationId,
       isSystemDefault: true // Make this the new default
     });
   }
@@ -67,7 +70,7 @@ exports.createTemplate = asyncHandler(async (req, res, next) => {
 
 exports.updateTemplate = asyncHandler(async (req, res, next) => {
   const template = await PayslipTemplate.findOneAndUpdate(
-    { _id: req.params.id, companyId: req.user.companyId },
+    { _id: req.params.id, organizationId: req.organizationId },
     req.body,
     {
       new: true,
@@ -83,13 +86,13 @@ exports.updateTemplate = asyncHandler(async (req, res, next) => {
 exports.deleteTemplate = asyncHandler(async (req, res, next) => {
   const template = await PayslipTemplate.findOne({ 
     _id: req.params.id, 
-    companyId: req.user.companyId 
+    organizationId: req.organizationId 
   });
   
   if (!template) throw new AppError('Template not found or unauthorized', 404);
   
-  if (template.type === 'DEFAULT') {
-    throw new AppError('Default templates cannot be deleted', 400);
+  if (template.type === 'DEFAULT' && !template.organizationId) {
+    throw new AppError('System-wide default templates cannot be deleted', 400);
   }
   
   await template.deleteOne();
@@ -97,11 +100,14 @@ exports.deleteTemplate = asyncHandler(async (req, res, next) => {
 });
 
 exports.setDefaultTemplate = asyncHandler(async (req, res, next) => {
-  const template = await PayslipTemplate.findById(req.params.id);
-  if (!template) throw new AppError('Template not found', 404);
+  const template = await PayslipTemplate.findOne({ 
+    _id: req.params.id, 
+    organizationId: req.organizationId 
+  });
+  if (!template) throw new AppError('Template not found or unauthorized', 404);
   
   template.isSystemDefault = true;
-  await template.save();
+  await template.save(); // Pre-save hook handles unsetting other defaults for this org
   
   res.status(200).json({ status: 'success', data: { template } });
 });
@@ -114,7 +120,7 @@ exports.previewTemplate = asyncHandler(async (req, res, next) => {
     finalHtml = payslipTemplateService.getHtmlForLayout(layoutType);
   }
   
-  // Create mock data
+  // Create mock data for preview (Not organization-specific as it's just a UI preview)
   const mockPayroll = {
     employeeInfo: { name: 'John Doe', employeeId: 'EMP001', department: 'Engineering', designation: 'Senior Architect' },
     bankDetails: { bankName: 'Global Bank', accountNumber: '1234567890', pan: 'ABCDE1234F' },
@@ -154,18 +160,21 @@ exports.getRenderedPayslip = asyncHandler(async (req, res, next) => {
   
   const payroll = await ProcessedPayroll.findOne({
     _id: req.params.payrollId,
-    companyId: req.user.companyId
+    organizationId: req.organizationId
   }).populate('user');
   if (!payroll) throw new AppError('Payroll record not found or unauthorized', 404);
   
-  const settings = await Settings.findOne({ companyId: req.user.companyId });
+  const settings = await Settings.findOne({ organizationId: req.organizationId });
   
   let template;
   if (payroll.payslipTemplateId) {
-    template = await PayslipTemplate.findById(payroll.payslipTemplateId);
+    template = await PayslipTemplate.findOne({ 
+      _id: payroll.payslipTemplateId,
+      $or: [{ organizationId: req.organizationId }, { type: 'DEFAULT' }]
+    });
   }
   if (!template) {
-    template = await payslipTemplateService.getDefaultTemplate(payroll.companyId);
+    template = await payslipTemplateService.getDefaultTemplate(req.organizationId);
   }
 
   let templateHtml = template.htmlContent;
@@ -181,7 +190,7 @@ exports.getRenderedPayslip = asyncHandler(async (req, res, next) => {
 
 exports.getActiveDesign = asyncHandler(async (req, res, next) => {
   const design = await PayslipDesign.findOne({ 
-    companyId: req.user.companyId,
+    organizationId: req.organizationId,
     isActive: true 
   }).sort({ createdAt: -1 });
 

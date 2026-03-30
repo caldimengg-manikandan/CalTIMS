@@ -5,7 +5,8 @@ const taskService = require('./task.service');
 class TaskController {
   async getAll(req, res, next) {
     try {
-      const { data, pagination } = await taskService.getAll(req.query);
+      const organizationId = req.organizationId;
+      const { data, pagination } = await taskService.getAll(req.query, organizationId);
       res.status(200).json({ success: true, data, pagination });
     } catch (error) {
       next(error);
@@ -14,7 +15,8 @@ class TaskController {
 
   async getById(req, res, next) {
     try {
-      const task = await taskService.getById(req.params.id);
+      const organizationId = req.organizationId;
+      const task = await taskService.getById(req.params.id, organizationId);
       if (!task) {
         return res.status(404).json({ success: false, message: 'Task not found' });
       }
@@ -26,7 +28,8 @@ class TaskController {
 
   async create(req, res, next) {
     try {
-      const task = await taskService.create(req.body);
+      const organizationId = req.organizationId;
+      const task = await taskService.create({ ...req.body, organizationId });
       res.status(201).json({ success: true, data: task });
     } catch (error) {
       next(error);
@@ -39,7 +42,8 @@ class TaskController {
       if (!Array.isArray(tasks)) {
         return res.status(400).json({ success: false, message: 'Tasks must be an array' });
       }
-      const data = await taskService.bulkCreate(tasks);
+      const organizationId = req.organizationId;
+      const data = await taskService.bulkCreate(tasks, organizationId);
       res.status(201).json({ success: true, data });
     } catch (error) {
       next(error);
@@ -48,7 +52,8 @@ class TaskController {
 
   async update(req, res, next) {
     try {
-      const task = await taskService.update(req.params.id, req.body);
+      const organizationId = req.organizationId;
+      const task = await taskService.update(req.params.id, req.body, organizationId);
       if (!task) {
         return res.status(404).json({ success: false, message: 'Task not found' });
       }
@@ -60,7 +65,8 @@ class TaskController {
 
   async delete(req, res, next) {
     try {
-      const task = await taskService.delete(req.params.id);
+      const organizationId = req.organizationId;
+      const task = await taskService.delete(req.params.id, organizationId);
       if (!task) {
         return res.status(404).json({ success: false, message: 'Task not found' });
       }

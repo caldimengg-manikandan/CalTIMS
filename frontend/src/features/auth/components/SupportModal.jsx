@@ -8,6 +8,8 @@ import {
 import supportService from '@/services/support/supportService'
 import { toast } from 'react-hot-toast'
 import { format } from 'date-fns'
+import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '@/store/authStore'
 
 const ISSUE_CATEGORIES = [
     'Login & Access',
@@ -37,6 +39,7 @@ export default function SupportModal({ isOpen, onClose }) {
     const [myTickets, setMyTickets] = useState([])
     const [trackEmail, setTrackEmail] = useState('')
     const [submittedTicket, setSubmittedTicket] = useState(null)
+    const [selectedTicket, setSelectedTicket] = useState(null)
 
     const filteredFAQs = FAQ_ITEMS.filter(item =>
         item.q.toLowerCase().includes(searchQuery.toLowerCase())
@@ -118,10 +121,22 @@ export default function SupportModal({ isOpen, onClose }) {
         setTrackEmail('')
     }
 
+    const { isAuthenticated } = useAuthStore()
+    const navigate = useNavigate()
+
     const handleClose = () => {
-        resetState()
-        setView('center')
         onClose()
+        setTimeout(() => {
+            resetState()
+            setView('center')
+        }, 300)
+    }
+
+    const handleEnterPortal = () => {
+        handleClose()
+        if (isAuthenticated) {
+            navigate('/dashboard')
+        }
     }
 
     const getStatusColor = (status) => {
@@ -140,7 +155,10 @@ export default function SupportModal({ isOpen, onClose }) {
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-3">
                         {view !== 'center' && view !== 'success' && (
-                            <button onClick={() => setView('center')} className="p-2 hover:bg-slate-100 rounded-xl transition-all">
+                            <button 
+                                onClick={() => setView(view === 'details' ? 'track-list' : 'center')} 
+                                className="p-2 hover:bg-slate-100 rounded-xl transition-all"
+                            >
                                 <ArrowLeft size={18} className="text-slate-400" />
                             </button>
                         )}
@@ -157,17 +175,7 @@ export default function SupportModal({ isOpen, onClose }) {
                 {/* VIEW: SUPPORT CENTER (MAIN) */}
                 {view === 'center' && (
                     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {/* Search */}
-                        <div className="relative group">
-                            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={20} />
-                            <input
-                                type="text"
-                                placeholder="Search help articles or common issues..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full h-16 bg-slate-50 dark:bg-white/5 border-2 border-transparent focus:border-primary/20 rounded-[2rem] pl-16 pr-6 text-sm font-bold outline-none transition-all shadow-sm"
-                            />
-                        </div>
+                       
 
                         {/* Common Issues */}
                         <div>
@@ -177,7 +185,7 @@ export default function SupportModal({ isOpen, onClose }) {
                             </div>
                             <div className="grid gap-3">
                                 {filteredFAQs.length > 0 ? filteredFAQs.map((faq, i) => (
-                                    <div key={i} className="group p-5 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-3xl hover:border-primary/30 hover:shadow-xl hover:shadow-indigo-600/5 transition-all cursor-pointer">
+                                    <div key={i} onClick={() => setView('ticket')} className="group p-5 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-3xl hover:border-primary/30 hover:shadow-xl hover:shadow-indigo-600/5 transition-all cursor-pointer">
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
                                                 <p className="text-sm font-black text-slate-800 dark:text-white mb-1">{faq.q}</p>
@@ -412,7 +420,13 @@ export default function SupportModal({ isOpen, onClose }) {
                                     <p className="text-xs text-slate-500 font-medium line-clamp-2 leading-relaxed">{ticket.message}</p>
                                     <div className="flex items-center justify-between pt-2 border-t border-slate-50 mt-2">
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{format(new Date(ticket.createdAt), 'MMM d, yyyy HH:mm')}</span>
-                                        <button className="text-[10px] font-black text-primary uppercase flex items-center gap-1 hover:underline">
+                                        <button 
+                                            onClick={() => {
+                                                setSelectedTicket(ticket)
+                                                setView('details')
+                                            }}
+                                            className="text-[10px] font-black text-primary uppercase flex items-center gap-1 hover:underline"
+                                        >
                                             View Details <ExternalLink size={10} />
                                         </button>
                                     </div>
@@ -427,7 +441,45 @@ export default function SupportModal({ isOpen, onClose }) {
                     </div>
                 )}
 
-                {/* VIEW: SUCCESS */}
+                {/* VIEW: TICKET DETAILS */}
+                {view === 'details' && selectedTicket && (
+                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-500 py-4">
+                        <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-black text-primary uppercase tracking-widest">{selectedTicket.ticketId}</span>
+                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${getStatusColor(selectedTicket.status)}`}>
+                                    {selectedTicket.status}
+                                </span>
+                            </div>
+                            
+                            <div className="space-y-1">
+                                <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest">Classification</h4>
+                                <p className="text-sm font-bold text-slate-800 dark:text-white uppercase">{selectedTicket.issueType}</p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest">Logged On</h4>
+                                <p className="text-sm font-medium text-slate-500 uppercase">{format(new Date(selectedTicket.createdAt), 'MMMM dd, yyyy HH:mm')}</p>
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-200 dark:border-white/10 space-y-2">
+                                <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest">Message Log</h4>
+                                <div className="p-4 bg-white dark:bg-black/20 rounded-2xl border border-slate-100 dark:border-white/5">
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 font-medium leading-relaxed whitespace-pre-wrap">
+                                        {selectedTicket.message}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={() => setView('track-list')}
+                            className="w-full py-4 border-2 border-slate-100 dark:border-white/5 text-[10px] font-black uppercase tracking-widest text-slate-400 rounded-2xl hover:bg-slate-50 transition-all"
+                        >
+                            Back to Request List
+                        </button>
+                    </div>
+                )}
                 {view === 'success' && (
                     <div className="py-12 text-center space-y-6 animate-in zoom-in-95 duration-500">
                         <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-xl">
@@ -442,7 +494,7 @@ export default function SupportModal({ isOpen, onClose }) {
                         </div>
                         <div className="pt-6">
                             <button
-                                onClick={handleClose}
+                                onClick={handleEnterPortal}
                                 className="px-12 py-4 bg-slate-900 text-white rounded-[2rem] text-xs font-black uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-2xl"
                             >
                                 Enter Portal

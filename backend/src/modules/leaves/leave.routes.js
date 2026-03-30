@@ -14,19 +14,19 @@ router.use(checkSubscription);
 router.use(requireFeature('leave_management'));
 
 router.post('/', asyncHandler(async (req, res) => {
-  const leave = await leaveService.apply(req.body, req.user._id);
+  const leave = await leaveService.apply(req.body, req.user._id, req.organizationId);
   ApiResponse.created(res, { message: 'Leave application submitted', data: leave });
 }));
 
 router.get('/', asyncHandler(async (req, res) => {
-  const { leaves, pagination } = await leaveService.getAll(req.query, req.user);
+  const { leaves, pagination } = await leaveService.getAll(req.query, req.user, req.organizationId);
   ApiResponse.success(res, { data: leaves, pagination });
 }));
 
 // ── GET all approved leaves for calendar display (visible to all users) ────────
 router.get('/calendar', asyncHandler(async (req, res) => {
   const Leave = require('./leave.model');
-  const filter = { status: 'approved' };
+  const filter = { status: 'approved', organizationId: req.organizationId };
 
   // Filter: leave overlaps with the requested date range
   if (req.query.from || req.query.to) {
@@ -71,7 +71,7 @@ router.get('/calendar', asyncHandler(async (req, res) => {
 
 // ── Backfill route MUST be before /:id routes to avoid param conflict ──────────
 router.post('/backfill-timesheets', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
-  const result = await leaveService.backfillTimesheets(req.user._id);
+  const result = await leaveService.backfillTimesheets(req.user._id, req.organizationId);
   ApiResponse.success(res, {
     message: `Synced ${result.synced}/${result.total} approved leaves to timesheets`,
     data: result
@@ -79,38 +79,38 @@ router.post('/backfill-timesheets', checkPermission('manageLeaves'), asyncHandle
 }));
 
 router.get('/filter-options', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
-  const options = await leaveService.getFilterOptions();
+  const options = await leaveService.getFilterOptions(req.organizationId);
   ApiResponse.success(res, { data: options });
 }));
 
 router.get('/balance/:userId', asyncHandler(async (req, res) => {
-  const balance = await leaveService.getBalance(req.params.userId);
+  const balance = await leaveService.getBalance(req.params.userId, req.organizationId);
   ApiResponse.success(res, { data: balance });
 }));
 
 router.get('/:id', asyncHandler(async (req, res) => {
-  const leave = await leaveService.getById(req.params.id, req.user);
+  const leave = await leaveService.getById(req.params.id, req.user, req.organizationId);
   ApiResponse.success(res, { data: leave });
 }));
 
 router.patch('/:id/approve', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
-  const leave = await leaveService.approve(req.params.id, req.user._id);
+  const leave = await leaveService.approve(req.params.id, req.user._id, req.organizationId);
   ApiResponse.success(res, { message: 'Leave approved', data: leave });
 }));
 
 router.patch('/:id/reject', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
-  const leave = await leaveService.reject(req.params.id, req.user._id, req.body.reason);
+  const leave = await leaveService.reject(req.params.id, req.user._id, req.body.reason, req.organizationId);
   ApiResponse.success(res, { message: 'Leave rejected', data: leave });
 }));
 
 // Sync timesheets for a single already-approved leave
 router.patch('/:id/sync-timesheet', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
-  const result = await leaveService.syncTimesheet(req.params.id, req.user._id);
+  const result = await leaveService.syncTimesheet(req.params.id, req.user._id, req.organizationId);
   ApiResponse.success(res, { message: result.message });
 }));
 
 router.patch('/:id/cancel', asyncHandler(async (req, res) => {
-  const leave = await leaveService.cancel(req.params.id, req.user._id, req.body.reason, req.user.role);
+  const leave = await leaveService.cancel(req.params.id, req.user._id, req.body.reason, req.user.role, req.organizationId);
   ApiResponse.success(res, { message: 'Leave cancelled', data: leave });
 }));
 

@@ -17,6 +17,25 @@ function hexToRgb(hex) {
     : null
 }
 
+function adjustColor(hex, amt) {
+    let usePound = false;
+    if (hex[0] === "#") {
+        hex = hex.slice(1);
+        usePound = true;
+    }
+    let num = parseInt(hex, 16);
+    let r = (num >> 16) + amt;
+    if (r > 255) r = 255;
+    else if (r < 0) r = 0;
+    let b = ((num >> 8) & 0x00FF) + amt;
+    if (b > 255) b = 255;
+    else if (b < 0) b = 0;
+    let g = (num & 0x0000FF) + amt;
+    if (g > 255) g = 255;
+    else if (g < 0) g = 0;
+    return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16).padStart(6, '0');
+}
+
 function applyTheme(state) {
   const root = document.documentElement
 
@@ -34,8 +53,13 @@ function applyTheme(state) {
   // Accent color
   const preset = ACCENT_PRESETS[state.accentPreset]
   const primary = state.customColor || preset?.primary || '#6366f1'
+  const primaryHover = preset?.primaryHover || adjustColor(primary, -20)
+  const primaryLight = preset?.primaryLight || `${primary}15` // 15 is ~8% opacity in hex
+
   root.style.setProperty('--color-primary', primary)
   root.style.setProperty('--color-primary-rgb', hexToRgb(primary))
+  root.style.setProperty('--color-primary-hover', primaryHover)
+  root.style.setProperty('--color-primary-light', primaryLight)
 }
 
 export const useThemeStore = create(
@@ -54,6 +78,12 @@ export const useThemeStore = create(
       setCustomColor: (hex) => {
         set({ customColor: hex })
       },
+      syncFromBranding: (branding) => {
+        if (!branding) return
+        if (branding.primaryColor) {
+           set({ customColor: branding.primaryColor })
+        }
+      },
       applyTheme: () => applyTheme(get()),
     }),
     { 
@@ -71,3 +101,4 @@ useThemeStore.subscribe((state) => {
 })
 
 export { ACCENT_PRESETS }
+

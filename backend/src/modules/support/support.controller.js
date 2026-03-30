@@ -30,7 +30,8 @@ const verifyOTP = async (req, res, next) => {
 
 const submitTicket = async (req, res, next) => {
     try {
-        const ticket = await supportService.createTicket(req.body, req.user?._id);
+        const organizationId = req.organizationId || req.body.organizationId;
+        const ticket = await supportService.createTicket(req.body, req.user?._id, organizationId);
         res.status(201).json({
             success: true,
             data: ticket
@@ -42,8 +43,9 @@ const submitTicket = async (req, res, next) => {
 
 const trackTickets = async (req, res, next) => {
     try {
-        const { email } = req.body;
-        const tickets = await supportService.getTicketsByEmail(email);
+        const { email, organizationId } = req.body;
+        const orgId = organizationId || req.organizationId;
+        const tickets = await supportService.getTicketsByEmail(email, orgId);
         res.status(200).json({
             success: true,
             data: { tickets }
@@ -55,7 +57,8 @@ const trackTickets = async (req, res, next) => {
 
 const getTickets = async (req, res, next) => {
     try {
-        const result = await supportService.getAllTickets(req.query);
+        const organizationId = req.organizationId;
+        const result = await supportService.getAllTickets(req.query, organizationId);
         res.status(200).json({
             success: true,
             data: result.tickets,
@@ -70,7 +73,8 @@ const updateTicketStatus = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
-        const ticket = await supportService.updateTicketStatus(id, status, req.user?._id);
+        const organizationId = req.organizationId;
+        const ticket = await supportService.updateTicketStatus(id, status, req.user?._id, organizationId);
         res.status(200).json({
             success: true,
             data: ticket
@@ -83,8 +87,9 @@ const updateTicketStatus = async (req, res, next) => {
 const addTicketMessage = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { message, sender } = req.body;
-        const ticket = await supportService.addMessage(id, message, sender);
+        const { message, sender, organizationId } = req.body;
+        const orgId = organizationId || req.organizationId;
+        const ticket = await supportService.addMessage(id, message, sender, orgId);
         res.status(200).json({
             success: true,
             data: ticket
@@ -97,7 +102,8 @@ const addTicketMessage = async (req, res, next) => {
 const deleteTicket = async (req, res, next) => {
     try {
         const { id } = req.params;
-        await supportService.deleteTicket(id, req.user?._id);
+        const organizationId = req.organizationId;
+        await supportService.deleteTicket(id, req.user?._id, organizationId);
         res.status(200).json({
             success: true,
             message: 'Ticket deleted successfully'

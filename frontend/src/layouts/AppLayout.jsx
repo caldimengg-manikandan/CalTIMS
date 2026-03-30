@@ -9,6 +9,7 @@ import { useInactivityTimer } from '@/hooks/useInactivityTimer'
 import { clsx } from 'clsx'
 import PasswordRotationPolicy from '@/features/auth/components/PasswordRotationPolicy'
 import TrialBanner from '@/components/ui/TrialBanner'
+import OnboardingTour from '@/features/onboarding/components/OnboardingTour'
 
 export default function AppLayout() {
     useInactivityTimer()
@@ -38,6 +39,9 @@ export default function AppLayout() {
 
     return (
         <div className="flex h-screen overflow-hidden bg-surface-50 dark:bg-black">
+            {/* Onboarding Tour */}
+            <OnboardingTour />
+
             {/* Sidebar */}
             <Sidebar />
 

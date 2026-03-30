@@ -15,8 +15,8 @@ const { logAction } = require('../audit/audit.routes');
 const policyService = require('../policyEngine/policy.service');
 
 // ─── Helper: get or create the system "Leave" project ────────────────────────
-async function getOrCreateLeaveProject(managerId) {
-  let leaveProject = await Project.findOne({ code: 'LEAVE-SYS' });
+async function getOrCreateLeaveProject(managerId, organizationId) {
+  let leaveProject = await Project.findOne({ code: 'LEAVE-SYS', organizationId });
   if (!leaveProject) {
     leaveProject = await Project.create({
       name: 'Leave',
@@ -27,14 +27,15 @@ async function getOrCreateLeaveProject(managerId) {
       managerId,
       budget: 0,
       isActive: true,
+      organizationId,
     });
   }
   return leaveProject;
 }
 
 // ─── Helper: get all working days between two dates respecting organization settings ─
-async function getWorkingDaysBetween(startDate, endDate) {
-  const policy = await policyService.getPolicy();
+async function getWorkingDaysBetween(startDate, endDate, organizationId) {
+  const policy = await policyService.getPolicy(organizationId);
   const workWeek = policy?.attendance?.workWeek || 'Mon-Fri';
 
   const days = [];
@@ -64,8 +65,8 @@ async function getWorkingDaysBetween(startDate, endDate) {
 }
 
 // ─── Helper: group dates by ISO week ─────────────────────────────────────────
-async function getWeekStartDay() {
-  const policy = await policyService.getPolicy();
+async function getWeekStartDay(organizationId) {
+  const policy = await policyService.getPolicy(organizationId);
   return policy?.attendance?.weekStartDay || 'monday';
 }
 
@@ -81,19 +82,19 @@ function groupByWeek(dates, weekStartDay = 'monday') {
 }
 
 // ─── Helper: remove leave rows from weekly timesheets when a leave is cancelled ─
-async function removeLeaveTimesheets(leave) {
-  const leaveProject = await Project.findOne({ code: 'LEAVE-SYS' });
+async function removeLeaveTimesheets(leave, organizationId) {
+  const leaveProject = await Project.findOne({ code: 'LEAVE-SYS', organizationId });
   if (!leaveProject) return; // No leave project means no timesheets to clean up
 
-  const workingDays = await getWorkingDaysBetween(leave.startDate, leave.endDate);
+  const workingDays = await getWorkingDaysBetween(leave.startDate, leave.endDate, organizationId);
   if (!workingDays.length) return;
 
-  const wsd = await getWeekStartDay();
+  const wsd = await getWeekStartDay(organizationId);
   const weeks = groupByWeek(workingDays, wsd);
   const category = leave.leaveType.charAt(0).toUpperCase() + leave.leaveType.slice(1);
 
   for (const { weekStart, dates } of weeks) {
-    const timesheet = await Timesheet.findOne({ userId: leave.userId._id || leave.userId, weekStartDate: weekStart });
+    const timesheet = await Timesheet.findOne({ userId: leave.userId._id || leave.userId, weekStartDate: weekStart, organizationId });
     if (!timesheet) continue;
 
     const rowIdx = timesheet.rows.findIndex(r => {
@@ -120,12 +121,12 @@ async function removeLeaveTimesheets(leave) {
 }
 
 // ─── Helper: create / upsert leave rows into weekly timesheet ─────────────────
-async function createLeaveTimesheets(leave, approverId) {
-  const leaveProject = await getOrCreateLeaveProject(approverId);
-  const workingDays = await getWorkingDaysBetween(leave.startDate, leave.endDate);
+async function createLeaveTimesheets(leave, approverId, organizationId) {
+  const leaveProject = await getOrCreateLeaveProject(approverId, organizationId);
+  const workingDays = await getWorkingDaysBetween(leave.startDate, leave.endDate, organizationId);
   if (!workingDays.length) return;
 
-  const wsd = await getWeekStartDay();
+  const wsd = await getWeekStartDay(organizationId);
   const weeks = groupByWeek(workingDays, wsd);
   const category = leave.leaveType.charAt(0).toUpperCase() + leave.leaveType.slice(1);
   let hoursPerDay = 8;
@@ -142,11 +143,12 @@ async function createLeaveTimesheets(leave, approverId) {
     }));
 
     // Find the single weekly document
-    let timesheet = await Timesheet.findOne({ userId: leave.userId._id, weekStartDate: weekStart });
+    let timesheet = await Timesheet.findOne({ userId: leave.userId._id, weekStartDate: weekStart, organizationId });
 
     if (!timesheet) {
       timesheet = new Timesheet({
         userId: leave.userId._id,
+        organizationId,
         weekStartDate: weekStart,
         weekEndDate: weekEnd,
         status: TIMESHEET_STATUS.DRAFT,
@@ -203,8 +205,8 @@ async function createLeaveTimesheets(leave, approverId) {
  * Leave Management Service
  */
 const leaveService = {
-  async apply(data, userId) {
-    const user = await User.findById(userId);
+  async apply(data, userId, organizationId) {
+    const user = await User.findOne({ _id: userId, organizationId });
     if (!user) throw new AppError('User not found', 404);
 
     let { startDate, endDate, leaveType } = data;
@@ -214,7 +216,7 @@ const leaveService = {
     const ed = new Date(endDate);
 
     // 0. Recalculate totalDays based on actual working days (respecting work week settings)
-    const workingDays = await getWorkingDaysBetween(sd, ed);
+    const workingDays = await getWorkingDaysBetween(sd, ed, organizationId);
     let totalDays = workingDays.length;
 
     if (data.isHalfDay) {
@@ -243,6 +245,7 @@ const leaveService = {
     // 2. Check for overlapping pending or approved leave
     const existingConflict = await Leave.findOne({
       userId,
+      organizationId,
       status: { $in: [LEAVE_STATUS.APPROVED, LEAVE_STATUS.PENDING] },
       $or: [
         { startDate: { $lte: ed }, endDate: { $gte: sd } }
@@ -254,11 +257,11 @@ const leaveService = {
       throw new AppError(`You already have ${statusText} ${existingConflict.leaveType} leave for this period (${formatDate(existingConflict.startDate)} - ${formatDate(existingConflict.endDate)})`, 400);
     }
 
-    const leave = await Leave.create({ ...data, userId });
+    const leave = await Leave.create({ ...data, userId, organizationId });
 
     // Notify Admins, Managers, and Direct Manager
-    const systemApprovers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
-    const directManager = user.managerId ? await User.findById(user.managerId).select('_id email') : null;
+    const systemApprovers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true, organizationId }).select('_id email');
+    const directManager = user.managerId ? await User.findOne({ _id: user.managerId, organizationId }).select('_id email') : null;
 
     const approverMap = new Map();
     systemApprovers.forEach(a => approverMap.set(a._id.toString(), a));
@@ -289,9 +292,9 @@ const leaveService = {
     return leave;
   },
 
-  async getAll(query, user) {
+  async getAll(query, user, organizationId) {
     const { page, limit, skip } = parsePagination(query);
-    const filter = {};
+    const filter = { organizationId };
 
     // If a specific userId is provided (admin filter), use it
     if (query.userId && mongoose.Types.ObjectId.isValid(query.userId)) {
@@ -335,6 +338,7 @@ const leaveService = {
     if (query.search && query.search.trim().length >= 2) {
       const searchRegex = new RegExp(query.search.trim(), 'i');
       const userIds = await User.find({
+        organizationId,
         $or: [
           { name: searchRegex },
           { employeeId: searchRegex }
@@ -367,8 +371,8 @@ const leaveService = {
     };
   },
 
-  async getById(id, requestor) {
-    const leave = await Leave.findById(id)
+  async getById(id, requestor, organizationId) {
+    const leave = await Leave.findOne({ _id: id, organizationId })
       .populate('userId', 'name employeeId department')
       .populate('approvedBy', 'name');
     if (!leave) throw new AppError('Leave record not found', 404);
@@ -379,8 +383,8 @@ const leaveService = {
     return leave;
   },
 
-  async approve(id, approverId) {
-    const leave = await Leave.findById(id).populate('userId');
+  async approve(id, approverId, organizationId) {
+    const leave = await Leave.findOne({ _id: id, organizationId }).populate('userId');
     if (!leave) throw new AppError('Leave record not found', 404);
     
     if (leave.status !== LEAVE_STATUS.PENDING) {
@@ -415,7 +419,7 @@ const leaveService = {
     });
 
     // Auto-create/update the weekly timesheet
-    await createLeaveTimesheets(leave, approverId);
+    await createLeaveTimesheets(leave, approverId, organizationId);
 
     // Notify employee
     await notifier.send(leave.userId._id, {
@@ -430,8 +434,8 @@ const leaveService = {
     return leave;
   },
 
-  async reject(id, approverId, reason) {
-    const leave = await Leave.findById(id).populate('userId');
+  async reject(id, approverId, reason, organizationId) {
+    const leave = await Leave.findOne({ _id: id, organizationId }).populate('userId');
     if (!leave) throw new AppError('Leave record not found', 404);
     leave.status = LEAVE_STATUS.REJECTED;
     leave.rejectionReason = reason;
@@ -465,8 +469,8 @@ const leaveService = {
     return leave;
   },
 
-  async cancel(id, requestorId, reason, requestorRole) {
-    const leave = await Leave.findById(id).populate('userId');
+  async cancel(id, requestorId, reason, requestorRole, organizationId) {
+    const leave = await Leave.findOne({ _id: id, organizationId }).populate('userId');
     if (!leave) throw new AppError('Leave record not found', 404);
 
     const isAdminOrManager = requestorRole === ROLES.ADMIN || requestorRole === ROLES.MANAGER;
@@ -495,7 +499,7 @@ const leaveService = {
         await user.save();
       }
       // Remove timesheet entries created for this approved leave
-      await removeLeaveTimesheets(leave);
+      await removeLeaveTimesheets(leave, organizationId);
     }
     // If the leave was PENDING, balance was never deducted — nothing to restore.
 
@@ -519,7 +523,7 @@ const leaveService = {
     // Notify Admins and Managers (if cancelled by the employee themselves)
     const user = leave.userId;
     if (isOwner) {
-      const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true }).select('_id email');
+      const approvers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.MANAGER] }, isActive: true, organizationId }).select('_id email');
       const notificationPromises = approvers.map(approver =>
         notifier.send(approver._id, {
           userEmail: approver.email,
@@ -546,23 +550,23 @@ const leaveService = {
     return leave;
   },
 
-  async syncTimesheet(id, adminId) {
-    const leave = await Leave.findById(id).populate('userId');
+  async syncTimesheet(id, adminId, organizationId) {
+    const leave = await Leave.findOne({ _id: id, organizationId }).populate('userId');
     if (!leave) throw new AppError('Leave record not found', 404);
     if (leave.status !== LEAVE_STATUS.APPROVED) {
       throw new AppError('Can only sync timesheets for approved leaves', 400);
     }
-    await createLeaveTimesheets(leave, adminId);
+    await createLeaveTimesheets(leave, adminId, organizationId);
     return { message: 'Timesheets synced successfully' };
   },
 
-  async backfillTimesheets(adminId) {
-    const approvedLeaves = await Leave.find({ status: LEAVE_STATUS.APPROVED }).populate('userId');
+  async backfillTimesheets(adminId, organizationId) {
+    const approvedLeaves = await Leave.find({ status: LEAVE_STATUS.APPROVED, organizationId }).populate('userId');
     let synced = 0;
     let failed = 0;
     for (const leave of approvedLeaves) {
       try {
-        await createLeaveTimesheets(leave, adminId);
+        await createLeaveTimesheets(leave, adminId, organizationId);
         synced++;
       } catch (err) {
         console.error(`[Backfill] Failed for leave ${leave._id}: ${err.message}`);
@@ -572,22 +576,22 @@ const leaveService = {
     return { total: approvedLeaves.length, synced, failed };
   },
 
-  async getBalance(userId) {
+  async getBalance(userId, organizationId) {
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       return { annual: 0, sick: 0, casual: 0 };
     }
-    const user = await User.findById(userId).select('leaveBalance name employeeId');
+    const user = await User.findOne({ _id: userId, organizationId }).select('leaveBalance name employeeId');
     if (!user) throw new AppError('User not found', 404);
     return user.leaveBalance;
   },
 
-  async getFilterOptions() {
+  async getFilterOptions(organizationId) {
     const Settings = mongoose.model('Settings');
     const [leaveIds, statuses, leaveTypesInUse, settings] = await Promise.all([
-      Leave.distinct('leaveId'),
-      Leave.distinct('status'),
-      Leave.distinct('leaveType'),
-      policyService.getPolicy()
+      Leave.distinct('leaveId', { organizationId }),
+      Leave.distinct('status', { organizationId }),
+      Leave.distinct('leaveType', { organizationId }),
+      policyService.getPolicy(organizationId)
     ]);
 
     // Merge leave types from settings with those already in use

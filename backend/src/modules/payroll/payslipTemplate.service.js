@@ -7,29 +7,35 @@ const logger = require('../../shared/utils/logger');
 
 /**
  * Seed default templates if they don't exist
+ * Note: These are system-wide defaults. In a multi-tenant setup,
+ * you might want to clone these for each new organization.
  */
-exports.seedTemplates = async () => {
+exports.seedTemplates = async (organizationId) => {
   try {
+    if (!organizationId) {
+      logger.warn('seedTemplates called without organizationId');
+      return;
+    }
     for (const template of DEFAULT_TEMPLATES) {
       await PayslipTemplate.findOneAndUpdate(
-        { name: template.name },
-        { ...template, type: 'DEFAULT' },
+        { name: template.name, organizationId },
+        { ...template, type: 'DEFAULT', organizationId },
         { upsert: true, new: true }
       );
     }
-    logger.info('Default payslip templates seeded successfully.');
+    logger.info(`Default payslip templates seeded for org: ${organizationId}`);
   } catch (err) {
     logger.error('Error seeding payslip templates:', err);
   }
 };
 
 /**
- * Get the active default template
+ * Get the active default template for an organization
  */
-exports.getDefaultTemplate = async (companyId = null) => {
-  // 1. Try to find the active design for the company
-  if (companyId) {
-    const activeDesign = await PayslipDesign.findOne({ companyId, isActive: true }).sort({ createdAt: -1 });
+exports.getDefaultTemplate = async (organizationId = null) => {
+  // 1. Try to find the active design for the organization
+  if (organizationId) {
+    const activeDesign = await PayslipDesign.findOne({ organizationId, isActive: true }).sort({ createdAt: -1 });
     if (activeDesign) {
       // Return a mock template object with the design properties
       return {
@@ -41,15 +47,19 @@ exports.getDefaultTemplate = async (companyId = null) => {
     }
   }
 
-  // 2. Fallback to templates marked as default
-  let template = await PayslipTemplate.findOne({ companyId, isActive: true, isSystemDefault: true });
+  // 2. Fallback to templates marked as default for this organization
+  let template = await PayslipTemplate.findOne({ organizationId, isActive: true, isSystemDefault: true });
+  
+  if (!template && organizationId) {
+    // 3. Last fallback: any active template for this organization
+    template = await PayslipTemplate.findOne({ organizationId, isActive: true });
+  }
+
+  // 4. Global system fallback (if still null)
   if (!template) {
     template = await PayslipTemplate.findOne({ type: 'DEFAULT', isSystemDefault: true });
   }
-  // 3. Last fallback
-  if (!template) {
-    template = await PayslipTemplate.findOne({ isActive: true });
-  }
+  
   return template;
 };
 
@@ -117,7 +127,7 @@ exports.renderTemplate = (templateHtml, data, backgroundImageUrl = null) => {
     rendered = rendered.split(`{{${key}}}`).join(value);
   });
 
-  // 2. Handle list placeholders (Table/Row versions)
+  // 3. Handle list placeholders (Table/Row versions)
   // For earningsTable
   if (rendered.includes('{{earningsTable}}')) {
     const tableHtml = Object.entries(data.earnings || {})

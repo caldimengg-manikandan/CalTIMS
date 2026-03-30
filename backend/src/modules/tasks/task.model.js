@@ -34,6 +34,12 @@ const taskSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -42,10 +48,10 @@ const taskSchema = new mongoose.Schema(
 );
 
 // Indexes
-taskSchema.index({ name: 1 });
-taskSchema.index({ projectId: 1 });
-taskSchema.index({ status: 1 });
-taskSchema.index({ isActive: 1 });
+taskSchema.index({ organizationId: 1, name: 1 });
+taskSchema.index({ organizationId: 1, projectId: 1 });
+taskSchema.index({ organizationId: 1, status: 1 });
+taskSchema.index({ organizationId: 1, isActive: 1 });
 
 const Task = mongoose.model('Task', taskSchema);
 module.exports = Task;

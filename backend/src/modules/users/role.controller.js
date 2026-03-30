@@ -4,7 +4,8 @@ const Role = require('./role.model');
 
 const getAllRoles = async (req, res, next) => {
   try {
-    const roles = await Role.find({}).sort({ name: 1 });
+    // Only fetch roles for the user's organization
+    const roles = await Role.find({ organizationId: req.organizationId }).sort({ name: 1 });
     res.status(200).json({
       success: true,
       data: roles
@@ -16,7 +17,13 @@ const getAllRoles = async (req, res, next) => {
 
 const createRole = async (req, res, next) => {
   try {
-    const role = await Role.create(req.body);
+    // Inject organization ID from the authenticated user
+    const roleData = {
+      ...req.body,
+      organizationId: req.organizationId
+    };
+    
+    const role = await Role.create(roleData);
     res.status(201).json({
       success: true,
       data: role

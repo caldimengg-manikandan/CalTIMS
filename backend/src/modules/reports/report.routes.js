@@ -28,7 +28,7 @@ router.get('/timesheet-summary', asyncHandler(async (req, res) => {
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED };
+  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
   if (from) match.weekStartDate = { $gte: new Date(from) };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
   if (userId) match.userId = require('mongoose').Types.ObjectId.createFromHexString(userId);
@@ -81,13 +81,13 @@ router.get('/compliance-summary', requireFeature('advanced_reports'), asyncHandl
     to = range.to;
   }
 
-  const match = {};
+  const match = { organizationId: req.organizationId };
   if (from) match.weekStartDate = { $gte: new Date(from) };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
   if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
 
-  // 1. Get total active employees
-  const totalEmployees = await User.countDocuments({ role: 'employee', isActive: true });
+  // 1. Get total active employees of the organization
+  const totalEmployees = await User.countDocuments({ organizationId: req.organizationId, role: 'employee', isActive: true });
 
   // 2. We need to determine "Expected Timesheets". 
   // If no date range provided, we just look at the last 4 weeks as a proxy, 
@@ -121,10 +121,6 @@ router.get('/compliance-summary', requireFeature('advanced_reports'), asyncHandl
     totalTimesheetsInRange += stat.count;
   });
 
-  // Calculate missing (if we know the expected weeks * employees)
-  // For standard reporting, "missing" is tricky without strict week boundaries.
-  // We'll return the raw status distribution, frontend can calculate percentages.
-
   const formattedData = [
     { name: 'Approved', value: result.approved, fill: '#22c55e' },
     { name: 'Pending Review', value: result.submitted, fill: '#f59e0b' },
@@ -145,7 +141,7 @@ router.get('/project-utilization', requireFeature('advanced_reports'), asyncHand
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED };
+  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
   if (from) match.weekStartDate = { $gte: new Date(from) };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
   if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
@@ -201,7 +197,6 @@ router.get('/project-utilization', requireFeature('advanced_reports'), asyncHand
             }
           }
         },
-        // Calculate employee-level utilization if per-project detail requested
         employeeDetails: {
           $map: {
             input: '$project.allocatedEmployees',
@@ -267,7 +262,7 @@ router.get('/leave-summary', asyncHandler(async (req, res) => {
     to = range.to;
   }
 
-  const match = {};
+  const match = { organizationId: req.organizationId };
   if (from) match.startDate = { $gte: new Date(from) };
   if (to) match.startDate = { ...match.startDate, $lte: new Date(to) };
 
@@ -283,7 +278,7 @@ router.get('/leave-summary', asyncHandler(async (req, res) => {
 // ─── Leave details (drill-down for a specific type) ────────────────────────
 router.get('/leave-details', asyncHandler(async (req, res) => {
   const { leaveType, from, to } = req.query;
-  const match = { status: LEAVE_STATUS.APPROVED };
+  const match = { status: LEAVE_STATUS.APPROVED, organizationId: req.organizationId };
   if (leaveType) match.leaveType = leaveType;
   if (from) match.startDate = { $gte: new Date(from) };
   if (to) match.startDate = { ...match.startDate, $lte: new Date(to) };
@@ -316,7 +311,7 @@ router.get('/leave-details', asyncHandler(async (req, res) => {
 // ─── Individual task details (drill-down for user/project/period) ──────────
 router.get('/timesheet-details', asyncHandler(async (req, res) => {
   const { userId, projectId, from, to } = req.query;
-  const match = { status: TIMESHEET_STATUS.APPROVED };
+  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
   if (userId) match.userId = require('mongoose').Types.ObjectId.createFromHexString(userId);
   if (from) match.weekStartDate = { $gte: new Date(from) };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
@@ -351,7 +346,7 @@ router.get('/employee-attendance', asyncHandler(async (req, res) => {
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED };
+  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
   if (from) match.weekStartDate = { $gte: new Date(from) };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
 
@@ -376,7 +371,7 @@ router.get('/weekly-trend', requireFeature('advanced_reports'), asyncHandler(asy
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED };
+  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
   if (from) match.weekStartDate = { $gte: new Date(from) };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
   if (userId) match.userId = require('mongoose').Types.ObjectId.createFromHexString(userId);
@@ -410,7 +405,7 @@ router.get('/weekly-trend', requireFeature('advanced_reports'), asyncHandler(asy
     { $sort: { week: 1 } },
   ]);
 
-  ApiResponse.success(res, { data });
+  ApiResponse.success(res, { data: data });
 }));
 
 // ─── NEW: Department hours summary (for stacked bar chart) ────────────────
@@ -423,7 +418,7 @@ router.get('/department-summary', requireFeature('advanced_reports'), asyncHandl
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED };
+  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
   if (from) match.weekStartDate = { $gte: new Date(from) };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
   if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
@@ -436,7 +431,7 @@ router.get('/department-summary', requireFeature('advanced_reports'), asyncHandl
         localField: 'userId',
         foreignField: '_id',
         as: 'user',
-        pipeline: [{ $project: { department: 1 } }],
+        pipeline: [{ $project: { department: 1, organizationId: 1 } }],
       },
     },
     { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
@@ -498,7 +493,7 @@ router.get('/smart-insights', requireFeature('advanced_reports'), asyncHandler(a
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED };
+  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
   if (from) match.weekStartDate = { $gte: new Date(from) };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
   if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
@@ -519,7 +514,7 @@ router.get('/smart-insights', requireFeature('advanced_reports'), asyncHandler(a
       { $limit: 1 }
     ]),
     Leave.aggregate([
-      { $match: { status: LEAVE_STATUS.APPROVED } },
+      { $match: { status: LEAVE_STATUS.APPROVED, organizationId: req.organizationId } },
       { $group: { _id: null, totalDays: { $sum: '$totalDays' } } }
     ])
   ]);
@@ -562,13 +557,13 @@ router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async
   from = from ? new Date(from) : null;
   to = to ? new Date(to) : null;
 
-  const match = { status: TIMESHEET_STATUS.APPROVED };
+  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
   if (from) match.weekStartDate = { $gte: from };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: to };
   if (userId) match.userId = mongoose.Types.ObjectId.createFromHexString(userId);
   if (projectId) match['rows.projectId'] = mongoose.Types.ObjectId.createFromHexString(projectId);
 
-  // Fetch all needed data in parallel
+  // Fetch all needed data in parallel (all strictly scoped to organizationId)
   const [timesheetStats, projectData, leaveData, weeklyTrend, employeeData, deptStats, complianceRes] = await Promise.all([
     // 1. Overall stats
     Timesheet.aggregate([
@@ -587,14 +582,14 @@ router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async
       { $match: match },
       { $unwind: '$rows' },
       { $group: { _id: '$rows.projectId', totalHours: { $sum: '$rows.totalHours' } } },
-      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'project', pipeline: [{ $project: { name: 1, code: 1, budgetHours: 1 } }] } },
+      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'project', pipeline: [{ $project: { name: 1, code: 1, budgetHours: 1, organizationId: 1 } }] } },
       { $unwind: { path: '$project', preserveNullAndEmptyArrays: true } },
       { $sort: { totalHours: -1 } },
       { $limit: 15 },
     ]),
     // 3. Leave summary
     Leave.aggregate([
-      { $match: { status: LEAVE_STATUS.APPROVED, ...(from ? { startDate: { $gte: from } } : {}), ...(to ? { endDate: { $lte: to } } : {}) } },
+      { $match: { status: LEAVE_STATUS.APPROVED, organizationId: req.organizationId, ...(from ? { startDate: { $gte: from } } : {}), ...(to ? { endDate: { $lte: to } } : {}) } },
       { $group: { _id: '$leaveType', count: { $sum: 1 }, totalDays: { $sum: '$totalDays' } } },
       { $sort: { totalDays: -1 } },
     ]),
@@ -610,7 +605,7 @@ router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async
     Timesheet.aggregate([
       { $match: match },
       { $group: { _id: '$userId', totalHours: { $sum: '$totalHours' }, timesheetCount: { $sum: 1 } } },
-      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user', pipeline: [{ $project: { name: 1, employeeId: 1, department: 1 } }] } },
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user', pipeline: [{ $project: { name: 1, employeeId: 1, department: 1, organizationId: 1 } }] } },
       { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
       { $sort: { totalHours: -1 } },
       { $limit: 15 },
@@ -625,7 +620,7 @@ router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async
     ]),
     // 7. Compliance Stats (simple overall group)
     Timesheet.aggregate([
-      { $match: { ...(from ? { weekStartDate: { $gte: from } } : {}), ...(to ? { weekStartDate: { $lte: to } } : {}) } },
+      { $match: { organizationId: req.organizationId, ...(from ? { weekStartDate: { $gte: from } } : {}), ...(to ? { weekStartDate: { $lte: to } } : {}) } },
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ])
   ]);
@@ -666,13 +661,13 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
   from = from ? new Date(from) : null;
   to = to ? new Date(to) : null;
 
-  const match = { status: TIMESHEET_STATUS.APPROVED };
+  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
   if (from) match.weekStartDate = { $gte: from };
   if (to) match.weekStartDate = { ...match.weekStartDate, $lte: to };
   if (userId) match.userId = mongoose.Types.ObjectId.createFromHexString(userId);
   if (projectId) match['rows.projectId'] = mongoose.Types.ObjectId.createFromHexString(projectId);
 
-  // Fetch categorized summary data (paralleling the PDF data)
+  // Fetch categorized summary data (paralleling the PDF data, all strictly scoped)
   const [timesheetStats, projectData, employeeData, deptStats, complianceRes] = await Promise.all([
     Timesheet.aggregate([
       { $match: match },
@@ -682,7 +677,7 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
       { $match: match },
       { $unwind: '$rows' },
       { $group: { _id: '$rows.projectId', totalHours: { $sum: '$rows.totalHours' } } },
-      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'p', pipeline: [{ $project: { name: 1, budgetHours: 1 } }] } },
+      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'p', pipeline: [{ $project: { name: 1, budgetHours: 1, organizationId: 1 } }] } },
       { $unwind: '$p' },
       { $sort: { totalHours: -1 } },
       { $limit: 15 }
@@ -690,7 +685,7 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
     Timesheet.aggregate([
       { $match: match },
       { $group: { _id: '$userId', totalHours: { $sum: '$totalHours' } } },
-      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'u', pipeline: [{ $project: { name: 1, employeeId: 1, department: 1 } }] } },
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'u', pipeline: [{ $project: { name: 1, employeeId: 1, department: 1, organizationId: 1 } }] } },
       { $unwind: '$u' },
       { $sort: { totalHours: -1 } },
       { $limit: 20 }
@@ -703,7 +698,7 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
       { $sort: { totalHours: -1 } }
     ]),
     Timesheet.aggregate([
-      { $match: { ...(from ? { weekStartDate: { $gte: from } } : {}), ...(to ? { weekStartDate: { $lte: to } } : {}) } },
+      { $match: { organizationId: req.organizationId, ...(from ? { weekStartDate: { $gte: from } } : {}), ...(to ? { weekStartDate: { $lte: to } } : {}) } },
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ])
   ]);
@@ -721,7 +716,7 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
 
   // Build CSV Content
   let csv = `EXECUTIVE WORKFORCE REPORT SUMMARY\n`;
-  csv += `Organization,Caldim Engineering\n`;
+  csv += `Organization,${req.user.organizationName || 'Current Organization'}\n`;
   csv += `Reporting Period,${from ? from.toISOString().split('T')[0] : 'All Time'} to ${to ? to.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}\n`;
   csv += `Generated At,${new Date().toISOString()}\n\n`;
 

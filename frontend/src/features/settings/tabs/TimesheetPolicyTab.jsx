@@ -98,7 +98,7 @@ export default function TimesheetPolicyTab() {
                         </div>
                     </SectionCard>
 
-                    <SectionCard title="Workflow & Approvals" subtitle="Governance for submission and editing" icon={Users}>
+                    {/* <SectionCard title="Workflow & Approvals" subtitle="Governance for submission and editing" icon={Users}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="group flex items-center justify-between p-5 rounded-3xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10 hover:border-primary0/30 transition-all">
                                 <div>
@@ -126,7 +126,7 @@ export default function TimesheetPolicyTab() {
                                 </button>
                             </div>
                         </div>
-                    </SectionCard>
+                    </SectionCard> */}
 
                     {/* Permission Log */}
                     <SectionCard title="Permission Log" subtitle="Configure limits for permission row entries" icon={CalendarClock}>

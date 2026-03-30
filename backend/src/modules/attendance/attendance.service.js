@@ -8,9 +8,9 @@ const Settings = require('../settings/settings.model');
 const attendanceService = {
   /**
    * Synchronize logs from a daemon or direct push.
-   * Expects an array of logs: [{ employeeId, timestamp, type }]
+   * Expects an array of logs: [{ employeeId, timestamp, type, organizationId }]
    */
-  async syncLogs(logs) {
+  async syncLogs(logs, globalOrganizationId = null) {
     const results = {
       received: logs.length,
       created: 0,
@@ -20,7 +20,14 @@ const attendanceService = {
 
     for (const log of logs) {
       try {
-        const user = await User.findOne({ employeeId: log.employeeId });
+        const orgId = log.organizationId || globalOrganizationId;
+        if (!orgId) {
+          console.warn(`[Attendance] Missing organizationId for log:`, log);
+          results.errors++;
+          continue;
+        }
+
+        const user = await User.findOne({ employeeId: log.employeeId, organizationId: orgId });
         if (!user) {
           console.warn(`[Attendance] User not found for employeeId: ${log.employeeId}`);
           results.errors++;
@@ -37,6 +44,7 @@ const attendanceService = {
             employeeId: log.employeeId, 
             timestamp, 
             type: log.type,
+            organizationId: orgId,
             rawLog: log.raw || {}
           },
           { upsert: true, new: true }
@@ -54,9 +62,10 @@ const attendanceService = {
   /**
    * Get attendance for a user in a date range
    */
-  async getAttendance(userId, from, to) {
+  async getAttendance(userId, from, to, organizationId) {
     return await AttendanceLog.find({
       userId,
+      organizationId,
       timestamp: { $gte: new Date(from), $lte: new Date(to) }
     }).sort({ timestamp: 1 });
   }

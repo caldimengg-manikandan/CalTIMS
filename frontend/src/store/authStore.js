@@ -12,6 +12,7 @@ export const useAuthStore = create(
       subscription: null,
       isAuthenticated: false,
       isHydrating: true, // true until checkAuth resolves; prevents premature redirects on refresh
+      hasCompletedTour: false,
 
       // Actions
       setAuth: (user, accessToken, refreshToken, subscription = null) =>
@@ -28,6 +29,9 @@ export const useAuthStore = create(
 
       updateUser: (userData) =>
         set((state) => ({ user: { ...state.user, ...userData } })),
+
+      setHasCompletedTour: (value) =>
+        set({ hasCompletedTour: value }),
 
       checkAuth: async () => {
         const { accessToken, isAuthenticated } = get()
@@ -85,7 +89,8 @@ export const useAuthStore = create(
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         subscription: state.subscription,
-        isAuthenticated: state.isAuthenticated 
+        isAuthenticated: state.isAuthenticated,
+        hasCompletedTour: state.hasCompletedTour
       }),
     }
   )

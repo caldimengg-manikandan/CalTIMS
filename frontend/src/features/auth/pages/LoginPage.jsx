@@ -90,13 +90,13 @@ export default function LoginPage() {
 
                 <form onSubmit={handleSubmit(login)} className="space-y-6">
                     <div className="space-y-2 group">
-                        <label className="block text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 group-focus-within:text-indigo-500 transition-colors">Work Email</label>
+                        <label className="block text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 group-focus-within:text-primary-500 transition-colors">Work Email</label>
                         <div className="relative">
-                            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
+                            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
                             <input
                                 {...register('email')}
                                 type="email"
-                                className={`w-full h-16 pl-14 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 rounded-2xl text-base font-bold placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 transition-all ${errors.email ? 'border-red-500 ring-2 ring-red-500/20' : ''}`}
+                                className={`w-full h-16 pl-14 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 rounded-2xl text-base font-bold placeholder:text-slate-400 focus:ring-2 focus:ring-primary-500 transition-all ${errors.email ? 'border-red-500 ring-2 ring-red-500/20' : ''}`}
                                 placeholder="name@company.com"
                             />
                         </div>
@@ -105,23 +105,23 @@ export default function LoginPage() {
 
                     <div className="space-y-2 group">
                         <div className="flex justify-between items-center mb-1">
-                            <label className="block text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 group-focus-within:text-indigo-500 transition-colors">Password</label>
+                            <label className="block text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 group-focus-within:text-primary-500 transition-colors">Password</label>
                             <Link to="/forgot-password" size={16} className="text-xs font-black text-primary hover:text-primary-700 uppercase tracking-wider transition-colors">
                                 Forgot?
                             </Link>
                         </div>
                         <div className="relative">
-                            <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
+                            <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
                             <input
                                 {...register('password')}
                                 type={showPassword ? 'text' : 'password'}
-                                className={`w-full h-16 pl-14 pr-14 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 rounded-2xl text-base font-bold placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 transition-all ${errors.password ? 'border-red-500 ring-2 ring-red-500/20' : ''}`}
+                                className={`w-full h-16 pl-14 pr-14 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 rounded-2xl text-base font-bold placeholder:text-slate-400 focus:ring-2 focus:ring-primary-500 transition-all ${errors.password ? 'border-red-500 ring-2 ring-red-500/20' : ''}`}
                                 placeholder="••••••••"
                             />
                             <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors"
+                                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary-500 transition-colors"
                             >
                                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                             </button>
@@ -133,7 +133,7 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={isPending}
-                            className="w-full h-16 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl font-black text-base uppercase tracking-widest shadow-xl shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-4 disabled:opacity-70"
+                            className="w-full h-16 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-2xl font-black text-base uppercase tracking-widest shadow-xl shadow-primary-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-4 disabled:opacity-70"
                         >
                             {isPending ? <Spinner size="sm" color="white" /> : (
                                 <>
@@ -147,7 +147,7 @@ export default function LoginPage() {
 
                 <div className="pt-8 border-t border-slate-100 dark:border-slate-800 text-center space-y-4">
                     <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                        New organization? <Link to="/signup" className="text-indigo-600 font-bold hover:underline">Start 28-day free trial</Link>
+                        New organization? <Link to="/signup" className="text-primary-600 font-bold hover:underline">Start 28-day free trial</Link>
                     </p>
                     <p className="text-xs font-medium text-slate-400 dark:text-slate-500 italic">
                         Securing workforce productivity in real-time.

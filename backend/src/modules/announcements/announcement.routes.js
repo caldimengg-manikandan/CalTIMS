@@ -19,6 +19,7 @@ router.get('/', asyncHandler(async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
   const now = new Date();
   const filter = {
+    organizationId: req.organizationId,
     isActive: true,
     $and: [
       { $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }] },
@@ -39,20 +40,20 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // Admin-only: Get ALL announcements (including inactive/expired) for management view
 router.get('/admin', authorize('admin'), asyncHandler(async (req, res) => {
-  const { page, limit, skip } = parsePagination(req.query);
+  const filter = { organizationId: req.organizationId };
   const [announcements, total] = await Promise.all([
-    Announcement.find({})
+    Announcement.find(filter)
       .populate('publishedBy', 'name email')
       .sort({ createdAt: -1 })
       .skip(skip).limit(limit).lean(),
-    Announcement.countDocuments({}),
+    Announcement.countDocuments(filter),
   ]);
   ApiResponse.success(res, { data: announcements, pagination: buildPaginationMeta(total, page, limit) });
 }));
 
 // Admin-only: Create announcement + notify all active users
 router.post('/', authorize('admin'), asyncHandler(async (req, res) => {
-  const ann = await Announcement.create({ ...req.body, publishedBy: req.user._id });
+  const ann = await Announcement.create({ ...req.body, publishedBy: req.user._id, organizationId: req.organizationId });
 
   // Determine who to notify based on targetRoles
   const targetRoles = req.body.targetRoles && req.body.targetRoles.length > 0
@@ -60,7 +61,7 @@ router.post('/', authorize('admin'), asyncHandler(async (req, res) => {
     : ['admin', 'manager', 'employee'];
 
   const usersToNotify = await User.find(
-    { isActive: true, role: { $in: targetRoles }, _id: { $ne: req.user._id } },
+    { organizationId: req.organizationId, isActive: true, role: { $in: targetRoles }, _id: { $ne: req.user._id } },
     '_id'
   ).lean();
 
@@ -87,12 +88,13 @@ router.post('/', authorize('admin'), asyncHandler(async (req, res) => {
     action: 'CREATE_ANNOUNCEMENT',
     entityType: 'Announcement',
     entityId: ann._id,
-    details: { title: ann.title, type: ann.type }
+    details: { title: ann.title, type: ann.type },
+    organizationId: req.organizationId
   });
 }));
 
 router.put('/:id', authorize('admin'), asyncHandler(async (req, res) => {
-  const ann = await Announcement.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+  const ann = await Announcement.findOneAndUpdate({ _id: req.params.id, organizationId: req.organizationId }, req.body, { new: true, runValidators: true });
   if (!ann) return ApiResponse.notFound(res);
   ApiResponse.success(res, { message: 'Announcement updated', data: ann });
 
@@ -101,12 +103,13 @@ router.put('/:id', authorize('admin'), asyncHandler(async (req, res) => {
     action: 'UPDATE_ANNOUNCEMENT',
     entityType: 'Announcement',
     entityId: req.params.id,
-    details: { title: ann.title, type: ann.type }
+    details: { title: ann.title, type: ann.type },
+    organizationId: req.organizationId
   });
 }));
 
 router.delete('/:id', authorize('admin'), asyncHandler(async (req, res) => {
-  const ann = await Announcement.findByIdAndDelete(req.params.id);
+  const ann = await Announcement.findOneAndDelete({ _id: req.params.id, organizationId: req.organizationId });
   if (!ann) return ApiResponse.notFound(res);
   ApiResponse.success(res, { message: 'Announcement deleted' });
 
@@ -115,7 +118,8 @@ router.delete('/:id', authorize('admin'), asyncHandler(async (req, res) => {
     action: 'DELETE_ANNOUNCEMENT',
     entityType: 'Announcement',
     entityId: req.params.id,
-    details: { title: ann.title }
+    details: { title: ann.title },
+    organizationId: req.organizationId
   });
 }));
 

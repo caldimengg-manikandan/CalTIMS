@@ -21,9 +21,11 @@ export default function AuditLogsTab() {
     const totalPages = Math.ceil(total / limit)
 
     const formatLogDetails = (log) => {
-        if (!log.details) return 'No details available'
+        const metadata = log.metadata || log.details
+        if (!metadata) return 'No details available'
 
-        const { action, details } = log
+        const { action } = log
+        const details = metadata
 
         switch (action) {
             case 'UPDATE_SETTINGS':
@@ -167,10 +169,10 @@ export default function AuditLogsTab() {
                                         <td className="px-6 py-5">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-[10px] font-black text-white">
-                                                    {log.userId?.name?.[0] || 'S'}
+                                                    {log.performedBy?.name?.[0] || 'S'}
                                                 </div>
                                                 <p className="text-xs font-black text-slate-800 dark:text-slate-100 tracking-tight">
-                                                    {log.userId?.name || 'System Engine'}
+                                                    {log.performedBy?.name || 'System Engine'}
                                                 </p>
                                             </div>
                                         </td>
@@ -182,7 +184,7 @@ export default function AuditLogsTab() {
                                         <td className="px-6 py-5">
                                             <p className="text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2">
                                                 <Filter size={12} className="text-slate-300" />
-                                                {log.entityType}
+                                                {log.entity || log.entityType}
                                             </p>
                                         </td>
                                         <td className="px-6 py-5">
@@ -246,10 +248,10 @@ export default function AuditLogsTab() {
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-xs font-black text-white">
-                                    {selectedLog.userId?.name?.[0] || 'S'}
+                                    {selectedLog.performedBy?.name?.[0] || 'S'}
                                 </div>
                                 <div>
-                                    <p className="text-sm font-black text-slate-800 dark:text-white">{selectedLog.userId?.name || 'System Engine'}</p>
+                                    <p className="text-sm font-black text-slate-800 dark:text-white">{selectedLog.performedBy?.name || 'System Engine'}</p>
                                     <p className="text-[10px] text-slate-500 font-medium">{selectedLog.action}</p>
                                 </div>
                             </div>
@@ -274,7 +276,7 @@ export default function AuditLogsTab() {
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Full Metadata</p>
                             <div className="bg-slate-900 rounded-xl p-4 overflow-x-auto max-h-60 overflow-y-auto">
                                 <pre className="text-[11px] font-mono text-indigo-300">
-                                    {JSON.stringify(selectedLog.details, null, 2)}
+                                    {JSON.stringify(selectedLog.metadata || selectedLog.details, null, 2)}
                                 </pre>
                             </div>
                         </div>

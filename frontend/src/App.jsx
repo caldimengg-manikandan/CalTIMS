@@ -102,10 +102,13 @@ const PageSuspense = ({ children }) => (
     </Suspense>
 )
 
+import { useThemeStore } from '@/store/themeStore'
+
 export default function App() {
     const { checkAuth, isAuthenticated, isHydrating: authHydrating, user } = useAuthStore()
     const { fetchGeneralSettings, general, isLoading: settingsLoading } = useSettingsStore()
     const { sidebarOpen } = useUIStore()
+    const syncFromBranding = useThemeStore(s => s.syncFromBranding)
 
     useEffect(() => {
         const init = async () => {
@@ -114,10 +117,15 @@ export default function App() {
             // Then fetch settings if we are authenticated
             if (useAuthStore.getState().isAuthenticated) {
                 await fetchGeneralSettings()
+                const branding = useSettingsStore.getState().general?.branding
+                if (branding) {
+                    syncFromBranding(branding)
+                }
             }
         }
         init()
-    }, [checkAuth, fetchGeneralSettings])
+    }, [checkAuth, fetchGeneralSettings, syncFromBranding])
+
 
     // Block ALL route rendering until auth check AND settings fetch have settled.
     // This prevents components from mounting with null settings (and thus wrong defaults).

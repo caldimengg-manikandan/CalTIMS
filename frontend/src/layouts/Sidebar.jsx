@@ -28,17 +28,17 @@ const navSections = [
     {
         label: 'Timesheets',
         items: [
-            { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', permission: { module: 'Timesheets', submodule: 'Dashboard', action: 'view' }, end: true },
-            { to: '/timesheets', icon: Clock, label: 'Timesheet Entry', permission: { module: 'Timesheets', submodule: 'Entry', action: 'view' }, end: true },
-            { to: '/timesheets/history', icon: List, label: 'History', permission: { module: 'Timesheets', submodule: 'History', action: 'view' } },
-            { to: '/timesheets/manage', icon: CheckSquare, label: 'Manage Timesheets', permission: { module: 'Timesheets', submodule: 'Management', action: 'view' } },
+            { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', permission: { module: 'Timesheets', submodule: 'Dashboard', action: 'view' }, end: true, tourId: 'tour-dashboard' },
+            { to: '/timesheets', icon: Clock, label: 'Timesheet Entry', permission: { module: 'Timesheets', submodule: 'Entry', action: 'view' }, end: true, tourId: 'tour-timesheets' },
+            { to: '/timesheets/history', icon: List, label: 'History', permission: { module: 'Timesheets', submodule: 'History', action: 'view' }, tourId: 'tour-history' },
+            { to: '/timesheets/manage', icon: CheckSquare, label: 'Manage Timesheets', permission: { module: 'Timesheets', submodule: 'Management', action: 'view' }, tourId: 'tour-manage-timesheets' },
             { to: '/timesheets/compliance', icon: AlertCircle, label: 'Compliance & Locks', permission: { module: 'Settings', submodule: 'Audit Logs', action: 'view' }, featureKey: FEATURE_KEYS.AUDIT_LOGS },
         ]
     },
     {
         label: 'Workspace',
         items: [
-            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', permission: { module: 'Leave Management', submodule: 'Leave Tracker', action: 'view' }, end: true, featureKey: FEATURE_KEYS.LEAVE_MANAGEMENT },
+            { to: '/leaves', icon: ClipboardList, label: 'Leave Tracker', permission: { module: 'Leave Management', submodule: 'Leave Tracker', action: 'view' }, end: true, featureKey: FEATURE_KEYS.LEAVE_MANAGEMENT, tourId: 'tour-leaves' },
             { to: '/leaves/manage', icon: ClipboardList, label: 'Leave Management', permission: { module: 'Leave Management', submodule: 'Leave Requests', action: 'view' }, featureKey: FEATURE_KEYS.LEAVE_MANAGEMENT },
             { to: '/my-payslips', icon: Banknote, label: 'My Payslips', permission: { module: 'My Payslip', submodule: 'Payslip View', action: 'view' }, featureKey: FEATURE_KEYS.PAYSLIPS },
             { to: '/announcements', icon: Megaphone, label: 'Announcements', permission: { module: 'Announcements', submodule: 'Announcements', action: 'view' } },
@@ -56,6 +56,7 @@ const navSections = [
                 icon: Banknote,
                 permission: { module: 'Payroll' },
                 featureKey: FEATURE_KEYS.PAYROLL,
+                tourId: 'tour-payroll',
                 subItems: [
                     { to: '/payroll/dashboard', label: 'Dashboard', permission: { module: 'Payroll', submodule: 'Dashboard', action: 'view' } },
                     { to: '/payroll/profiles', label: 'Payroll Profiles', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'view' } },
@@ -68,9 +69,9 @@ const navSections = [
                     { to: '/payroll/export', label: 'Bank Export', permission: { module: 'Payroll', submodule: 'Bank Export', action: 'view' } },
                 ]
             },
-            { to: '/reports', icon: BarChart3, label: 'Reports', permission: { module: 'Reports', submodule: 'Reports Dashboard', action: 'view' }, featureKey: FEATURE_KEYS.REPORTS },
+            { to: '/reports', icon: BarChart3, label: 'Reports', permission: { module: 'Reports', submodule: 'Reports Dashboard', action: 'view' }, featureKey: FEATURE_KEYS.REPORTS, tourId: 'tour-reports' },
             { to: '/audit-logs', icon: Shield, label: 'Audit Logs', permission: { module: 'Settings', submodule: 'Audit Logs', action: 'view' }, featureKey: FEATURE_KEYS.AUDIT_LOGS },
-            { to: '/settings', icon: Settings2, label: 'Settings', permission: { module: 'Settings', submodule: 'Users & Roles', action: 'view' } },
+            { to: '/settings', icon: Settings2, label: 'Settings', permission: { module: 'Settings', submodule: 'Users & Roles', action: 'view' }, tourId: 'tour-settings' },
         ]
     },
 ]
@@ -125,7 +126,7 @@ export default function Sidebar() {
 
     const getRoleColor = (role) => {
         switch (role) {
-            case 'admin': return 'text-indigo-600 dark:text-indigo-400'
+            case 'admin': return 'text-primary-600 dark:text-primary-400'
             case 'manager': return 'text-emerald-600 dark:text-emerald-400'
             case 'hr': return 'text-violet-600 dark:text-violet-400'
             case 'finance': return 'text-amber-600 dark:text-amber-400'
@@ -134,6 +135,10 @@ export default function Sidebar() {
     }
 
     const handleLogout = async () => {
+        if (useUIStore.getState().hasUnsavedChanges) {
+            useUIStore.getState().setPendingNavTarget('/login')
+            return
+        }
         try {
             await authAPI.logout()
             logout()
@@ -170,6 +175,10 @@ export default function Sidebar() {
             <div
                 onClick={() => {
                     const target = user?.role === 'super_admin' ? '/admin/dashboard' : '/dashboard'
+                    if (useUIStore.getState().hasUnsavedChanges) {
+                        useUIStore.getState().setPendingNavTarget(target)
+                        return
+                    }
                     navigate(target)
                 }}
                 className={clsx(
@@ -180,7 +189,7 @@ export default function Sidebar() {
                 )}
             >
                 {/* Clock icon */}
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0 shadow-sm relative overflow-hidden">
+                <div className="w-10 h-10 rounded-xl bg-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm relative overflow-hidden">
                     {/* Ticks */}
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                         <div className="absolute top-1.5 w-[2px] h-[3px] bg-white/40 rounded-full" />
@@ -275,6 +284,7 @@ export default function Sidebar() {
                                         return (
                                             <div key={item.label} className="space-y-0.5">
                                                 <button
+                                                    id={item.tourId}
                                                     onClick={() => setExpandedItem(isExpanded ? null : item.label)}
                                                     className={clsx(
                                                         'w-full group relative flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer text-left',
@@ -282,7 +292,7 @@ export default function Sidebar() {
                                                             ? 'px-2.5'
                                                             : 'px-0 justify-center group-hover/sidebar:justify-start group-hover/sidebar:px-2.5',
                                                         isExpanded
-                                                            ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400'
+                                                            ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400'
                                                             : 'text-slate-500 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300',
                                                         item.featureKey && isFeatureLocked(item.featureKey) && 'opacity-50 grayscale cursor-not-allowed pointer-events-none select-none'
                                                     )}
@@ -291,7 +301,7 @@ export default function Sidebar() {
                                                         size={17}
                                                         className={clsx(
                                                             'flex-shrink-0',
-                                                            isExpanded ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'
+                                                            isExpanded ? 'text-primary-600 dark:text-primary-400' : 'text-slate-400'
                                                         )}
                                                     />
                                                     {sidebarOpen && <span className="flex-1 truncate">{item.label}</span>}
@@ -319,10 +329,17 @@ export default function Sidebar() {
                                                                     className={({ isActive }) => clsx(
                                                                         'block py-2 text-sm transition-colors rounded-lg px-3 font-medium',
                                                                         isActive
-                                                                            ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 font-semibold'
+                                                                            ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 font-semibold'
                                                                             : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'
                                                                     )}
-                                                                    onClick={() => { if (window.innerWidth < 1024) setSidebar(false) }}
+                                                                    onClick={(e) => {
+                                                                        if (useUIStore.getState().hasUnsavedChanges) {
+                                                                            e.preventDefault()
+                                                                            useUIStore.getState().setPendingNavTarget(sub.to)
+                                                                            return
+                                                                        }
+                                                                        if (window.innerWidth < 1024) setSidebar(false)
+                                                                    }}
                                                                 >
                                                                     {sub.label}
                                                                 </NavLink>
@@ -335,6 +352,7 @@ export default function Sidebar() {
 
                                     return (
                                         <NavLink
+                                            id={item.tourId}
                                             key={`${item.to}-${item.label}`}
                                             to={item.to}
                                             end={item.end}
@@ -344,7 +362,7 @@ export default function Sidebar() {
                                                     ? 'px-2.5'
                                                     : 'px-0 justify-center group-hover/sidebar:justify-start group-hover/sidebar:px-2.5',
                                                 isActive
-                                                    ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 font-semibold'
+                                                    ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 font-semibold'
                                                     : 'text-slate-500 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300',
                                                 item.featureKey && isFeatureLocked(item.featureKey) && 'opacity-50 grayscale cursor-not-allowed'
                                             )}
@@ -355,19 +373,24 @@ export default function Sidebar() {
                                                     toast.error(`The ${item.label} module is locked in the ${planType} plan. Please upgrade to Pro.`);
                                                     return;
                                                 }
+                                                if (useUIStore.getState().hasUnsavedChanges) {
+                                                    e.preventDefault();
+                                                    useUIStore.getState().setPendingNavTarget(item.to);
+                                                    return;
+                                                }
                                                 if (window.innerWidth < 1024) setSidebar(false) 
                                             }}
                                         >
                                             {({ isActive }) => (
                                                 <>
                                                     {isActive && (
-                                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-indigo-600 dark:bg-indigo-400 rounded-r-full" />
+                                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary-600 dark:bg-primary-400 rounded-r-full" />
                                                     )}
                                                     <item.icon
                                                         size={17}
                                                         className={clsx(
                                                             'flex-shrink-0',
-                                                            isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'
+                                                            isActive ? 'text-primary-600 dark:text-primary-400' : 'text-slate-400'
                                                         )}
                                                     />
                                                     {sidebarOpen && (
@@ -376,11 +399,12 @@ export default function Sidebar() {
                                                     {sidebarOpen && item.featureKey && isFeatureLocked(item.featureKey) && (
                                                         <span className={clsx(
                                                             "text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md border",
-                                                            "bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/20 dark:border-violet-800"
+                                                            "bg-primary-50 text-primary-600 border-primary-200 dark:bg-primary-900/20 dark:border-primary-800"
                                                         )}>
                                                             <Lock size={8} className="inline mr-0.5" />
                                                             LOCKED
                                                         </span>
+
                                                     )}
                                                     {!sidebarOpen && (
                                                         <span className="hidden group-hover/sidebar:block truncate flex-1 text-left">{item.label}</span>

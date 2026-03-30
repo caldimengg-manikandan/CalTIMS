@@ -98,7 +98,7 @@ const hikvisionService = {
           .filter(Boolean);
 
         if (logsToSync.length > 0) {
-          await attendanceService.syncLogs(logsToSync);
+          await attendanceService.syncLogs(logsToSync, device.organizationId);
           totalProcessed += logsToSync.length;
         }
 

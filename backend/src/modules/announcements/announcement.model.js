@@ -40,6 +40,12 @@ const announcementSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -47,9 +53,9 @@ const announcementSchema = new mongoose.Schema(
   }
 );
 
-announcementSchema.index({ isActive: 1, createdAt: -1 });
-announcementSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0, sparse: true });
-announcementSchema.index({ targetRoles: 1 });
+announcementSchema.index({ organizationId: 1, isActive: 1, createdAt: -1 });
+announcementSchema.index({ organizationId: 1, expiresAt: 1 }, { expireAfterSeconds: 0, sparse: true });
+announcementSchema.index({ organizationId: 1, targetRoles: 1 });
 
 const Announcement = mongoose.model('Announcement', announcementSchema);
 module.exports = Announcement;

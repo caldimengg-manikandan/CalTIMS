@@ -12,10 +12,11 @@ class IncidentService {
     /**
      * Creates a new incident ticket and notifies admins.
      */
-    async createIncident(employeeId, data) {
+    async createIncident(employeeId, data, organizationId) {
         const incidentData = {
             ...data,
             employee: employeeId,
+            organizationId,
             status: 'Open',
         };
 
@@ -23,7 +24,7 @@ class IncidentService {
         await incident.save();
 
         // Notify admins about the new incident
-        await this._notifyAdminsAboutNewIncident(incident, employeeId);
+        await this._notifyAdminsAboutNewIncident(incident, employeeId, organizationId);
 
         return incident;
     }
@@ -31,13 +32,13 @@ class IncidentService {
     /**
      * Helper function to notify all active admins/managers about a new INC.
      */
-    async _notifyAdminsAboutNewIncident(incident, reporterId) {
-        const reporter = await User.findById(reporterId).select('name');
+    async _notifyAdminsAboutNewIncident(incident, reporterId, organizationId) {
+        const reporter = await User.findOne({ _id: reporterId, organizationId }).select('name');
         const reporterName = reporter ? reporter.name : 'An employee';
 
         const message = `${reporterName} has raised a new ${incident.priority} priority incident (${incident.incidentId}) regarding '${incident.category}'.`;
 
-        const admins = await User.find({ role: { $in: ['admin'] }, isActive: true }).select('_id');
+        const admins = await User.find({ role: { $in: ['admin'] }, isActive: true, organizationId }).select('_id');
         const adminIds = admins.map((a) => a._id);
 
         if (adminIds.length > 0) {
@@ -57,10 +58,10 @@ class IncidentService {
      * Returns a paginated/filtered list of incidents.
      * If `userRole` is employee, forces the query to only match their `employeeId`.
      */
-    async getIncidents(userId, userRole, queryParams = {}) {
+    async getIncidents(userId, userRole, queryParams = {}, organizationId) {
         const { status, priority, category, search, page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc' } = queryParams;
 
-        const filter = {};
+        const filter = { organizationId };
 
         // RBAC: Employees can only see their own
         if (userRole === 'employee') {
@@ -105,8 +106,8 @@ class IncidentService {
     /**
      * Retrieves a single incident by ID. Checks RBAC.
      */
-    async getIncidentById(incidentId, userId, userRole) {
-        const incident = await Incident.findById(incidentId)
+    async getIncidentById(incidentId, userId, userRole, organizationId) {
+        const incident = await Incident.findOne({ _id: incidentId, organizationId })
             .populate('employee', 'name email employeeId department')
             .populate('assignedTo', 'name email')
             .populate('relatedTimesheet', 'weekStartDate status')
@@ -127,8 +128,8 @@ class IncidentService {
     /**
      * Add a response to an existing incident ticket.
      */
-    async addResponse(incidentId, userId, userRole, message) {
-        const incident = await Incident.findById(incidentId);
+    async addResponse(incidentId, userId, userRole, message, organizationId) {
+        const incident = await Incident.findOne({ _id: incidentId, organizationId });
 
         if (!incident) throw new AppError('Incident not found', 404);
 
@@ -180,15 +181,15 @@ class IncidentService {
         }
 
         // Return the updated populated version to easily send back the new reply with user names
-        return this.getIncidentById(incidentId, userId, userRole);
+        return this.getIncidentById(incidentId, userId, userRole, organizationId);
     }
 
     /**
      * Updates status, priority, or assignee.
      * Employees can only update status to 'Withdrawn' (if Open/In Progress) or 'Open' (if Resolved/Closed - Reopening).
      */
-    async updateIncident(incidentId, userId, userRole, updates) {
-        const incident = await Incident.findById(incidentId);
+    async updateIncident(incidentId, userId, userRole, updates, organizationId) {
+        const incident = await Incident.findOne({ _id: incidentId, organizationId });
 
         if (!incident) throw new AppError('Incident not found', 404);
 
@@ -265,7 +266,7 @@ class IncidentService {
     /**
      * Notify assigned admin or all admins about an update.
      */
-    async _notifyAdminsAboutUpdate(incident, message) {
+    async _notifyAdminsAboutUpdate(incident, message, organizationId) {
         if (incident.assignedTo) {
             await notificationService.create({
                 userId: incident.assignedTo,
@@ -276,7 +277,7 @@ class IncidentService {
                 refModel: 'Incident',
             });
         } else {
-            const admins = await User.find({ role: 'admin', isActive: true }).select('_id');
+            const admins = await User.find({ role: 'admin', isActive: true, organizationId }).select('_id');
             const adminIds = admins.map(a => a._id);
             if (adminIds.length > 0) {
                 const notifications = adminIds.map(adminId => ({

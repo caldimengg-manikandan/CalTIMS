@@ -109,4 +109,14 @@ const getPeriodRange = (period, date = new Date()) => {
   return { from, to };
 };
 
-module.exports = { getWeekStart, getWeekEnd, getWeekDates, getWorkingDays, formatDate, getPeriodRange };
+/**
+ * Format decimal hours to HH:MM string
+ */
+const formatDuration = (decimalHours) => {
+  const decimal = Number(decimalHours) || 0;
+  const h = Math.floor(decimal);
+  const m = Math.round((decimal - h) * 60);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
+module.exports = { getWeekStart, getWeekEnd, getWeekDates, getWorkingDays, formatDate, getPeriodRange, formatDuration };

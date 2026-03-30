@@ -55,19 +55,25 @@ const checkPermission = (module, submodule, action) => {
 
       const permissions = userRole.permissions || {};
 
+      const auditService = require('../modules/audit/audit.service');
       // Hierarchical validation
       if (!permissions[module]) {
+        await auditService.log(req.user.id, 'UNAUTHORIZED_ACCESS_ATTEMPT', module, null, { submodule, action, reason: 'Module access denied' }, 'SECURITY_WARNING', req.ip);
         return next(new AppError(`Forbidden: No access to module: ${module}`, 403));
       }
 
       if (submodule) {
         if (!permissions[module][submodule]) {
+          await auditService.log(req.user.id, 'UNAUTHORIZED_ACCESS_ATTEMPT', module, null, { submodule, action, reason: 'Submodule access denied' }, 'SECURITY_WARNING', req.ip);
           return next(new AppError(`Forbidden: No access to submodule: ${submodule} in ${module}`, 403));
         }
 
         if (action) {
           const allowedActions = permissions[module][submodule];
           if (!Array.isArray(allowedActions) || !allowedActions.includes(action)) {
+            // Special log for payroll disbursement as requested in E2E requirements
+            const actionType = (module === 'Payroll' && action === 'disburse') ? 'UNAUTHORIZED_PAYMENT_ATTEMPT' : 'UNAUTHORIZED_ACTION_ATTEMPT';
+            await auditService.log(req.user.id, actionType, module, null, { submodule, action, reason: 'Action permission missing' }, 'SECURITY_WARNING', req.ip);
             return next(new AppError(`Forbidden: Missing action: ${action} in ${module} > ${submodule}`, 403));
           }
         }

@@ -4,10 +4,10 @@ const mongoose = require('mongoose');
 
 const processedPayrollSchema = new mongoose.Schema(
   {
-    companyId: {
+    organizationId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Company',
-      required: false,
+      ref: 'Organization',
+      required: true,
       index: true
     },
     user: {
@@ -121,8 +121,8 @@ const processedPayrollSchema = new mongoose.Schema(
   }
 );
 
-// Ensure only one processed entry per user/month/year
-processedPayrollSchema.index({ user: 1, month: 1, year: 1 }, { unique: true });
+// Ensure only one processed entry per user/month/year per organization
+processedPayrollSchema.index({ organizationId: 1, user: 1, month: 1, year: 1 }, { unique: true });
 
 const ProcessedPayroll = mongoose.model('ProcessedPayroll', processedPayrollSchema);
 

@@ -44,6 +44,11 @@ export default function Navbar() {
         : '?'
 
     const handleLogout = async () => {
+        if (useUIStore.getState().hasUnsavedChanges) {
+            setProfileOpen(false)
+            useUIStore.getState().setPendingNavTarget('/login')
+            return
+        }
         try {
             await authAPI.logout()
             logout()
@@ -86,9 +91,9 @@ export default function Navbar() {
 
     const getRoleBadgeClass = (role) => {
         switch (role) {
-            case 'admin':   return 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+            case 'admin':   return 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
             case 'manager': return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-            case 'hr':      return 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'
+            case 'hr':      return 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
             case 'finance': return 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
             default:        return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
         }
@@ -114,19 +119,26 @@ export default function Navbar() {
                         {location.pathname !== '/dashboard' && (
                             <button
                                 onClick={() => navigate(-1)}
-                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 dark:hover:text-indigo-400 rounded-md transition-all flex items-center gap-1 text-xs font-semibold shrink-0"
+                                className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 rounded-md transition-all flex items-center gap-1 text-xs font-semibold shrink-0"
                                 title="Go back"
                             >
                                 <ArrowLeft size={13} strokeWidth={2.5} className="pointer-events-none" />
                             </button>
                         )}
 
-                        <Link
-                            to={user?.role === 'super_admin' ? '/admin/dashboard' : '/dashboard'}
-                            className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors whitespace-nowrap shrink-0"
+                        <button
+                            onClick={() => {
+                                const t = user?.role === 'super_admin' ? '/admin/dashboard' : '/dashboard'
+                                if (useUIStore.getState().hasUnsavedChanges) {
+                                    useUIStore.getState().setPendingNavTarget(t)
+                                    return
+                                }
+                                navigate(t)
+                            }}
+                            className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors whitespace-nowrap shrink-0"
                         >
                             Home
-                        </Link>
+                        </button>
 
                         {pathnames.map((part, index) => {
                             if (part === 'dashboard') return null
@@ -138,16 +150,22 @@ export default function Navbar() {
                                 <React.Fragment key={routeTo}>
                                     <ChevronRight size={9} className="text-slate-300 dark:text-slate-600 flex-shrink-0" />
                                     {isLast ? (
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 truncate whitespace-nowrap">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary-600 dark:text-primary-400 truncate whitespace-nowrap">
                                             {label}
                                         </span>
                                     ) : (
-                                        <Link
-                                            to={routeTo}
-                                            className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate whitespace-nowrap"
+                                        <button
+                                            onClick={() => {
+                                                if (useUIStore.getState().hasUnsavedChanges) {
+                                                    useUIStore.getState().setPendingNavTarget(routeTo)
+                                                    return
+                                                }
+                                                navigate(routeTo)
+                                            }}
+                                            className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors truncate whitespace-nowrap"
                                         >
                                             {label}
-                                        </Link>
+                                        </button>
                                     )}
                                 </React.Fragment>
                             )
@@ -185,7 +203,7 @@ export default function Navbar() {
                         onClick={() => setProfileOpen(prev => !prev)}
                         onMouseEnter={handleMouseEnter}
                         onMouseLeave={handleMouseLeave}
-                        className={`w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm transition-all duration-150 hover:bg-indigo-700 hover:shadow-md focus:outline-none ${profileOpen ? 'ring-2 ring-indigo-500 ring-offset-2' : ''}`}
+                        className={`w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white text-xs font-bold shadow-sm transition-all duration-150 hover:bg-primary-700 hover:shadow-md focus:outline-none ${profileOpen ? 'ring-2 ring-primary-500 ring-offset-2' : ''}`}
                         title="Account"
                     >
                         {fullInitials}
@@ -212,7 +230,7 @@ export default function Navbar() {
                         <X size={13} />
                     </button>
 
-                    <div className="w-14 h-14 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-lg mx-auto mb-3">
+                    <div className="w-14 h-14 rounded-xl bg-primary-600 flex items-center justify-center text-white text-xl font-bold shadow-lg mx-auto mb-3">
                         {fullInitials}
                     </div>
 
@@ -227,8 +245,15 @@ export default function Navbar() {
                 {/* Actions */}
                 <div className="px-3 py-2 space-y-0.5">
                     <button
-                        onClick={() => { setProfileOpen(false); navigate('/profile') }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all"
+                        onClick={() => { 
+                            setProfileOpen(false); 
+                            if (useUIStore.getState().hasUnsavedChanges) {
+                                useUIStore.getState().setPendingNavTarget('/profile')
+                                return
+                            }
+                            navigate('/profile') 
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-primary-400 transition-all"
                     >
                         <Settings2 size={15} className="text-slate-400" />
                         Account Settings

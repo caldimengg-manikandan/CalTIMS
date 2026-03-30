@@ -170,7 +170,7 @@ const PayslipTemplatesTab = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-700 to-violet-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary-700 to-primary-600 bg-clip-text text-transparent">
             Payslip Customizer
           </h1>
           <p className="text-slate-500 mt-1">Design your enterprise payslips with visual layouts and custom branding.</p>

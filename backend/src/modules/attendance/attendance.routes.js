@@ -41,7 +41,7 @@ router.delete('/devices/:id', checkPermission('manageSettings'), hikvisionContro
 router.get('/', asyncHandler(async (req, res) => {
   const { from, to } = req.query;
   const userId = req.user._id;
-  const logs = await attendanceService.getAttendance(userId, from || new Date(Date.now() - 7*24*60*60*1000), to || new Date());
+  const logs = await attendanceService.getAttendance(userId, from || new Date(Date.now() - 7*24*60*60*1000), to || new Date(), req.organizationId);
   ApiResponse.success(res, { data: logs });
 }));
 
@@ -49,7 +49,7 @@ router.get('/', asyncHandler(async (req, res) => {
 router.get('/user/:userId', checkPermission('viewReports'), asyncHandler(async (req, res) => {
   const { from, to } = req.query;
   const { userId } = req.params;
-  const logs = await attendanceService.getAttendance(userId, from || new Date(Date.now() - 7*24*60*60*1000), to || new Date());
+  const logs = await attendanceService.getAttendance(userId, from || new Date(Date.now() - 7*24*60*60*1000), to || new Date(), req.organizationId);
   ApiResponse.success(res, { data: logs });
 }));
 

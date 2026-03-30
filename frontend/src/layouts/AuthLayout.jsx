@@ -13,17 +13,14 @@ export default function AuthLayout() {
     const [legalType, setLegalType] = useState(null) // 'privacy' | 'terms' | 'support'
 
     useEffect(() => {
-        // Auth pages (Login, etc.) should stay fixed on their original theme class
-        // but we ensure the CSS variables are set
-        const root = document.documentElement
-        root.style.setProperty('--color-primary', '#6366f1') // Default indigo-600
-        root.style.setProperty('--color-primary-rgb', '99 102 241')
-    }, [])
+        applyTheme()
+    }, [applyTheme])
+
 
     if (isAuthenticated) return <Navigate to="/dashboard" replace />
 
     return (
-        <div className="min-h-screen flex bg-white dark:bg-black font-sans">
+        <div className="h-screen flex overflow-hidden bg-white dark:bg-black font-sans">
             {/* Left panel — Stunning Branding with Background Image */}
             <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
                 {/* Background Image with Overlay */}
@@ -68,7 +65,7 @@ export default function AuthLayout() {
             <SupportModal isOpen={legalType === 'support'} onClose={() => setLegalType(null)} />
 
             {/* Right panel — Refined Auth Form Container */}
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col h-full overflow-y-auto scrollbar-thin">
                 <div className="flex justify-end p-8 lg:hidden">
                     <div className="flex items-center gap-2">
                         <Timer size={24} className="text-primary" />

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { timesheetAPI, projectAPI, settingsAPI, taskAPI, leaveAPI, calendarAPI, attendanceAPI } from '@/services/endpoints'
 import { useSettingsStore } from '@/store/settingsStore'
+import { useUIStore } from '@/store/uiStore'
 import Spinner from '@/components/ui/Spinner'
 import {
     format,
@@ -67,13 +68,11 @@ export default function TimesheetEntryPage() {
     const [currentDate, setCurrentDate] = useState(() => {
         if (!initialDateStr) return new Date()
         try {
-            // Handle ISO strings (like 2026-03-02T00:00:00.000Z) or YYYY-MM-DD
-            if (initialDateStr.includes('T')) {
-                return new Date(initialDateStr)
-            }
-            const parts = initialDateStr.trim().split(/[- /]/).map(Number)
+            // Robust parsing for YYYY-MM-DD or ISO strings to avoid UTC shifts
+            const datePart = initialDateStr.includes('T') ? initialDateStr.split('T')[0] : initialDateStr.trim()
+            const parts = datePart.split(/[- /]/).map(Number)
             if (parts.length >= 3) {
-                return new Date(parts[0], parts[1] - 1, parts[2])
+                return new Date(parts[0], parts[1] - 1, parts[2]) // Local Midnight
             }
             return new Date(initialDateStr)
         } catch (e) {
@@ -90,6 +89,28 @@ export default function TimesheetEntryPage() {
     const [rows, setRows] = useState([
         { id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00') }
     ])
+
+    const [isDirty, setIsDirty] = useState(false)
+    const setUnsavedChanges = useUIStore(s => s.setUnsavedChanges)
+    const navIntent = useUIStore(s => s.pendingNavTarget)
+    const setNavIntent = useUIStore(s => s.setPendingNavTarget)
+
+    // Sync local isDirty to global store
+    useEffect(() => {
+        setUnsavedChanges(isDirty)
+    }, [isDirty, setUnsavedChanges])
+
+    // Detect browser close/refresh
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            if (isDirty) {
+                e.preventDefault()
+                e.returnValue = ''
+            }
+        }
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }, [isDirty])
 
     // Shifts state per day
 
@@ -381,7 +402,25 @@ export default function TimesheetEntryPage() {
         });
 
         setRows(finalRows)
+        setIsDirty(false)
     }, [existingTimesheets, weekLeaves, weekStart, weekDays, editId, projects, allTasks, tsSettings])
+
+    const handleWeekChange = (offset) => {
+        let newDate;
+        if (offset === 0) {
+            newDate = new Date();
+        } else {
+            newDate = addDays(currentDate, offset * 7);
+        }
+        
+        const target = `/timesheets?date=${format(newDate, 'yyyy-MM-dd')}`;
+        if (isDirty) {
+            setNavIntent(target);
+            return;
+        }
+        setCurrentDate(newDate);
+        navigate(target);
+    }
 
 
     const bulkSaveMutation = useMutation({
@@ -427,6 +466,14 @@ export default function TimesheetEntryPage() {
             if (res) {
                 toast.success('Timesheets saved successfully')
                 queryClient.invalidateQueries({ queryKey: ['timesheets'] })
+                setIsDirty(false)
+
+                // If there was a pending navigation intended, execute it now
+                if (navIntent) {
+                    const target = navIntent
+                    setNavIntent(null)
+                    navigate(target)
+                }
             }
         },
         onError: (err) => {
@@ -526,6 +573,7 @@ export default function TimesheetEntryPage() {
     const handleAddRow = () => {
         if (isWeekSubmitted) return
         setRows([...rows, { id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00') }])
+        setIsDirty(true)
     }
 
     const handleAddPermission = () => {
@@ -536,15 +584,18 @@ export default function TimesheetEntryPage() {
             return
         }
         setRows([...rows, { id: Date.now(), projectId: PERMISSION_ROW_MARKER, taskType: PERMISSION_ROW_MARKER, dayHours: Array(7).fill('00:00'), permissionNote: '' }])
+        setIsDirty(true)
     }
 
     const handleRemoveRow = (id) => {
         setRows(rows.filter(r => r.id !== id))
+        setIsDirty(true)
     }
 
     const handleUpdateRow = (id, field, value) => {
         setRows(rows.map(r => {
             if (r.id !== id) return r
+            setIsDirty(true)
             let updated = { ...r, [field]: value }
 
             // If project changes, reset task type if it's not a global type or doesn't belong to the new project
@@ -627,6 +678,7 @@ export default function TimesheetEntryPage() {
 
                 const newHours = [...r.dayHours]
                 newHours[dayIndex] = value
+                setIsDirty(true)
                 return { ...r, dayHours: newHours }
             }
             return r
@@ -653,7 +705,10 @@ export default function TimesheetEntryPage() {
     }
 
     const formatHours = (total) => {
-        return (Number(total) || 0).toFixed(2) + 'h'
+        const decimal = Number(total) || 0
+        const h = Math.floor(decimal)
+        const m = Math.round((decimal - h) * 60)
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
     }
 
 
@@ -737,7 +792,7 @@ export default function TimesheetEntryPage() {
             <div className="flex flex-wrap items-center justify-between gap-4 py-2">
                 <div className="flex items-center gap-4 bg-white dark:bg-black px-4 py-2 rounded-xl shadow-sm border border-slate-100 dark:border-white">
                     <button
-                        onClick={() => setCurrentDate(subDays(currentDate, 7))}
+                        onClick={() => handleWeekChange(-1)}
                         className="p-1.5 hover:bg-slate-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-colors"
                     >
                         <ChevronLeft size={20} className="text-slate-600" />
@@ -753,7 +808,7 @@ export default function TimesheetEntryPage() {
                         </span>
                     </div>
                     <button
-                        onClick={() => setCurrentDate(addDays(currentDate, 7))}
+                        onClick={() => handleWeekChange(1)}
                         disabled={isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn }))}
                         className="p-1.5 hover:bg-slate-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     >
@@ -770,7 +825,7 @@ export default function TimesheetEntryPage() {
                 )}
 
                 <button
-                    onClick={() => setCurrentDate(new Date())}
+                    onClick={() => handleWeekChange(0)}
                     className="flex items-center gap-2 px-4 py-2 btn-primary hover:bg-primary-700 text-white rounded-lg font-medium shadow-md transition-all active:scale-95"
                 >
                     <Calendar size={16} />
@@ -984,28 +1039,47 @@ export default function TimesheetEntryPage() {
                                                                         type="text"
                                                                         maxLength={2}
                                                                         placeholder="00"
-                                                                        className="w-6 bg-transparent text-center text-sm font-semibold outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                        className="w-6 bg-transparent text-center text-sm font-semibold outline-none disabled:opacity-60 disabled:cursor-not-allowed selection:bg-primary-100"
                                                                         value={time.split(':')[0]}
+                                                                        onFocus={(e) => e.target.select()}
                                                                         onChange={(e) => {
                                                                             const h = e.target.value.replace(/\D/g, '')
                                                                             const m = time.split(':')[1] || '00'
                                                                             handleUpdateHour(row.id, i, `${h}:${m}`)
+                                                                            
+                                                                            // Auto-focus minutes if 2 digits entered
+                                                                            if (h.length === 2 && e.target.nextSibling?.nextSibling) {
+                                                                                e.target.nextSibling.nextSibling.focus()
+                                                                            }
                                                                         }}
                                                                         disabled={isDisabledInput}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                e.preventDefault();
+                                                                                bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))
+                                                                            }
+                                                                        }}
                                                                     />
                                                                     <span className="text-slate-400 font-medium px-0.5">:</span>
                                                                     <input
                                                                         type="text"
                                                                         maxLength={2}
                                                                         placeholder="00"
-                                                                        className="w-6 bg-transparent text-center text-sm font-semibold outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                        className="w-6 bg-transparent text-center text-sm font-semibold outline-none disabled:opacity-60 disabled:cursor-not-allowed selection:bg-primary-100"
                                                                         value={time.split(':')[1]}
+                                                                        onFocus={(e) => e.target.select()}
                                                                         onChange={(e) => {
                                                                             const m = e.target.value.replace(/\D/g, '')
                                                                             const h = time.split(':')[0] || '00'
                                                                             handleUpdateHour(row.id, i, `${h}:${m}`)
                                                                         }}
                                                                         disabled={isDisabledInput}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                e.preventDefault();
+                                                                                bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))
+                                                                            }
+                                                                        }}
                                                                         onBlur={(e) => {
                                                                             let m = parseInt(e.target.value, 10) || 0
                                                                             if (m > 59) m = 59
@@ -1169,6 +1243,65 @@ export default function TimesheetEntryPage() {
                     {isWeekSubmitted ? '✓ WEEK SUBMITTED' : `SUBMIT WEEK (${formatHours(totalWeekHours)})`}
                 </button>
             </div>
+
+            {/* Unsaved Changes Modal */}
+            {navIntent && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-8 pb-4 text-center">
+                            <div className="w-20 h-20 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-6 ring-8 ring-amber-50/50 dark:ring-amber-900/10">
+                                <AlertTriangle className="text-amber-500" size={40} />
+                            </div>
+                            <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2 tracking-tight">Unsaved Changes</h3>
+                            <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed text-sm">
+                                You have pending changes in your timesheet. Leaving now will result in data loss.
+                            </p>
+                        </div>
+                        
+                        <div className="p-6 pt-2 flex flex-col gap-2.5">
+                            <button
+                                onClick={() => {
+                                    const t = navIntent;
+                                    setNavIntent(null);
+                                    // Save Draft stays on page (or if we save it, we clear dirty and navigate to t?)
+                                    // Actually bulkSave's onSuccess will navigate if navIntent was set.
+                                    // So if user clicks "Save Draft", they might want to JUST SAVE and stay.
+                                    // But usually in a GUARD modal, "Save" means "Save and Go".
+                                    // BUT the user specifically asked for [save draft, save and change, close].
+                                    // Maybe "Save Draft" means SAVE AND STAY.
+                                    // "Save and Change" means SAVE AND NAVIGATE.
+                                    
+                                    setNavIntent(null); // Clear intent so we stay on page
+                                    bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))
+                                }}
+                                className="w-full h-12 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary-500/20 transition-all active:scale-[0.98]"
+                            >
+                                <Save size={18} /> SAVE DRAFT
+                            </button>
+                            
+                            <button
+                                onClick={() => {
+                                    // Save and Change: keep navIntent and trigger save.
+                                    // onSuccess will handle the actual navigation.
+                                    bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))
+                                }}
+                                className="w-full h-12 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 text-slate-700 dark:text-white rounded-xl font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                            >
+                                <Send size={18} className="text-primary-500" /> SAVE AND CHANGE
+                            </button>
+                            
+                            <button
+                                onClick={() => {
+                                    setNavIntent(null);
+                                }}
+                                className="w-full h-12 bg-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold transition-all text-xs tracking-widest uppercase"
+                            >
+                                CLOSE
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

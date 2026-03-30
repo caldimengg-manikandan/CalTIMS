@@ -25,14 +25,20 @@ const supportTicketSchema = new mongoose.Schema({
         sender: { type: String, enum: ['user', 'admin'], default: 'user' },
         message: { type: String, required: true },
         createdAt: { type: Date, default: Date.now }
-    }]
+    }],
+    organizationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Organization',
+        required: true,
+        index: true
+    }
 }, { timestamps: true });
 
-// Auto-generate ticketId
+// Auto-generate ticketId (scoped to organization)
 supportTicketSchema.pre('save', async function(next) {
-    if (this.ticketId || !this.isNew) return next();
+    if (this.ticketId || !this.isNew || !this.organizationId) return next();
     try {
-        const count = await this.constructor.countDocuments();
+        const count = await this.constructor.countDocuments({ organizationId: this.organizationId });
         this.ticketId = `TKT-${100001 + count}`;
         next();
     } catch (err) {

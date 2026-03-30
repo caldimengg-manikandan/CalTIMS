@@ -66,6 +66,12 @@ const leaveSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -73,11 +79,11 @@ const leaveSchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate leaveId before save if not set
+// Auto-generate leaveId before save if not set (scoped to organization)
 leaveSchema.pre('save', async function (next) {
-  if (this.leaveId || !this.isNew) return next();
+  if (this.leaveId || !this.isNew || !this.organizationId) return next();
   try {
-     const count = await this.constructor.countDocuments();
+     const count = await this.constructor.countDocuments({ organizationId: this.organizationId });
      this.leaveId = `LEV${String(count + 1).padStart(4, '0')}`;
      next();
   } catch (err) {
@@ -86,11 +92,11 @@ leaveSchema.pre('save', async function (next) {
 });
 
 // ─── Indexes ──────────────────────────────────────────────────────────────────
-leaveSchema.index({ userId: 1, status: 1 });
-leaveSchema.index({ userId: 1, startDate: -1 });
-leaveSchema.index({ startDate: 1, endDate: 1 });
-leaveSchema.index({ status: 1 });
-leaveSchema.index({ approvedBy: 1 });
+leaveSchema.index({ organizationId: 1, userId: 1, status: 1 });
+leaveSchema.index({ organizationId: 1, userId: 1, startDate: -1 });
+leaveSchema.index({ organizationId: 1, startDate: 1, endDate: 1 });
+leaveSchema.index({ organizationId: 1, status: 1 });
+leaveSchema.index({ organizationId: 1, approvedBy: 1 });
 
 const Leave = mongoose.model('Leave', leaveSchema);
 module.exports = Leave;

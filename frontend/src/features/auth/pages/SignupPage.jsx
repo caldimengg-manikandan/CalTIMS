@@ -30,11 +30,9 @@ export default function SignupPage() {
 
   const { mutate: signup, isPending } = useMutation({
     mutationFn: (data) => authAPI.register(data),
-    onSuccess: (res) => {
-      const { accessToken, refreshToken, user, subscription } = res.data.data
-      setAuth(user, accessToken, refreshToken, subscription)
-      toast.success(`Welcome to CALTIMS, ${user.name.split(' ')[0]}! Your 28-day trial has started.`)
-      navigate('/dashboard', { replace: true })
+    onSuccess: () => {
+      toast.success('Registration successful! Please sign in to access your account.')
+      navigate('/login', { replace: true })
     },
     onError: (err) => {
       const message = err.response?.data?.message || 'Registration failed. Please try again.'
@@ -53,7 +51,7 @@ export default function SignupPage() {
         <div className="space-y-6 text-center lg:text-left">
           <div className="space-y-3">
             <h2 className="text-5xl font-black text-slate-800 dark:text-white tracking-tight">Get Started</h2>
-            <div className="h-2 w-16 bg-indigo-600 rounded-full mx-auto lg:ml-1" />
+            <div className="h-2 w-16 bg-primary-600 rounded-full mx-auto lg:ml-1" />
           </div>
           <p className="text-slate-500 font-medium">Create your account and start your 28-day free trial today.</p>
         </div>
@@ -63,10 +61,10 @@ export default function SignupPage() {
             <div className="space-y-2 group">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
               <div className="relative">
-                <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={18} />
                 <input
                   {...register('name')}
-                  className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all ${errors.name ? 'border-red-500' : ''}`}
+                  className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all ${errors.name ? 'border-red-500' : ''}`}
                   placeholder="John Doe"
                 />
               </div>
@@ -76,10 +74,10 @@ export default function SignupPage() {
             <div className="space-y-2 group">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
               <div className="relative">
-                <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={18} />
                 <input
                   {...register('phoneNumber')}
-                  className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all ${errors.phoneNumber ? 'border-red-500' : ''}`}
+                  className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all ${errors.phoneNumber ? 'border-red-500' : ''}`}
                   placeholder="+1 (555) 000-0000"
                 />
               </div>
@@ -90,10 +88,10 @@ export default function SignupPage() {
           <div className="space-y-2 group">
             <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Organization Name</label>
             <div className="relative">
-              <Building2 className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+              <Building2 className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={18} />
               <input
                 {...register('organizationName')}
-                className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all ${errors.organizationName ? 'border-red-500' : ''}`}
+                className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all ${errors.organizationName ? 'border-red-500' : ''}`}
                 placeholder="Acme Corp"
               />
             </div>
@@ -103,11 +101,11 @@ export default function SignupPage() {
           <div className="space-y-2 group">
             <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Work Email</label>
             <div className="relative">
-              <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+              <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={18} />
               <input
                 {...register('email')}
                 type="email"
-                className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all ${errors.email ? 'border-red-500' : ''}`}
+                className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all ${errors.email ? 'border-red-500' : ''}`}
                 placeholder="name@company.com"
               />
             </div>
@@ -117,17 +115,17 @@ export default function SignupPage() {
           <div className="space-y-2 group">
             <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Password</label>
             <div className="relative">
-              <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+              <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={18} />
               <input
                 {...register('password')}
                 type={showPassword ? 'text' : 'password'}
-                className={`w-full h-14 pl-12 pr-12 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all ${errors.password ? 'border-red-500' : ''}`}
+                className={`w-full h-14 pl-12 pr-12 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all ${errors.password ? 'border-red-500' : ''}`}
                 placeholder="••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors"
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary-500 transition-colors"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -139,7 +137,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={isPending}
-              className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-indigo-200 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-70"
+              className="w-full h-14 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-primary-200 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-70"
             >
               {isPending ? <Spinner size="sm" color="white" /> : (
                 <>
@@ -154,7 +152,7 @@ export default function SignupPage() {
         <div className="text-center">
           <p className="text-sm font-medium text-slate-500">
             Already have an account?{' '}
-            <Link to="/login" className="text-indigo-600 font-bold hover:underline">Sign In</Link>
+            <Link to="/login" className="text-primary-600 font-bold hover:underline">Sign In</Link>
           </p>
         </div>
       </motion.div>

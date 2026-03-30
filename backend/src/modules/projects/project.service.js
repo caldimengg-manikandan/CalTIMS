@@ -7,10 +7,10 @@ const { ROLES } = require('../../constants');
 const { logAction } = require('../audit/audit.routes');
 
 const projectService = {
-  async getAll(query, requestor) {
+  async getAll(query, requestor, organizationId) {
     const { page, limit, skip } = parsePagination(query);
     const sort = buildSort(query);
-    const filter = {};
+    const filter = { organizationId };
 
     if (query.status) filter.status = query.status;
     if (query.search) filter.name = new RegExp(query.search, 'i');
@@ -43,33 +43,34 @@ const projectService = {
     return { projects, pagination: buildPaginationMeta(total, page, limit) };
   },
 
-  async getById(id) {
-    const project = await Project.findById(id)
+  async getById(id, organizationId) {
+    const project = await Project.findOne({ _id: id, organizationId })
       .populate('managerId', 'name email employeeId')
       .populate('allocatedEmployees.userId', 'name email employeeId department');
     if (!project) throw new AppError('Project not found', 404);
     return project;
   },
 
-  async create(data, requestorId) {
-    const existing = await Project.findOne({ code: data.code.toUpperCase() });
+  async create(data, requestorId, organizationId) {
+    const existing = await Project.findOne({ code: data.code.toUpperCase(), organizationId });
     if (existing) throw new AppError(`Project with code '${data.code}' already exists`, 409);
     
-    const project = await Project.create(data);
+    const project = await Project.create({ ...data, organizationId });
 
     logAction({
         userId: requestorId,
         action: 'CREATE_PROJECT',
         entityType: 'Project',
         entityId: project._id,
-        details: { name: project.name, code: project.code }
+        details: { name: project.name, code: project.code },
+        organizationId
     });
 
     return project;
   },
 
-  async update(id, data, requestor) {
-    const project = await Project.findById(id);
+  async update(id, data, requestor, organizationId) {
+    const project = await Project.findOne({ _id: id, organizationId });
     if (!project) throw new AppError('Project not found', 404);
     if (requestor.role === ROLES.MANAGER && project.managerId.toString() !== requestor._id.toString()) {
       throw new AppError('Managers can only update their own projects', 403);
@@ -88,8 +89,8 @@ const projectService = {
     return project;
   },
 
-  async allocate(id, allocations, requestor) {
-    const project = await Project.findById(id);
+  async allocate(id, allocations, requestor, organizationId) {
+    const project = await Project.findOne({ _id: id, organizationId });
     if (!project) throw new AppError('Project not found', 404);
 
     for (const alloc of allocations) {
@@ -106,8 +107,8 @@ const projectService = {
     return project.populate('allocatedEmployees.userId', 'name email employeeId');
   },
 
-  async deallocate(projectId, userId) {
-    const project = await Project.findById(projectId);
+  async deallocate(projectId, userId, organizationId) {
+    const project = await Project.findOne({ _id: projectId, organizationId });
     if (!project) throw new AppError('Project not found', 404);
     project.allocatedEmployees = project.allocatedEmployees.filter(
       (a) => a.userId.toString() !== userId
@@ -116,8 +117,8 @@ const projectService = {
     return project;
   },
 
-  async delete(id, requestor) {
-    const project = await Project.findById(id);
+  async delete(id, requestor, organizationId) {
+    const project = await Project.findOne({ _id: id, organizationId });
     if (!project) throw new AppError('Project not found', 404);
     
     // Only admins can delete projects
@@ -125,7 +126,7 @@ const projectService = {
       throw new AppError('Only admins can delete projects', 403);
     }
 
-    await Project.findByIdAndDelete(id);
+    await Project.findOneAndDelete({ _id: id, organizationId });
 
     logAction({
         userId: requestor._id || requestor,

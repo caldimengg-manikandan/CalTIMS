@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
 
 const PayrollPolicySchema = new mongoose.Schema({
-  companyId: {
+  organizationId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company',
-    required: false,
+    ref: 'Organization',
+    required: true,
     index: true
   },
   name: { type: String, default: 'Unified Payroll Policy' },
@@ -95,7 +95,7 @@ const PayrollPolicySchema = new mongoose.Schema({
 PayrollPolicySchema.pre('save', async function(next) {
   if (this.isActive) {
     await this.constructor.updateMany(
-      { companyId: this.companyId, _id: { $ne: this._id } },
+      { organizationId: this.organizationId, _id: { $ne: this._id } },
       { $set: { isActive: false } }
     );
   }

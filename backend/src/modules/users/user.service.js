@@ -7,12 +7,12 @@ const { parsePagination, buildPaginationMeta, buildSort } = require('../../share
 const { logAction } = require('../audit/audit.routes');
 
 const userService = {
-  async getAll(query) {
+  async getAll(query, organizationId) {
     const { page, limit, skip } = parsePagination(query);
     const sort = buildSort(query);
 
     // status filter: 'active' => isActive:true, 'inactive' => isActive:false, else show all
-    const filter = {};
+    const filter = { organizationId };
     if (query.status === 'active') filter.isActive = true;
     else if (query.status === 'inactive') filter.isActive = false;
     if (query.role) filter.role = query.role;
@@ -37,16 +37,17 @@ const userService = {
     return { users, pagination: buildPaginationMeta(total, page, limit) };
   },
 
-  async getById(id) {
-    const user = await User.findById(id).populate('managerId', 'name email employeeId');
+  async getById(id, organizationId) {
+    const user = await User.findOne({ _id: id, organizationId }).populate('managerId', 'name email employeeId');
     if (!user) throw new AppError('User not found', 404);
     return user;
   },
 
-  async create(data, requestorId, ipAddress) {
-    const existing = await User.findOne({ email: data.email });
-    if (existing) throw new AppError('An account with this email already exists', 409);
+  async create(data, requestorId, organizationId, ipAddress) {
+    const existing = await User.findOne({ email: data.email, organizationId });
+    if (existing) throw new AppError('An account with this email already exists in this organization', 409);
     
+    data.organizationId = organizationId;
     // Store plain password to send in email before it gets hashed by pre-save hook
     const plainPassword = data.password;
 
@@ -54,7 +55,7 @@ const userService = {
     if (!data.leaveBalance) {
       try {
         const Settings = require('../settings/settings.model');
-        const settings = await Settings.findOne().lean();
+        const settings = await Settings.findOne({ organizationId }).lean();
         const policy = settings?.leavePolicy || {};
         
         // Map policy settings to user leave balance
@@ -75,7 +76,7 @@ const userService = {
     // Send Welcome Email
     try {
       const Settings = require('../settings/settings.model');
-      const settings = await Settings.findOne().lean();
+      const settings = await Settings.findOne({ organizationId }).lean();
       const companyName = settings?.organization?.companyName || 'CALTIMS';
       const portalLink = process.env.CLIENT_URL || 'http://localhost:5173';
 
@@ -102,8 +103,8 @@ const userService = {
     return user.toPublicJSON();
   },
 
-  async update(id, data, requestorId, requestorRole) {
-    const user = await User.findById(id);
+  async update(id, data, requestorId, requestorRole, organizationId) {
+    const user = await User.findOne({ _id: id, organizationId });
     if (!user) throw new AppError('User not found', 404);
 
     // Only admins can change roles
@@ -143,8 +144,8 @@ const userService = {
     return user.toPublicJSON();
   },
 
-  async resetPassword(id, newPassword, requestorId) {
-    const user = await User.findById(id);
+  async resetPassword(id, newPassword, requestorId, organizationId) {
+    const user = await User.findOne({ _id: id, organizationId });
     if (!user) throw new AppError('User not found', 404);
 
     user.password = newPassword;
@@ -160,8 +161,8 @@ const userService = {
     return true;
   },
 
-  async deactivate(id, requestorId, ipAddress) {
-    const user = await User.findByIdAndUpdate(id, { isActive: false, refreshTokenHash: null }, { new: true });
+  async deactivate(id, requestorId, organizationId, ipAddress) {
+    const user = await User.findOneAndUpdate({ _id: id, organizationId }, { isActive: false, refreshTokenHash: null }, { new: true });
     if (!user) throw new AppError('User not found', 404);
 
     logAction({
@@ -176,8 +177,8 @@ const userService = {
     return user.toPublicJSON();
   },
 
-  async activate(id, requestorId, ipAddress) {
-    const user = await User.findByIdAndUpdate(id, { isActive: true }, { new: true });
+  async activate(id, requestorId, organizationId, ipAddress) {
+    const user = await User.findOneAndUpdate({ _id: id, organizationId }, { isActive: true }, { new: true });
     if (!user) throw new AppError('User not found', 404);
 
     logAction({
@@ -192,21 +193,21 @@ const userService = {
     return user.toPublicJSON();
   },
 
-  async changeRole(id, role) {
-    const user = await User.findByIdAndUpdate(id, { role }, { new: true, runValidators: true });
+  async changeRole(id, role, organizationId) {
+    const user = await User.findOneAndUpdate({ _id: id, organizationId }, { role }, { new: true, runValidators: true });
     if (!user) throw new AppError('User not found', 404);
     return user.toPublicJSON();
   },
 
-  async getMe(userId) {
-    return this.getById(userId);
+  async getMe(userId, organizationId) {
+    return this.getById(userId, organizationId);
   },
 
-  async deleteUser(id, requestorId, ipAddress) {
-    const user = await User.findById(id);
+  async deleteUser(id, requestorId, organizationId, ipAddress) {
+    const user = await User.findOne({ _id: id, organizationId });
     if (!user) throw new AppError('User not found', 404);
 
-    await User.findByIdAndDelete(id);
+    await User.findOneAndDelete({ _id: id, organizationId });
 
     logAction({
         userId: requestorId,
@@ -220,8 +221,8 @@ const userService = {
     return true;
   },
 
-  async getDepartments() {
-    return User.distinct('department', { isActive: true });
+  async getDepartments(organizationId) {
+    return User.distinct('department', { organizationId, isActive: true });
   },
 };
 

@@ -330,7 +330,7 @@ export default function OrganizationTab() {
                         </div>
                     </SectionCard>
 
-                    <SectionCard title="Operational Pace" subtitle="Default system-wide pace rules" icon={Clock}>
+                    {/* <SectionCard title="Operational Pace" subtitle="Default system-wide pace rules" icon={Clock}>
                         <div className="space-y-6">
                             <div>
                                 <div className="flex justify-between items-end mb-3">
@@ -371,7 +371,7 @@ export default function OrganizationTab() {
                                 </div>
                             </div>
                         </div>
-                    </SectionCard>
+                    </SectionCard> */}
                 </div>
             </div>
 

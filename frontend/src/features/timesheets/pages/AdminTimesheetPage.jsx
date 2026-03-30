@@ -87,7 +87,10 @@ function RejectModal({ ts, onReject, onClose }) {
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 const formatDuration = (totalHours) => {
-    return (Number(totalHours) || 0).toFixed(2)
+    const decimal = Number(totalHours) || 0
+    const h = Math.floor(decimal)
+    const m = Math.round((decimal - h) * 60)
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
 const formatWeek = (weekStartDate) => {

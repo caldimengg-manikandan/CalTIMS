@@ -1,13 +1,36 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { timesheetAPI } from '@/services/endpoints'
+import { timesheetAPI, attendanceAPI, settingsAPI } from '@/services/endpoints'
 import Modal from '@/components/ui/Modal'
 import Spinner from '@/components/ui/Spinner'
 import StatusBadge from '@/components/ui/StatusBadge'
-import { format, isValid } from 'date-fns'
-import { Calendar, Clock, Briefcase, FileText, AlertCircle } from 'lucide-react'
+import { format, isValid, addDays } from 'date-fns'
+import { Calendar, Clock, Briefcase, FileText, AlertCircle, User, Zap } from 'lucide-react'
 
 export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, onClose }) {
+    const formatHours = (hours) => {
+        const decimal = Number(hours) || 0
+        const h = Math.floor(decimal)
+        const m = Math.round((decimal - h) * 60)
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+
+    const safeFormat = (date, formatStr) => {
+        if (!date) return ''
+        let d = new Date(date)
+        if (!isValid(d)) return ''
+
+        // Handle timezone shifts for midnight dates (Common in YYYY-MM-DD or ISO strings)
+        if (typeof date === 'string') {
+            const datePart = date.includes('T') ? date.split('T')[0] : date
+            if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+                const [y, m, day] = datePart.split('-').map(Number)
+                d = new Date(y, m - 1, day) // Create local midnight
+            }
+        }
+        return format(d, formatStr)
+    }
+
     const { data: timesheets, isLoading } = useQuery({
         queryKey: ['timesheets', 'details', weekStartDate, userId],
         queryFn: () => {
@@ -22,24 +45,44 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
         enabled: !!weekStartDate && isOpen && isValid(new Date(weekStartDate)),
     })
 
-    const formatHours = (hours) => {
-        return (Number(hours) || 0).toFixed(2)
-    }
+    const { data: fullSettings } = useQuery({
+        queryKey: ['settings', 'full'],
+        queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
+        enabled: isOpen,
+        staleTime: 5 * 60 * 1000,
+    })
 
-    const safeFormat = (date, formatStr) => {
-        if (!date) return ''
-        let d = new Date(date)
-        if (!isValid(d)) return ''
-        // If it's a UTC midnight date (common from server), it might shift to previous day locally.
-        // We ensure we read it based on its "intended" date.
-        // Simple trick: if it's close to 00:00:00 (due to TZ shift), we can add offset.
-        // But the most robust way for "YYYY-MM-DD" is to treat it as local.
-        if (typeof date === 'string' && date.includes('T00:00:00')) {
-            // It's a midnight date from server
-            const [y, m, day] = date.split('T')[0].split('-').map(Number)
-            d = new Date(y, m - 1, day) // Create local midnight
-        }
-        return format(d, formatStr)
+    const { data: attendanceLogs } = useQuery({
+        queryKey: ['attendance', safeFormat(weekStartDate, 'yyyy-MM-dd'), userId],
+        queryFn: () => {
+            const start = new Date(weekStartDate)
+            // Ensure we use the same week start logic
+            const dateStr = safeFormat(start, 'yyyy-MM-dd')
+            return attendanceAPI.getAll({
+                from: dateStr,
+                to: safeFormat(addDays(start, 6), 'yyyy-MM-dd'),
+                userId: userId
+            }).then(r => r.data.data)
+        },
+        enabled: !!weekStartDate && isOpen && !!userId,
+    })
+
+    const isAttendanceEnabled = React.useMemo(() => {
+        if (!fullSettings?.hardwareGateways) return false;
+        return Object.values(fullSettings.hardwareGateways).some(gw => gw.enabled);
+    }, [fullSettings])
+
+
+    const calculateSwipeHours = (date) => {
+        if (!attendanceLogs) return 0
+        const dateStr = safeFormat(date, 'yyyy-MM-dd')
+        const dayLogs = attendanceLogs.filter(log => safeFormat(log.timestamp, 'yyyy-MM-dd') === dateStr)
+        if (dayLogs.length < 2) return 0
+
+        const timestamps = dayLogs.map(log => new Date(log.timestamp).getTime())
+        const start = Math.min(...timestamps)
+        const end = Math.max(...timestamps)
+        return (end - start) / (1000 * 60 * 60)
     }
 
     return (
@@ -60,11 +103,43 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
                 </div>
             ) : (
                 <div className="space-y-8 animate-fade-in">
-                    {/* The week status is now top-level */}
-                    <div className="flex justify-end px-2">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-slate-400 uppercase">Week Status:</span>
+                    {/* Header: User Info & Status */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-2">
+                        {timesheets?.data?.[0]?.userId && (
+                            <div className="flex items-center gap-4 bg-white dark:bg-black p-4 rounded-2xl border border-slate-100 dark:border-white shadow-sm flex-1">
+                                <div className="w-14 h-14 rounded-2xl gradient-primary flex items-center justify-center text-white text-xl font-black shadow-lg shadow-indigo-100 dark:shadow-none shrink-0 uppercase">
+                                    {(timesheets.data[0].userId.name || '?').charAt(0)}
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-800 dark:text-white leading-tight">
+                                        {timesheets.data[0].userId.name}
+                                        <span className="text-slate-400 font-bold ml-2">
+                                            ({timesheets.data[0].userId.employeeId || 'N/A'})
+                                        </span>
+                                    </h3>
+                                    <div className="flex items-center gap-3 mt-1.5">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            <Briefcase size={14} className="text-primary" />
+                                            {timesheets.data[0].userId.department || 'Employee'}
+                                        </div>
+                                        <span className="text-slate-300">•</span>
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            <Clock size={14} className="text-primary" />
+                                            {formatHours(timesheets.data[0].totalHours || 0)} Week Total
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col items-end gap-2 bg-slate-50 dark:bg-black/50 p-4 rounded-2xl border border-slate-100 dark:border-white shadow-sm shrink-0 min-w-[180px]">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Week Status</span>
                             <StatusBadge status={timesheets.data[0].status} />
+                            {timesheets.data[0].submittedAt && (
+                                <span className="text-[10px] text-slate-400 font-medium mt-1">
+                                    Finalized: {safeFormat(timesheets.data[0].submittedAt, 'MMM d, HH:mm')}
+                                </span>
+                            )}
                         </div>
                     </div>
 
@@ -92,27 +167,40 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
                             {/* Daily Breakdown */}
                             <div className="p-6">
                                 <div className="grid grid-cols-7 gap-2 mb-6">
-                                    {row.entries.map((entry, idx) => (
-                                        <div key={idx} className="flex flex-col items-center">
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                                {safeFormat(entry.date, 'EEE')}
-                                            </span>
-                                            <div className={`w-full p-2 rounded-xl border text-center transition-all ${entry.hoursWorked > 0
-                                                ? 'btn-primary border-primary text-white shadow-sm shadow-indigo-100'
-                                                : 'bg-white dark:bg-black border-slate-100 dark:border-white text-slate-400'
-                                                }`}>
-                                                <div className="text-xs font-bold leading-none mb-0.5">{safeFormat(entry.date, 'd')}</div>
-                                                <div className="text-[10px] opacity-90">{(entry.hoursWorked || 0).toFixed(2)}h</div>
+                                    {row.entries.map((entry, idx) => {
+                                        const swipeHrs = calculateSwipeHours(entry.date)
+                                        return (
+                                            <div key={idx} className="flex flex-col items-center">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                                    {safeFormat(entry.date, 'EEE')}
+                                                </span>
+                                                <div className={`w-full p-2 rounded-xl border text-center transition-all ${entry.hoursWorked > 0
+                                                    ? 'btn-primary border-primary text-white shadow-sm shadow-indigo-100'
+                                                    : 'bg-white dark:bg-black border-slate-100 dark:border-white text-slate-400'
+                                                    }`}>
+                                                    <div className="text-xs font-bold leading-none mb-0.5">{safeFormat(entry.date, 'd')}</div>
+                                                    <div className="text-[10px] opacity-90">{formatHours(entry.hoursWorked || 0)}</div>
+                                                </div>
+                                                
+                                                {/* Swipe Hours Display */}
+                                                {(isAttendanceEnabled || swipeHrs > 0) && (
+                                                    <div className="mt-1.5 flex flex-col items-center">
+                                                        <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-tighter" title="Office Presence (Swipe Hours)">
+                                                            <Zap size={8} className={swipeHrs > 0 ? "text-amber-500" : "text-slate-300"} />
+                                                            {swipeHrs > 0 ? formatHours(swipeHrs) : '—'}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                    ))}
+                                        )
+                                    })}
                                 </div>
 
                                 {/* Tasks for this project */}
                                 <div className="space-y-3">
-                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                    {/* <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                                         <FileText size={14} /> Task Descriptions
-                                    </div>
+                                    </div> */}
                                     <div className="grid grid-cols-1 gap-2">
                                         {row.entries.filter(e => e.taskDescription).map((entry, idx) => (
                                             <div key={idx} className="flex gap-3 p-3 bg-white dark:bg-black rounded-xl border border-slate-100 dark:border-white">
@@ -124,9 +212,9 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
                                                 </div>
                                             </div>
                                         ))}
-                                        {row.entries.every(e => !e.taskDescription) && (
+                                        {/* {row.entries.every(e => !e.taskDescription) && (
                                             <p className="text-sm text-slate-400 italic py-2">No task descriptions provided.</p>
-                                        )}
+                                        )} */}
                                     </div>
                                 </div>
                             </div>
