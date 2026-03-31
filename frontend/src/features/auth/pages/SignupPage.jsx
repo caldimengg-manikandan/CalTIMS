@@ -15,6 +15,8 @@ const schema = z.object({
   email: z.string().email('Enter a valid email'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   name: z.string().min(2, 'Name is required'),
+  organizationName: z.string().min(2, 'Organization name is required'),
+  phoneNumber: z.string().length(10, 'Phone number must be 10 digits').regex(/^\d+$/, 'Only digits allowed'),
 })
 
 const GoogleIcon = () => (
@@ -50,8 +52,8 @@ export default function SignupPage() {
     onSuccess: (res) => {
       const { accessToken, refreshToken, user } = res.data.data
       setAuth(user, accessToken, refreshToken)
-      toast.success('Account created! Let\'s setup your organization.')
-      navigate('/onboarding', { replace: true })
+      toast.success('Account created! Welcome to CalTIMS.')
+      navigate('/dashboard', { replace: true })
     },
     onError: (err) => {
       const message = err.response?.data?.message || 'Registration failed. Please try again.'
@@ -128,6 +130,35 @@ export default function SignupPage() {
                 />
               </div>
               {errors.name && <p className="text-xs text-red-500 font-bold ml-2">{errors.name.message}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-2 group">
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Organization Name</label>
+              <div className="relative">
+                <Building2 className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={18} />
+                <input
+                  {...register('organizationName')}
+                  className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all ${errors.organizationName ? 'border-red-500' : ''}`}
+                  placeholder="Company Name"
+                />
+              </div>
+              {errors.organizationName && <p className="text-xs text-red-500 font-bold ml-2">{errors.organizationName.message}</p>}
+            </div>
+
+            <div className="space-y-2 group">
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
+              <div className="relative">
+                <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={18} />
+                <input
+                  {...register('phoneNumber')}
+                  maxLength={10}
+                  className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all ${errors.phoneNumber ? 'border-red-500' : ''}`}
+                  placeholder="10-digit number"
+                />
+              </div>
+              {errors.phoneNumber && <p className="text-xs text-red-500 font-bold ml-2">{errors.phoneNumber.message}</p>}
             </div>
           </div>
 
