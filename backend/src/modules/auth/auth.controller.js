@@ -103,7 +103,20 @@ const authController = {
   }),
 
   googleCallback: asyncHandler(async (req, res) => {
-    // passport.authenticate('google') already attached the user document to req.user
+    // passport.authenticate already attached the user document to req.user
+    const { accessToken, refreshToken, user } = await authService.generateTokensForUser(req.user, req);
+    
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    
+    // Logic-based redirect: if no organization, user must complete onboarding
+    const targetPath = user.organizationId ? '/dashboard' : '/onboarding';
+    const redirectUrl = `${clientUrl}${targetPath}?token=${accessToken}&refreshToken=${refreshToken}`;
+    
+    res.redirect(redirectUrl);
+  }),
+
+  microsoftCallback: asyncHandler(async (req, res) => {
+    // passport.authenticate already attached the user document to req.user
     const { accessToken, refreshToken, user } = await authService.generateTokensForUser(req.user, req);
     
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';

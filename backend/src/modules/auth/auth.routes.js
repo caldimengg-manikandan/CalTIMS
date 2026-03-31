@@ -26,6 +26,10 @@ router.post('/reset-password/:token', validate(resetPasswordSchema), authControl
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL}/login?error=oauth_failed` }), authController.googleCallback);
 
+// Microsoft OAuth 2.0
+router.get('/microsoft', passport.authenticate('microsoft', { scope: ['user.read'] }));
+router.get('/microsoft/callback', passport.authenticate('microsoft', { session: false, failureRedirect: `${process.env.CLIENT_URL}/login?error=oauth_failed` }), authController.microsoftCallback);
+
 // Protected routes
 router.use(authenticate);
 router.post('/logout', authController.logout);

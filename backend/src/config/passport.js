@@ -2,11 +2,15 @@
 
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const MicrosoftStrategy = require('passport-microsoft').Strategy;
 const { authService } = require('../modules/auth/auth.service');
 const logger = require('../shared/utils/logger');
 
 // Validate environment variables for OAuth
-const requiredEnv = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_CALLBACK_URL'];
+const requiredEnv = [
+  'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_CALLBACK_URL',
+  'MICROSOFT_CLIENT_ID', 'MICROSOFT_CLIENT_SECRET', 'MICROSOFT_CALLBACK_URL'
+];
 const missingEnv = requiredEnv.filter(key => !process.env[key]);
 
 if (missingEnv.length > 0) {
@@ -36,6 +40,30 @@ passport.use(new GoogleStrategy({
       return done(null, user);
     } catch (error) {
       logger.error('Google OAuth Strategy Error:', error.message);
+      return done(error, null);
+    }
+  }
+));
+
+passport.use(new MicrosoftStrategy({
+    clientID: process.env.MICROSOFT_CLIENT_ID,
+    clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+    callbackURL: process.env.MICROSOFT_CALLBACK_URL,
+    scope: ['user.read'],
+    passReqToCallback: true
+  },
+  async (req, accessToken, refreshToken, profile, done) => {
+    try {
+      const email = profile.emails[0].value;
+      const name = profile.displayName;
+      const provider = 'microsoft';
+
+      // Use the unified socialLogin logic
+      const user = await authService.socialLogin({ email, name, provider, req });
+      
+      return done(null, user);
+    } catch (error) {
+      logger.error('Microsoft OAuth Strategy Error:', error.message);
       return done(error, null);
     }
   }
