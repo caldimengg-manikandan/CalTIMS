@@ -5,6 +5,7 @@ const AppError = require('../../shared/utils/AppError');
 const emailService = require('../../shared/services/email.service');
 const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
 const { logAction } = require('../audit/audit.routes');
+const { ROLES } = require('../../constants');
 
 const userService = {
   async getAll(query, organizationId) {
@@ -38,7 +39,10 @@ const userService = {
   },
 
   async getById(id, organizationId) {
-    const user = await User.findOne({ _id: id, organizationId }).populate('managerId', 'name email employeeId');
+    const user = await User.findOne({ _id: id, organizationId }).populate([
+      { path: 'managerId', select: 'name email employeeId' },
+      { path: 'roleId' }
+    ]);
     if (!user) throw new AppError('User not found', 404);
     return user;
   },
@@ -53,6 +57,28 @@ const userService = {
     }
     
     data.organizationId = organizationId;
+    data.isOnboardingComplete = true;
+
+    // Automatically assign the "Employee" role if not provided
+    if (!data.roleId) {
+      try {
+        const Role = require('./role.model');
+        const defaultRole = await Role.findOne({ organizationId, name: /employee/i }).lean();
+        if (defaultRole) {
+          data.roleId = defaultRole._id;
+          data.role = data.role || ROLES.EMPLOYEE;
+        } else {
+          // Fallback to searching for ANY role if "Employee" name isn't found
+          const anyRole = await Role.findOne({ organizationId }).lean();
+          if (anyRole) {
+             data.roleId = anyRole._id;
+             data.role = anyRole.name.toLowerCase().includes('admin') ? ROLES.ADMIN : ROLES.EMPLOYEE;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to assign default role:', err);
+      }
+    }
     // Store plain password to send in email before it gets hashed by pre-save hook
     const plainPassword = data.password;
 
@@ -210,7 +236,16 @@ const userService = {
   },
 
   async getMe(userId, organizationId) {
-    return this.getById(userId, organizationId);
+    const user = await this.getById(userId, organizationId);
+    const publicUser = user.toPublicJSON();
+    
+    // Flatten permissions if role is populated
+    if (user.roleId && user.roleId.permissions) {
+      publicUser.permissions = user.roleId.permissions;
+      publicUser.roleName = user.roleId.name;
+    }
+
+    return publicUser;
   },
 
   async deleteUser(id, requestorId, organizationId, ipAddress) {

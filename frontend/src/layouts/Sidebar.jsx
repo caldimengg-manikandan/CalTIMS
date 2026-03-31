@@ -87,7 +87,11 @@ export default function Sidebar() {
     useEffect(() => {
         if (!general) fetchGeneralSettings()
         if (!payroll) fetchPayrollSettings()
-    }, [])
+        // Debug: Log user state to help identify missing role/permissions
+        console.log('[Sidebar Debug] User:', user);
+        console.log('[Sidebar Debug] Role:', user?.role);
+        console.log('[Sidebar Debug] Permissions:', user?.permissions);
+    }, [user])
 
     // Auto-expand Payroll when on any payroll route
     const isOnPayroll = location.pathname.startsWith('/payroll')

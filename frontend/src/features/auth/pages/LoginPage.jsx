@@ -25,15 +25,8 @@ const GoogleIcon = () => (
     </svg>
 )
 
-const MicrosoftIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg">
-        <path fill="#f3f3f3" d="M0 0h23v23H0z" />
-        <path fill="#f35325" d="M1 1h10v10H1z" />
-        <path fill="#81bc06" d="M12 1h10v10H12z" />
-        <path fill="#05a6f0" d="M1 12h10v10H1z" />
-        <path fill="#ffba08" d="M12 12h10v10H12z" />
-    </svg>
-)
+
+
 
 export default function LoginPage() {
     const navigate = useNavigate()
@@ -63,33 +56,12 @@ export default function LoginPage() {
         }
     })
 
-    const { mutate: socialLogin, isPending: isSocialPending } = useMutation({
-        mutationFn: (data) => authAPI.socialLogin(data),
-        onSuccess: (res) => {
-            const { accessToken, refreshToken, user } = res.data.data
-            setAuth(user, accessToken, refreshToken)
-            toast.success(`Authenticated with ${user.provider}!`)
-            navigate('/dashboard', { replace: true })
-        },
-        onError: (err) => {
-            const message = err.response?.data?.message || 'Social login failed'
-            toast.error(message)
-        }
-    })
 
-    const handleSocialLogin = (provider) => {
-        if (provider === 'google') {
-            // Standard OAuth redirect to backend
-            window.location.href = '/api/v1/auth/google'
-            return
-        }
 
-        // For Microsoft, we still use the mock for now
-        socialLogin({ 
-            email: `demo_${provider}@example.com`, 
-            name: `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
-            provider 
-        })
+
+    const handleSocialLogin = () => {
+        // Standard OAuth redirect to backend for Google
+        window.location.href = '/api/v1/auth/google'
     }
 
     return (
@@ -106,25 +78,24 @@ export default function LoginPage() {
                         <div className="h-2 w-16 btn-primary rounded-full" />
                     </div>
 
-                    <div className="flex gap-5">
+                    <div className="space-y-6">
                         <button 
                             type="button"
-                            onClick={() => handleSocialLogin('google')}
-                            disabled={isSocialPending}
-                            className="w-14 h-14 rounded-full border-2 border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-white/5 transition-all active:scale-95 shadow-md disabled:opacity-50"
+                            onClick={handleSocialLogin}
+                            className="w-full h-16 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-2xl font-black text-base uppercase tracking-widest shadow-xl shadow-primary-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-4 disabled:opacity-70 group"
                         >
-                            <GoogleIcon />
+                            <div className="bg-white p-1.5 rounded-lg">
+                                <GoogleIcon />
+                            </div>
+                            <span>Continue with Google</span>
                         </button>
-                        <button 
-                            type="button"
-                            onClick={() => handleSocialLogin('microsoft')}
-                            disabled={isSocialPending}
-                            className="w-14 h-14 rounded-full border-2 border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-white/5 transition-all active:scale-95 shadow-md disabled:opacity-50"
-                        >
-                            <MicrosoftIcon />
-                        </button>
+
+                        <div className="relative flex items-center py-2">
+                            <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
+                            <span className="flex-shrink mx-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] relative top-[1px]">OR USE YOUR WORK ACCOUNT</span>
+                            <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
+                        </div>
                     </div>
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">or use your work account</p>
                 </div>
 
                 <form onSubmit={handleSubmit(login)} className="space-y-6">

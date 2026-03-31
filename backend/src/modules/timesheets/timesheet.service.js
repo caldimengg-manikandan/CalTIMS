@@ -247,7 +247,7 @@ const timesheetService = {
 
       let timesheet = await Timesheet.findOne({ userId, weekStartDate: weekStart, organizationId });
 
-      const { isFrozen } = await getFreezeInfo(weekStart);
+      const { isFrozen } = await getFreezeInfo(weekStart, organizationId);
 
       if (!timesheet) {
         timesheet = new Timesheet({
@@ -637,6 +637,7 @@ const timesheetService = {
           message: `${user.name} (${user.employeeId}) has submitted a timesheet for the week of ${weekStr} (${year}).`,
           refId: ts._id,
           refModel: 'Timesheet',
+          organizationId: ts.organizationId
         })
       );
       await Promise.all(notificationPromises);
@@ -690,6 +691,7 @@ const timesheetService = {
         message: `${user.name} (${user.employeeId}) has submitted a timesheet for the week of ${weekStr} (${year}).`,
         refId: ts._id,
         refModel: 'Timesheet',
+        organizationId: ts.organizationId
       })
     );
     await Promise.all(notificationPromises);
@@ -742,6 +744,7 @@ const timesheetService = {
       message: `Your timesheet for the week of ${weekStr} (${year}) has been approved by ${approver?.name || 'Admin'}.`,
       refId: timesheet._id,
       refModel: 'Timesheet',
+      organizationId: timesheet.organizationId
     });
 
     return timesheet;
@@ -781,6 +784,7 @@ const timesheetService = {
       message: `Your timesheet for the week of ${weekStr} (${year}) was rejected by ${approver?.name || 'Admin'}: "${reason}".`,
       refId: timesheet._id,
       refModel: 'Timesheet',
+      organizationId: timesheet.organizationId
     });
 
     return timesheet;

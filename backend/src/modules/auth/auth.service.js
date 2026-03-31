@@ -106,7 +106,13 @@ const authService = {
         },
         {
           name: 'Employee',
-          permissions: { timesheets: { all: ['view', 'create', 'edit'] } },
+          permissions: { 
+            timesheets: { 
+              dashboard: ['view'],
+              entry: ['view', 'create', 'edit'],
+              history: ['view']
+            } 
+          },
           isSystemRole: false,
         },
         {
@@ -156,7 +162,7 @@ const authService = {
         req
       });
 
-      return user;
+      return await User.findById(user._id).populate('roleId');
     } catch (err) {
       if (isReplicaSet) await session.abortTransaction();
       throw err;
@@ -209,7 +215,13 @@ const authService = {
       },
       {
         name: 'Employee',
-        permissions: { timesheets: { all: ['view', 'create', 'edit'] } },
+        permissions: { 
+          timesheets: { 
+            dashboard: ['view'],
+            entry: ['view', 'create', 'edit'],
+            history: ['view']
+          } 
+        },
         isSystemRole: false,
       },
       {
@@ -319,13 +331,7 @@ const authService = {
     user.refreshTokenHash = hashToken(newRefreshToken);
     await user.save({ validateBeforeSave: false });
 
-    const publicUser = user.toPublicJSON();
-    if (user.roleId && user.roleId.permissions) {
-      publicUser.permissions = user.roleId.permissions;
-      publicUser.roleName = user.roleId.name;
-    }
-
-    return { accessToken, refreshToken: newRefreshToken, user: publicUser };
+    return { accessToken, refreshToken: newRefreshToken, user: user.toPublicJSON() };
   },
 
   /**
@@ -386,17 +392,11 @@ const authService = {
     return true;
   },
 
-  /**
-   * Helper to generate tokens and update user state for any login method
-   */
   async generateTokensForUser(user, req) {
-    if (!user || typeof user.save !== 'function') {
-      // If for some reason we get a plain object, we re-fetch from ID
-      // This is a safety net for the "save is not a function" error
-      const userId = user._id || user.id;
-      user = await User.findById(userId).populate('roleId');
-      if (!user) throw new AppError('User not found during token generation', 404);
-    }
+    const userId = user._id || user.id;
+    // Always re-fetch or ensure population to get role/permissions
+    user = await User.findById(userId).populate('roleId');
+    if (!user) throw new AppError('User not found during token generation', 404);
 
     if (!user.isActive) {
       throw new AppError('Your account has been deactivated. Please contact your administrator.', 403);
@@ -415,15 +415,7 @@ const authService = {
       req
     });
 
-    const publicUser = user.toPublicJSON();
-    
-    // Add permissions if using a role model
-    if (user.roleId && user.roleId.permissions) {
-      publicUser.permissions = user.roleId.permissions;
-      publicUser.roleName = user.roleId.name;
-    }
-
-    return { accessToken, refreshToken, user: publicUser };
+    return { accessToken, refreshToken, user: user.toPublicJSON() };
   },
 };
 

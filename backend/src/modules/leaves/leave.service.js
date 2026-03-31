@@ -277,6 +277,7 @@ const leaveService = {
         message: `${user.name} (${user.employeeId}) has applied for ${leave.leaveType} leave. Leave ID: ${leave.leaveId}`,
         refId: leave._id,
         refModel: 'Leave',
+        organizationId
       })
     );
     await Promise.all(notificationPromises);
@@ -429,6 +430,7 @@ const leaveService = {
       message: `Your ${leave.leaveType} leave application (${leave.leaveId}) has been approved.`,
       refId: leave._id,
       refModel: 'Leave',
+      organizationId,
     });
 
     return leave;
@@ -464,6 +466,7 @@ const leaveService = {
       message: `Your ${leave.leaveType} leave application (${leave.leaveId}) was rejected. Reason: ${reason}`,
       refId: leave._id,
       refModel: 'Leave',
+      organizationId,
     });
 
     return leave;
@@ -532,6 +535,7 @@ const leaveService = {
           message: `${user.name} (${user.employeeId}) has cancelled their ${leave.leaveType} leave (${leave.leaveId}).`,
           refId: leave._id,
           refModel: 'Leave',
+          organizationId
         })
       );
       await Promise.all(notificationPromises);
@@ -544,6 +548,7 @@ const leaveService = {
         message: `Your ${leave.leaveType} leave (${leave.leaveId}) has been cancelled by management${reason ? '. Reason: ' + reason : ''}.`,
         refId: leave._id,
         refModel: 'Leave',
+        organizationId
       });
     }
 

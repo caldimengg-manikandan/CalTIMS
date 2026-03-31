@@ -264,6 +264,9 @@ userSchema.methods.toPublicJSON = function () {
     uan: this.uan,
     pan: this.pan,
     aadhaar: this.aadhaar,
+    roleId: this.roleId?._id || this.roleId,
+    roleName: this.roleId?.name,
+    permissions: this.roleId?.permissions || {}
   };
 };
 

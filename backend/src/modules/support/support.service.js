@@ -91,6 +91,7 @@ const supportService = {
                     message: `A new support ticket (#${ticket.ticketId}) has been raised by ${ticket.name} (${ticket.email}). Type: ${ticket.issueType}`,
                     refId: ticket._id,
                     refModel: 'Support',
+                    organizationId,
                 })
             );
             await Promise.all(notificationPromises);

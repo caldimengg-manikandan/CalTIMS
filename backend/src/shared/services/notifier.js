@@ -9,14 +9,17 @@ const mongoose = require('mongoose');
  * It respects the system settings for global/event-level toggles.
  */
 const notifier = {
-  async getSettings() {
+  async getSettings(organizationId) {
     const Settings = mongoose.model('Settings');
-    const settings = await Settings.findOne().lean();
+    const settings = await Settings.findOne({ organizationId }).lean();
     return settings || {};
   },
 
-  async send(userId, { type, title, message, refId, refModel, actionLink, actionLabel, userEmail }) {
-    const settings = await this.getSettings();
+  async send(userId, { type, title, message, refId, refModel, actionLink, actionLabel, userEmail, organizationId }) {
+    if (!organizationId) {
+        console.warn(`[Notifier] Sending notification ${type} without organizationId to user ${userId}`);
+    }
+    const settings = await this.getSettings(organizationId);
     const notifSettings = settings.notifications || {};
     const companyName = settings.organization?.companyName || 'CALTIMS';
 
@@ -46,7 +49,8 @@ const notifier = {
         title,
         message,
         refId,
-        refModel
+        refModel,
+        organizationId
       });
       results.inApp = true;
     }
