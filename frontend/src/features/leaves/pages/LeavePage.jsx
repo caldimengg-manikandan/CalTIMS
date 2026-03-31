@@ -186,7 +186,14 @@ function ApplyLeaveModal({ onClose, balance }) {
                     <div className="space-y-1.5">
                         <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Start Date <span className="text-slate-400 font-normal">(*)</span></label>
                         <input type="date" className="input" max="9999-12-31" value={form.startDate}
-                            onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} required />
+                            onChange={e => {
+                                const val = e.target.value;
+                                setForm(f => ({ 
+                                    ...f, 
+                                    startDate: val,
+                                    endDate: f.endDate && val > f.endDate ? val : f.endDate
+                                }))
+                            }} required />
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">End Date <span className="text-slate-400 font-normal">(*)</span></label>

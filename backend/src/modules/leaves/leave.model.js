@@ -7,8 +7,8 @@ const leaveSchema = new mongoose.Schema(
   {
     leaveId: {
       type: String,
-      unique: true,
       trim: true,
+      // unique: true // Removed global unique constraint
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -92,6 +92,7 @@ leaveSchema.pre('save', async function (next) {
 });
 
 // ─── Indexes ──────────────────────────────────────────────────────────────────
+leaveSchema.index({ organizationId: 1, leaveId: 1 }, { unique: true });
 leaveSchema.index({ organizationId: 1, userId: 1, status: 1 });
 leaveSchema.index({ organizationId: 1, userId: 1, startDate: -1 });
 leaveSchema.index({ organizationId: 1, startDate: 1, endDate: 1 });

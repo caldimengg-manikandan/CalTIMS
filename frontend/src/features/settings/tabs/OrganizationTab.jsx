@@ -126,6 +126,8 @@ export default function OrganizationTab() {
         weekStartDay: 'monday',
     })
 
+    const upd = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
     const { data, isLoading } = useQuery({
         queryKey: ['settings'],
         queryFn: () => settingsAPI.getSettings().then(r => r.data.data),

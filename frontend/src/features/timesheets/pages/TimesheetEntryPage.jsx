@@ -95,10 +95,17 @@ export default function TimesheetEntryPage() {
     const navIntent = useUIStore(s => s.pendingNavTarget)
     const setNavIntent = useUIStore(s => s.setPendingNavTarget)
 
-    // Sync local isDirty to global store
+    // Sync local isDirty to global store and cleanup on unmount
     useEffect(() => {
         setUnsavedChanges(isDirty)
     }, [isDirty, setUnsavedChanges])
+
+    useEffect(() => {
+        return () => {
+            setUnsavedChanges(false)
+            setNavIntent(null)
+        }
+    }, [setUnsavedChanges, setNavIntent])
 
     // Detect browser close/refresh
     useEffect(() => {
@@ -467,6 +474,7 @@ export default function TimesheetEntryPage() {
                 toast.success('Timesheets saved successfully')
                 queryClient.invalidateQueries({ queryKey: ['timesheets'] })
                 setIsDirty(false)
+                setUnsavedChanges(false)
 
                 // If there was a pending navigation intended, execute it now
                 if (navIntent) {
@@ -1329,17 +1337,7 @@ export default function TimesheetEntryPage() {
                         <div className="p-6 pt-2 flex flex-col gap-2.5">
                             <button
                                 onClick={() => {
-                                    const t = navIntent;
-                                    setNavIntent(null);
-                                    // Save Draft stays on page (or if we save it, we clear dirty and navigate to t?)
-                                    // Actually bulkSave's onSuccess will navigate if navIntent was set.
-                                    // So if user clicks "Save Draft", they might want to JUST SAVE and stay.
-                                    // But usually in a GUARD modal, "Save" means "Save and Go".
-                                    // BUT the user specifically asked for [save draft, save and change, close].
-                                    // Maybe "Save Draft" means SAVE AND STAY.
-                                    // "Save and Change" means SAVE AND NAVIGATE.
-                                    
-                                    setNavIntent(null); // Clear intent so we stay on page
+                                    // Save and proceed
                                     bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))
                                 }}
                                 className="w-full h-12 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary-500/20 transition-all active:scale-[0.98]"
@@ -1349,13 +1347,15 @@ export default function TimesheetEntryPage() {
                             
                             <button
                                 onClick={() => {
-                                    // Save and Change: keep navIntent and trigger save.
-                                    // onSuccess will handle the actual navigation.
-                                    bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))
+                                    const target = navIntent;
+                                    setIsDirty(false);
+                                    setUnsavedChanges(false);
+                                    setNavIntent(null);
+                                    navigate(target);
                                 }}
                                 className="w-full h-12 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 text-slate-700 dark:text-white rounded-xl font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
                             >
-                                <Send size={18} className="text-primary-500" /> SAVE AND CHANGE
+                                <Trash2 size={18} className="text-rose-500" /> DON'T SAVE
                             </button>
                             
                             <button

@@ -89,7 +89,11 @@ export default function EmployeeFormPage() {
     }
 
     const handleChange = (e) => {
-        const { name, value } = e.target
+        let { name, value } = e.target
+        
+        if (['phone', 'accountNumber', 'uan', 'aadhaar'].includes(name)) {
+            value = value.replace(/[^0-9]/g, '')
+        }
         
         if (name === 'role') {
             const selectedRole = roles.find(r => r.name.toLowerCase() === value.toLowerCase())
@@ -209,7 +213,11 @@ export default function EmployeeFormPage() {
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Phone Number *</label>
                         <input name="phone" className={getInputClass('phone')} placeholder="1234567890"
-                            value={formData.phone} onChange={handleChange} maxLength={10} />
+                            value={formData.phone} onChange={handleChange} maxLength={10} 
+                            onInput={(e) => {
+                                e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                            }}
+                        />
                     </div>
 
                     <div className="space-y-1.5">
@@ -232,7 +240,11 @@ export default function EmployeeFormPage() {
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Account Number *</label>
                         <input name="accountNumber" className={getInputClass('accountNumber')} placeholder="Numeric only"
-                            value={formData.accountNumber} onChange={handleChange} />
+                            value={formData.accountNumber} onChange={handleChange} maxLength={18} 
+                            onInput={(e) => {
+                                e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                            }}
+                        />
                     </div>
 
                     <div className="space-y-1.5">
@@ -250,7 +262,11 @@ export default function EmployeeFormPage() {
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">UAN Number *</label>
                         <input name="uan" className={getInputClass('uan')} placeholder="e.g. 123456789012"
-                            value={formData.uan} onChange={handleChange} maxLength={12} />
+                            value={formData.uan} onChange={handleChange} maxLength={12} 
+                            onInput={(e) => {
+                                e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                            }}
+                        />
                     </div>
 
                     {/* Personal Details */}
@@ -267,7 +283,11 @@ export default function EmployeeFormPage() {
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Aadhaar Number *</label>
                         <input name="aadhaar" className={getInputClass('aadhaar')} placeholder="12 digit number"
-                            value={formData.aadhaar} onChange={handleChange} maxLength={12} />
+                            value={formData.aadhaar} onChange={handleChange} maxLength={12} 
+                            onInput={(e) => {
+                                e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                            }}
+                        />
                     </div>
                 </div>
 

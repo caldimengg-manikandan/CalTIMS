@@ -48,17 +48,22 @@ export const useAuthStore = create(
         }
 
         try {
-          // Fetch user and subscription in parallel for efficiency
-          const [userRes, subRes] = await Promise.all([
-            userAPI.getMe(),
-            subscriptionAPI.getCurrent().catch(err => {
-               console.warn('Failed to fetch subscription during checkAuth:', err)
-               return { data: { data: get().subscription } } // Fallback to persisted subscription
-            })
-          ])
-
+          // 1. Fetch the fresh user object
+          const userRes = await userAPI.getMe()
           const user = userRes.data.data
-          const subscription = subRes.data.data
+          
+          let subscription = get().subscription
+
+          // 2. Only fetch subscription if the user is associated with an organization
+          if (user.organizationId) {
+            try {
+              const subRes = await subscriptionAPI.getCurrent({ skipToast: true })
+              subscription = subRes.data.data
+            } catch (err) {
+              console.warn('Failed to fetch subscription during checkAuth:', err)
+              // Keep old subscription or set to null if preferred
+            }
+          }
 
           set({ user, subscription, isAuthenticated: true, isHydrating: false })
         } catch (error) {

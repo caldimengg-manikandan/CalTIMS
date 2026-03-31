@@ -157,7 +157,11 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Phone Number *</label>
-                        <input name="phone" className={getInputClass('phone')} placeholder="1234567890" value={formData.phone} onChange={onChange} maxLength={10} />
+                        <input name="phone" className={getInputClass('phone')} placeholder="1234567890" value={formData.phone} onChange={onChange} maxLength={10} 
+                            onInput={(e) => {
+                                e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                            }}
+                        />
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Joining Date *</label>
@@ -177,7 +181,11 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Account Number *</label>
-                        <input name="accountNumber" className={getInputClass('accountNumber')} placeholder="Numeric only" value={formData.accountNumber || ''} onChange={onChange} />
+                        <input name="accountNumber" className={getInputClass('accountNumber')} placeholder="Numeric only" value={formData.accountNumber || ''} onChange={onChange} maxLength={18} 
+                            onInput={(e) => {
+                                e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                            }}
+                        />
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Branch Name *</label>
@@ -189,7 +197,11 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">UAN Number *</label>
-                        <input name="uan" className={getInputClass('uan')} placeholder="e.g. 123456789012" value={formData.uan || ''} onChange={onChange} maxLength={12} />
+                        <input name="uan" className={getInputClass('uan')} placeholder="e.g. 123456789012" value={formData.uan || ''} onChange={onChange} maxLength={12} 
+                            onInput={(e) => {
+                                e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                            }}
+                        />
                     </div>
                 </div>
             </div>
@@ -205,7 +217,11 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Aadhaar Number *</label>
-                        <input name="aadhaar" className={getInputClass('aadhaar')} placeholder="12 digit number" value={formData.aadhaar || ''} onChange={onChange} maxLength={12} />
+                        <input name="aadhaar" className={getInputClass('aadhaar')} placeholder="12 digit number" value={formData.aadhaar || ''} onChange={onChange} maxLength={12} 
+                            onInput={(e) => {
+                                e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                            }}
+                        />
                     </div>
                 </div>
             </div>
@@ -321,7 +337,9 @@ export default function EmployeesPage() {
     }
 
     const handleAddChange = (e) => {
-        const { name, value } = e.target
+        let { name, value } = e.target
+        if (['phone', 'accountNumber', 'uan', 'aadhaar'].includes(name)) value = value.replace(/\D/g, '')
+        
         setAddForm(p => ({ ...p, [name]: value }))
         if (addErrors[name]) setAddErrors(prev => {
             const up = { ...prev }; delete up[name]; return up
@@ -339,7 +357,9 @@ export default function EmployeesPage() {
     }
 
     const handleEditChange = (e) => {
-        const { name, value } = e.target
+        let { name, value } = e.target
+        if (['phone', 'accountNumber', 'uan', 'aadhaar'].includes(name)) value = value.replace(/\D/g, '')
+
         setEditForm(p => ({ ...p, [name]: value }))
         if (editErrors[name]) setEditErrors(prev => {
             const up = { ...prev }; delete up[name]; return up

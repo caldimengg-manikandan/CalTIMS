@@ -6,8 +6,8 @@ const incidentSchema = new mongoose.Schema(
     {
         incidentId: {
             type: String,
-            unique: true,
             trim: true,
+            // unique: true // Removed global unique constraint
         },
         title: {
             type: String,
@@ -102,6 +102,7 @@ incidentSchema.pre('save', async function (next) {
 });
 
 // Indexes for common queries
+incidentSchema.index({ organizationId: 1, incidentId: 1 }, { unique: true });
 incidentSchema.index({ organizationId: 1, employee: 1 });
 incidentSchema.index({ organizationId: 1, status: 1 });
 incidentSchema.index({ organizationId: 1, priority: 1 });

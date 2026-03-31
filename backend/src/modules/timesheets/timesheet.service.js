@@ -1537,7 +1537,8 @@ const timesheetService = {
           approved: { $sum: { $cond: [{ $eq: ['$status', TIMESHEET_STATUS.APPROVED] }, 1, 0] } },
           rejected: { $sum: { $cond: [{ $eq: ['$status', TIMESHEET_STATUS.REJECTED] }, 1, 0] } },
           drafts: { $sum: { $cond: [{ $eq: ['$status', TIMESHEET_STATUS.DRAFT] }, 1, 0] } },
-          totalHours: { $sum: '$totalHours' }
+          totalHours: { $sum: '$totalHours' },
+          uniqueUserIds: { $addToSet: '$userId' }
         }
       }
     ]);
@@ -1551,7 +1552,8 @@ const timesheetService = {
       rejected: stats[0]?.rejected || 0,
       drafts: stats[0]?.drafts || 0,
       totalHours: stats[0]?.totalHours || 0,
-      totalEmployees: activeUsers
+      totalEmployees: activeUsers,
+      submittedUsersCount: stats[0]?.uniqueUserIds?.length || 0
     };
   },
 

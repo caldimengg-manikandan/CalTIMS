@@ -170,6 +170,7 @@ const userSchema = new mongoose.Schema(
     accountNumber: {
       type: String,
       trim: true,
+      maxlength: [18, 'Account number cannot exceed 18 digits'],
     },
     branchName: {
       type: String,

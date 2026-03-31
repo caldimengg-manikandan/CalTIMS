@@ -86,7 +86,7 @@ function ProjectFormModal({ project, onClose }) {
     const queryClient = useQueryClient()
     const isEdit = !!project
 
-    const { register, handleSubmit, control, formState: { errors } } = useForm({
+    const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm({
         resolver: zodResolver(projectSchema),
         defaultValues: project ? {
             ...project,
@@ -200,12 +200,31 @@ function ProjectFormModal({ project, onClose }) {
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Start Date *</label>
-                            <input {...register('startDate')} type="date" max="9999-12-31" className={`input ${errors.startDate ? 'border-rose-400' : ''}`} />
+                            <input 
+                                {...register('startDate')} 
+                                type="date" 
+                                max="9999-12-31" 
+                                className={`input ${errors.startDate ? 'border-rose-400' : ''}`} 
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    const currentEnd = watch('endDate');
+                                    setValue('startDate', val);
+                                    if (currentEnd && val > currentEnd) {
+                                        setValue('endDate', val);
+                                    }
+                                }}
+                            />
                             {errors.startDate && <p className="text-[10px] text-rose-500">{errors.startDate.message}</p>}
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">End Date</label>
-                            <input {...register('endDate')} type="date" max="9999-12-31" className={`input ${errors.endDate ? 'border-rose-400' : ''}`} />
+                            <input 
+                                {...register('endDate')} 
+                                type="date" 
+                                max="9999-12-31" 
+                                min={watch('startDate')}
+                                className={`input ${errors.endDate ? 'border-rose-400' : ''}`} 
+                            />
                             {errors.endDate && <p className="text-[10px] text-rose-500">{errors.endDate.message}</p>}
                         </div>
                         <div className="col-span-2 space-y-1.5">

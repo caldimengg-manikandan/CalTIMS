@@ -105,14 +105,14 @@ export default function SignupPage() {
             >
                 <GoogleIcon />
             </button>
-            <button 
+            {/* <button 
                 type="button"
                 onClick={() => handleSocialLogin('microsoft')}
                 disabled={isSocialPending}
                 className="w-14 h-14 rounded-full border-2 border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-white/5 transition-all active:scale-95 shadow-md disabled:opacity-50"
             >
                 <MicrosoftIcon />
-            </button>
+            </button> */}
           </div>
           <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-4">or create a work account</p>
         </div>
@@ -154,6 +154,9 @@ export default function SignupPage() {
                 <input
                   {...register('phoneNumber')}
                   maxLength={10}
+                  onInput={(e) => {
+                    e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                  }}
                   className={`w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all ${errors.phoneNumber ? 'border-red-500' : ''}`}
                   placeholder="10-digit number"
                 />

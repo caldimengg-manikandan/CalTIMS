@@ -28,12 +28,13 @@ export default function OnboardingPage() {
   // Mutation to complete onboarding
   const { mutate: completeOnboarding, isPending } = useMutation({
     mutationFn: (data) => authAPI.completeOnboarding(data),
-    onSuccess: (response) => {
-      // Update the user in the store with the new organization data
-      const { accessToken, refreshToken } = useAuthStore.getState();
-      const updatedUser = { ...user, ...response.data.user };
-      setAuth(updatedUser, accessToken, refreshToken);
+    onSuccess: async () => {
+      // 1. Trigger a full auth check to fetch the fresh user, roles, and organization state
+      // This is more reliable than manual merging as it ensures consistent state across the app
+      await useAuthStore.getState().checkAuth()
+      
       toast.success('Onboarding complete! Welcome aboard.')
+      // 2. Redirect only after state is refreshed
       navigate('/dashboard', { replace: true })
     },
     onError: (err) => {
@@ -143,6 +144,9 @@ export default function OnboardingPage() {
                         <input
                           {...register('phoneNumber')}
                           maxLength={10}
+                          onInput={(e) => {
+                            e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                          }}
                           className={`w-full h-16 pl-14 pr-6 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-base font-bold focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all outline-none ${errors.phoneNumber ? 'border-red-500' : ''}`}
                           placeholder="10 digit number"
                         />

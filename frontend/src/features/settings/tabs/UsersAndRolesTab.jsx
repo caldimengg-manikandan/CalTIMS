@@ -556,16 +556,7 @@ export default function UsersAndRolesTab() {
                                         </div>
                                     </div>
 
-                                    <div className="relative pt-2">
-                                        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 mt-1" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search permissions (e.g., 'Payroll', 'Approve')..."
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 focus:border-indigo-300 dark:focus:border-indigo-500/50 rounded-2xl text-sm transition-all focus:ring-0 shadow-inner"
-                                        />
-                                    </div>
+                                  
                                 </div>
                             </div>
 

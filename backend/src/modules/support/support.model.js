@@ -11,7 +11,11 @@ const otpSchema = new mongoose.Schema({
 
 // ── Support Ticket Schema ────────────────────────────────────────────────────
 const supportTicketSchema = new mongoose.Schema({
-    ticketId: { type: String, unique: true },
+    ticketId: { 
+        type: String,
+        trim: true,
+        // unique: true // Removed global unique constraint
+    },
     name: { type: String, required: true },
     email: { type: String, required: true, lowercase: true, trim: true },
     issueType: { type: String, required: true },
@@ -29,22 +33,25 @@ const supportTicketSchema = new mongoose.Schema({
     organizationId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Organization',
-        required: true,
+        required: false,
         index: true
     }
 }, { timestamps: true });
 
-// Auto-generate ticketId (scoped to organization)
 supportTicketSchema.pre('save', async function(next) {
-    if (this.ticketId || !this.isNew || !this.organizationId) return next();
+    if (this.ticketId || !this.isNew) return next();
     try {
-        const count = await this.constructor.countDocuments({ organizationId: this.organizationId });
+        const filter = this.organizationId ? { organizationId: this.organizationId } : { organizationId: { $exists: false } };
+        const count = await this.constructor.countDocuments(filter);
         this.ticketId = `TKT-${100001 + count}`;
         next();
     } catch (err) {
         next(err);
     }
 });
+
+// Compound index for organization-scoped unique ticket IDs
+supportTicketSchema.index({ organizationId: 1, ticketId: 1 }, { unique: true });
 
 const OTP = mongoose.model('SupportOTP', otpSchema);
 const SupportTicket = mongoose.model('SupportTicket', supportTicketSchema);

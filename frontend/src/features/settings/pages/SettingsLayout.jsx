@@ -116,9 +116,9 @@ export default function SettingsLayout() {
 
             <div className="flex flex-col lg:flex-row gap-8 items-start">
                 {/* Vertical Sidebar */}
-                <div className="w-full lg:w-72 flex-shrink-0 space-y-8 sticky top-6">
+                <div className="w-full lg:w-72 flex-shrink-0 flex flex-col lg:sticky lg:top-6 lg:h-[calc(100vh-180px)]">
                     {/* Sidebar Search */}
-                    <div className="relative group px-1">
+                    <div className="relative group px-1 mb-8">
                         <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
                             <Search size={14} className="text-slate-400 group-focus-within:text-primary transition-colors" />
                         </div>
@@ -133,7 +133,7 @@ export default function SettingsLayout() {
                         />
                     </div>
 
-                    <div className="space-y-7">
+                    <div className="space-y-7 lg:overflow-y-auto pr-2 custom-scrollbar flex-1 pb-4">
                         {filteredSections.map((section, idx) => (
                             <div key={idx} className="animate-in fade-in slide-in-from-left-2 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
                                 <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4 px-4 flex items-center justify-between">
@@ -184,7 +184,7 @@ export default function SettingsLayout() {
                 </div>
 
                 {/* Main Content Area */}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 lg:h-[calc(100vh-180px)] lg:overflow-y-auto pr-2 custom-scrollbar">
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={activeTab}

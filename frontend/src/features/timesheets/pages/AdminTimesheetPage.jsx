@@ -33,7 +33,7 @@ function Modal({ open, onClose, maxWidth = 'max-w-md', children }) {
 }
 
 /* ─── Reject Modal ───────────────────────────────────────────── */
-function RejectModal({ ts, onReject, onClose }) {
+function RejectModal({ ts, onReject, onClose, loading = false }) {
     const [reason, setReason] = React.useState('')
     const projects = ts.rows?.map(r => r.projectId?.name).filter(Boolean).join(', ') || '—'
     return (
@@ -70,15 +70,26 @@ function RejectModal({ ts, onReject, onClose }) {
                 </div>
             </div>
             <div className="flex gap-3 px-6 py-4 border-t border-slate-100 dark:border-[#333333] midnight:border-[#1a1a1a] bg-slate-50 dark:bg-[#0a0a0a] midnight:bg-[#050505]">
-                <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+                <button onClick={onClose} disabled={loading} className="btn-secondary flex-1">Cancel</button>
                 <button
                     onClick={() => {
                         if (!reason.trim()) return toast.error('Please provide a reason')
                         onReject(reason)
                     }}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
+                    disabled={loading || !reason.trim()}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all ${loading ? 'bg-slate-400 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600 active:scale-[0.98]'}`}
                 >
-                    <XCircle size={15} /> Reject
+                    {loading ? (
+                        <>
+                            <Spinner size="xs" color="white" />
+                            <span>Processing...</span>
+                        </>
+                    ) : (
+                        <>
+                            <XCircle size={15} />
+                            <span>Reject</span>
+                        </>
+                    )}
                 </button>
             </div>
         </Modal>
@@ -157,13 +168,13 @@ export default function AdminTimesheetPage() {
     })
 
     /* ── Mutations ── */
-    const { mutate: approve } = useMutation({
+    const { mutate: approve, isPending: isApproving } = useMutation({
         mutationFn: (id) => timesheetAPI.approve(id),
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['timesheets'] }); toast.success('Timesheet approved!') },
         onError: () => toast.error('Failed to approve timesheet'),
     })
 
-    const { mutate: reject } = useMutation({
+    const { mutate: reject, isPending: isRejecting } = useMutation({
         mutationFn: ({ id, reason }) => timesheetAPI.reject(id, reason),
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['timesheets'] }); toast.success('Timesheet rejected'); setRejectTarget(null) },
         onError: () => toast.error('Failed to reject timesheet'),
@@ -259,7 +270,7 @@ export default function AdminTimesheetPage() {
                     { title: 'Pending', value: stats?.pendingReview || 0, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20' },
                     { title: 'Approved', value: stats?.approved || 0, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
                     { title: 'Rejected', value: stats?.rejected || 0, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
-                    { title: 'Users', value: stats?.totalEmployees || 0, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20' },
+                    { title: 'Users', value: stats?.submittedUsersCount || 0, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20' },
                     { title: 'Hours', value: formatDuration(stats?.totalHours || 0) + 'h', icon: Clock, color: 'text-pink-500', bg: 'bg-pink-50 dark:bg-pink-900/20' },
                 ].map((st) => (
                     <div key={st.title} className="card p-4 flex items-center gap-3">
@@ -529,17 +540,19 @@ export default function AdminTimesheetPage() {
                                                             <>
                                                                 <button
                                                                     onClick={() => setRejectTarget(ts)}
+                                                                    disabled={isApproving || isRejecting}
                                                                     title="Reject"
-                                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                 >
                                                                     <XCircle size={16} />
                                                                 </button>
                                                                 <button
                                                                     onClick={() => approve(ts._id)}
+                                                                    disabled={isApproving || isRejecting}
                                                                     title="Approve"
-                                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                 >
-                                                                    <CheckCircle2 size={16} />
+                                                                    {isApproving ? <Spinner size="xs" /> : <CheckCircle2 size={16} />}
                                                                 </button>
                                                             </>
                                                         )}
@@ -584,6 +597,7 @@ export default function AdminTimesheetPage() {
                     ts={rejectTarget}
                     onReject={(reason) => reject({ id: rejectTarget._id, reason })}
                     onClose={() => setRejectTarget(null)}
+                    loading={isRejecting}
                 />
             )}
 

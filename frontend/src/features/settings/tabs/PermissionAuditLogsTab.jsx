@@ -126,13 +126,21 @@ export default function PermissionAuditLogsTab() {
                             type="date" 
                             className="bg-transparent border-none text-[11px] font-bold text-slate-600 dark:text-slate-400 focus:ring-0 py-2 w-28"
                             value={filters.startDate}
-                            onChange={e => setFilters(f => ({ ...f, startDate: e.target.value }))}
+                            onChange={e => {
+                                const newStart = e.target.value;
+                                setFilters(f => ({ 
+                                    ...f, 
+                                    startDate: newStart,
+                                    endDate: f.endDate && newStart > f.endDate ? newStart : f.endDate
+                                }))
+                            }}
                         />
                         <span className="text-slate-300 mx-1">→</span>
                         <input 
                             type="date" 
                             className="bg-transparent border-none text-[11px] font-bold text-slate-600 dark:text-slate-400 focus:ring-0 py-2 w-28"
                             value={filters.endDate}
+                            min={filters.startDate}
                             onChange={e => setFilters(f => ({ ...f, endDate: e.target.value }))}
                         />
                     </div>

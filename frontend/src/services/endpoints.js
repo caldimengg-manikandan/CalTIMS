@@ -14,7 +14,7 @@ export const authAPI = {
 export const userAPI = {
   getAll: (params) => api.get('/users', { params }),
   getById: (id) => api.get(`/users/${id}`),
-  getMe: () => api.get('/users/me'),
+  getMe: (config = {}) => api.get('/users/me', config),
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   resetPassword: (id, password) => api.post(`/users/${id}/reset-password`, { password }),
@@ -238,7 +238,7 @@ export const adminAPI = {
 }
 
 export const subscriptionAPI = {
-  getCurrent: () => api.get('/subscriptions/current'),
+  getCurrent: (config = {}) => api.get('/subscriptions/current', config),
   upgrade: (data) => api.post('/subscriptions/upgrade', data),
 }
 

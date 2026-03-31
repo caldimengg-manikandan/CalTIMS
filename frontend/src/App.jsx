@@ -77,15 +77,19 @@ const ProtectedRoute = ({ children, roles, featureKey }) => {
     }
 
     if (!isAuthenticated) return <Navigate to="/login" replace />
+    if (!user && !isHydrating) return <Navigate to="/login" replace />
 
     // Onboarding Guard: if user exists but onboarding is not complete, redirect to /onboarding
     // Skip for super_admin
-    if (user && !user.isOnboardingComplete && location.pathname !== '/onboarding' && user.role !== 'super_admin') {
+    const isOnboardingPath = location.pathname === '/onboarding'
+    const needsOnboarding = user && !user.isOnboardingComplete && user.role !== 'super_admin'
+
+    if (needsOnboarding && !isOnboardingPath) {
         return <Navigate to="/onboarding" replace />
     }
 
     // Reverse Guard: if onboarding is complete, don't allow /onboarding
-    if (user && user.isOnboardingComplete && location.pathname === '/onboarding') {
+    if (user?.isOnboardingComplete && isOnboardingPath) {
         return <Navigate to="/dashboard" replace />
     }
 

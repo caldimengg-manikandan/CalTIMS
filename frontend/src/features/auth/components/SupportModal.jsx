@@ -21,10 +21,10 @@ const ISSUE_CATEGORIES = [
 ]
 
 const FAQ_ITEMS = [
-    { q: "I can't login to my account", a: "Check your credentials or contact IT to reset your password if your account is locked." },
-    { q: "How to submit a timesheet?", a: "Navigate to 'Timesheet Entry', fill in your hours for each project, and click 'Submit' at the bottom." },
-    { q: "Forget my password", a: "Use the 'Forgot Password' link on the login page to receive a reset link via email." },
-    { q: "Leave request status pending", a: "Contact your manager or department head to approve your pending leave requests." }
+    { q: "I can't login to my account", a: "Check your credentials or contact IT to reset your password if your account is locked.", cat: 'Login & Access' },
+    { q: "How to submit a timesheet?", a: "Navigate to 'Timesheet Entry', fill in your hours for each project, and click 'Submit' at the bottom.", cat: 'Timesheet Issues' },
+    { q: "Forget my password", a: "Use the 'Forgot Password' link on the login page to receive a reset link via email.", cat: 'Login & Access' },
+    { q: "Leave request status pending", a: "Contact your manager or department head to approve your pending leave requests.", cat: 'Leave Management' }
 ]
 
 export default function SupportModal({ isOpen, onClose }) {
@@ -102,7 +102,10 @@ export default function SupportModal({ isOpen, onClose }) {
 
         setIsSubmitting(true)
         try {
-            const res = await supportService.submitTicket(formData)
+            const res = await supportService.submitTicket({
+                ...formData,
+                organizationId: user?.organizationId
+            })
             setSubmittedTicket(res.data)
             setView('success')
             resetState()
@@ -121,7 +124,7 @@ export default function SupportModal({ isOpen, onClose }) {
         setTrackEmail('')
     }
 
-    const { isAuthenticated } = useAuthStore()
+    const { isAuthenticated, user } = useAuthStore()
     const navigate = useNavigate()
 
     const handleClose = () => {
@@ -185,7 +188,18 @@ export default function SupportModal({ isOpen, onClose }) {
                             </div>
                             <div className="grid gap-3">
                                 {filteredFAQs.length > 0 ? filteredFAQs.map((faq, i) => (
-                                    <div key={i} onClick={() => setView('ticket')} className="group p-5 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-3xl hover:border-primary/30 hover:shadow-xl hover:shadow-indigo-600/5 transition-all cursor-pointer">
+                                    <div 
+                                        key={i} 
+                                        onClick={() => {
+                                            setFormData(prev => ({ 
+                                                ...prev, 
+                                                message: faq.q,
+                                                issueType: faq.cat || '' 
+                                            }))
+                                            setView('ticket')
+                                        }} 
+                                        className="group p-5 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-3xl hover:border-primary/30 hover:shadow-xl hover:shadow-indigo-600/5 transition-all cursor-pointer"
+                                    >
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
                                                 <p className="text-sm font-black text-slate-800 dark:text-white mb-1">{faq.q}</p>

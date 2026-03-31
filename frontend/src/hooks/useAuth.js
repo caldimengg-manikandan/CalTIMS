@@ -14,7 +14,7 @@ export const useAuth = () => {
             // 2. Fetch user and subscription data
             const [userRes, subRes] = await Promise.all([
                 userAPI.getMe(),
-                subscriptionAPI.getCurrent().catch(() => ({ data: { data: null } }))
+                subscriptionAPI.getCurrent({ skipToast: true }).catch(() => ({ data: { data: null } }))
             ]);
 
             const user = userRes.data.data;

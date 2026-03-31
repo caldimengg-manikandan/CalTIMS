@@ -82,6 +82,8 @@ export default function TimesheetHistoryPage() {
 
     const handleFilterChange = (key, value) => {
         setTempFilters(prev => ({ ...prev, [key]: value }))
+        setFilters(prev => ({ ...prev, [key]: value }))
+        setPage(1)
     }
 
     const clearFilters = () => {
@@ -233,7 +235,7 @@ export default function TimesheetHistoryPage() {
                             <input
                                 type="text"
                                 placeholder="Search..."
-                                className="input pl-9 h-10 text-sm w-full"
+                                className="input pl-9 h-11 text-sm w-full"
                                 value={search}
                                 onChange={(e) => { setSearch(e.target.value); setPage(1) }}
                             />
@@ -244,7 +246,7 @@ export default function TimesheetHistoryPage() {
                         <select
                             value={tempFilters.year}
                             onChange={(e) => handleFilterChange('year', e.target.value)}
-                            className="input h-19 text-sm w-full"
+                            className="input h-11 text-sm w-full"
                         >
                             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
@@ -254,7 +256,7 @@ export default function TimesheetHistoryPage() {
                         <select
                             value={tempFilters.month}
                             onChange={(e) => handleFilterChange('month', e.target.value)}
-                            className="input h-91 text-sm w-full"
+                            className="input h-11 text-sm w-full"
                         >
                             {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
                         </select>

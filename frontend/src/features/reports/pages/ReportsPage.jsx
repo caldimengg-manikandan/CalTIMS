@@ -353,10 +353,22 @@ export default function ReportsPage() {
 
                         <div className="flex items-center gap-2">
                             <input type="date" className="input py-2 text-sm w-36 bg-slate-50 dark:bg-slate-800"
-                                value={range.from} onChange={e => setRange(r => ({ ...r, from: e.target.value }))} />
+                                value={range.from} 
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    setRange(r => ({ 
+                                        ...r, 
+                                        from: val,
+                                        to: r.to && val > r.to ? val : r.to
+                                    }))
+                                }} 
+                            />
                             <span className="text-slate-400 text-xs font-medium">TO</span>
                             <input type="date" className="input py-2 text-sm w-36 bg-slate-50 dark:bg-slate-800"
-                                value={range.to} onChange={e => setRange(r => ({ ...r, to: e.target.value }))} />
+                                value={range.to} 
+                                min={range.from}
+                                onChange={e => setRange(r => ({ ...r, to: e.target.value }))} 
+                            />
                         </div>
 
                         <div className="h-8 w-px bg-slate-200 dark:bg-white/10 hidden md:block"></div>

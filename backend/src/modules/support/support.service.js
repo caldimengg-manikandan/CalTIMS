@@ -66,8 +66,17 @@ const supportService = {
      * Submit a new support ticket
      */
     async createTicket(data, requestorId, organizationId) {
-        if (!organizationId) throw new AppError('Organization ID is required', 400);
-        const ticket = await SupportTicket.create({ ...data, organizationId });
+        let finalOrgId = organizationId;
+        
+        // Try to find organization via email if not provided
+        if (!finalOrgId && data.email) {
+            const user = await User.findOne({ email: data.email.toLowerCase() });
+            if (user) {
+                finalOrgId = user.organizationId;
+            }
+        }
+
+        const ticket = await SupportTicket.create({ ...data, organizationId: finalOrgId });
         
         // Notify User via email
         try {
@@ -119,7 +128,9 @@ const supportService = {
     async getTicketsByEmail(email, organizationId) {
         if (!email) throw new AppError('Email is required', 400);
         const filter = { email };
-        if (organizationId) filter.organizationId = organizationId;
+        if (organizationId) {
+            filter.organizationId = organizationId;
+        }
 
         const tickets = await SupportTicket.find(filter).sort({ createdAt: -1 });
         return tickets;
@@ -130,7 +141,8 @@ const supportService = {
      */
     async getAllTickets(query = {}, organizationId) {
         const { status, limit = 10, page = 1 } = query;
-        const filter = { organizationId };
+        const filter = {};
+        if (organizationId) filter.organizationId = organizationId;
         if (status) filter.status = status;
 
         const tickets = await SupportTicket.find(filter)
