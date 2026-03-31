@@ -85,87 +85,114 @@ const authService = {
    */
   async completeOnboarding(userId, { organizationName, phoneNumber, req }) {
     const session = await mongoose.startSession();
-    // Check if replica set is available for transactions
-    const isReplicaSet = !!(await mongoose.connection.db.admin().command({ isMaster: 1 })).setName;
-
-    if (isReplicaSet) session.startTransaction();
 
     try {
-      const user = await User.findById(userId).session(isReplicaSet ? session : null);
-      if (!user) throw new AppError('User not found', 404);
-      if (user.isOnboardingComplete) throw new AppError('Onboarding already completed', 400);
+      let result;
+      
+      const isReplicaSet = !!(await mongoose.connection.db.admin().command({ isMaster: 1 })).setName;
+      
+      const executeOnboarding = async () => {
+        // 0. Pre-checks inside transaction for consistency
+        const user = await User.findById(userId).session(isReplicaSet ? session : null);
+        if (!user) throw new AppError('User not found', 404);
+        if (user.isOnboardingComplete) throw new AppError('Onboarding already completed', 400);
 
-      // 1. Create Organization
-      const organization = (await Organization.create([{ name: organizationName }], { session }))[0];
-
-      // 2. Create Default Roles
-      const defaultRoles = [
-        {
-          name: 'Admin',
-          permissions: { all: { all: ['all'] } },
-          isSystemRole: true,
-        },
-        {
-          name: 'Employee',
-          permissions: { 
-            timesheets: { 
-              dashboard: ['view'],
-              entry: ['view', 'create', 'edit'],
-              history: ['view']
-            } 
-          },
-          isSystemRole: false,
-        },
-        {
-          name: 'Finance',
-          permissions: { payroll: { all: ['view', 'approve'] } },
-          isSystemRole: false,
+        // Check for duplicate organization name
+        const existingOrg = await Organization.findOne({ name: organizationName }).session(isReplicaSet ? session : null);
+        if (existingOrg) {
+          throw new AppError('An organization with this name already exists. Please choose another name.', 409);
         }
-      ];
 
-      let adminRole;
-      for (const roleDef of defaultRoles) {
-        const r = (await Role.create([{ ...roleDef, organizationId: organization._id }], { session }))[0];
-        if (roleDef.name === 'Admin') adminRole = r;
+        // 1. Create Organization
+        const organization = (await Organization.create([{ name: organizationName }], { session: isReplicaSet ? session : null }))[0];
+
+        // 2. Create Default Roles
+        const defaultRoles = [
+          {
+            name: 'Admin',
+            permissions: { all: { all: ['all'] } },
+            isSystemRole: true,
+          },
+          {
+            name: 'Employee',
+            permissions: { 
+              timesheets: { 
+                dashboard: ['view'],
+                entry: ['view', 'create', 'edit'],
+                history: ['view']
+              } 
+            },
+            isSystemRole: false,
+          },
+          {
+            name: 'Finance',
+            permissions: { payroll: { all: ['view', 'approve'] } },
+            isSystemRole: false,
+          }
+        ];
+
+        let adminRole;
+        for (const roleDef of defaultRoles) {
+          // Check if role already exists for this organization (shouldn't happen for new org)
+          const existingRole = await Role.findOne({ 
+            name: roleDef.name, 
+            organizationId: organization._id 
+          }).session(isReplicaSet ? session : null);
+
+          if (existingRole) {
+            if (roleDef.name === 'Admin') adminRole = existingRole;
+            continue;
+          }
+
+          const r = (await Role.create([{ ...roleDef, organizationId: organization._id }], { session: isReplicaSet ? session : null }))[0];
+          if (roleDef.name === 'Admin') adminRole = r;
+        }
+
+        // 3. Create Default Settings
+        await Settings.create([{
+          organizationId: organization._id,
+          organization: { companyName: organizationName },
+          branding: { organizationName: organizationName }
+        }], { session: isReplicaSet ? session : null });
+
+        // 4. Update User
+        user.organizationId = organization._id;
+        user.role = ROLES.ADMIN;
+        user.roleId = adminRole._id;
+        user.phoneNumber = phoneNumber;
+        user.isOwner = true;
+        user.isOnboardingComplete = true;
+        await user.save({ session: isReplicaSet ? session : null, validateBeforeSave: false });
+
+        // 5. Create Trial Subscription
+        await Subscription.create([{
+          organizationId: organization._id,
+          planType: 'TRIAL',
+          status: 'ACTIVE'
+        }], { session: isReplicaSet ? session : null });
+
+        // Carry result out of transaction
+        result = { userId: user._id, organizationId: organization._id, organizationName };
+      };
+
+      if (isReplicaSet) {
+        await session.withTransaction(executeOnboarding);
+      } else {
+        await executeOnboarding();
       }
 
-      // 3. Create Default Settings
-      await Settings.create([{
-        organizationId: organization._id,
-        organization: { companyName: organizationName },
-        branding: { organizationName: organizationName }
-      }], { session });
-
-      // 4. Update User
-      user.organizationId = organization._id;
-      user.role = ROLES.ADMIN;
-      user.roleId = adminRole._id;
-      user.phoneNumber = phoneNumber;
-      user.isOwner = true;
-      user.isOnboardingComplete = true;
-      await user.save({ session, validateBeforeSave: false });
-
-      // 5. Create Trial Subscription
-      await Subscription.create([{
-        organizationId: organization._id,
-        planType: 'TRIAL',
-        status: 'ACTIVE'
-      }], { session });
-
-      if (isReplicaSet) await session.commitTransaction();
-
-      // Log onboarding activity
+      // Log onboarding activity AFTER successful commit
       await logActivity({
-        userId: user._id,
-        organizationId: organization._id,
+        userId: result.userId,
+        organizationId: result.organizationId,
         action: 'ONBOARDING_COMPLETE',
-        details: { organizationName },
+        details: { organizationName: result.organizationName },
         req
       });
 
-      return await User.findById(user._id).populate('roleId');
+      return await User.findById(result.userId).populate('roleId');
     } catch (err) {
-      if (isReplicaSet) await session.abortTransaction();
+      logger.error('Onboarding Transaction Failed:', err);
       throw err;
     } finally {
       session.endSession();
@@ -176,157 +203,161 @@ const authService = {
    * Signup an organization and create first admin user with 28-day trial
    */
   async register({ email, password, name, organizationName, phoneNumber, ipAddress, deviceFingerprint }) {
-    const session = await mongoose.startSession();
-    const isReplicaSet = !!(await mongoose.connection.db.admin().command({ isMaster: 1 })).setName;
+    // 1. Fail-fast duplicate checks (Outside transaction for performance and clarity)
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      throw new AppError('Email already registered. Please sign in instead.', 409);
+    }
 
-    if (isReplicaSet) session.startTransaction();
+    const existingOrg = await Organization.findOne({ name: organizationName });
+    if (existingOrg) {
+      throw new AppError('Organization name already taken. Please choose another.', 409);
+    }
+
+    const session = await mongoose.startSession();
 
     try {
-      // 1. Trial Abuse Prevention
-      const existingTrial = await TrialTracking.findOne({
-        $or: [{ email }, { phoneNumber }]
-      }).session(isReplicaSet ? session : null);
+      let result;
+      const isReplicaSet = !!(await mongoose.connection.db.admin().command({ isMaster: 1 })).setName;
 
-      if (existingTrial) {
-        throw new AppError('You have already used your free trial.', 400);
-      }
+      const executeRegistration = async () => {
+        // 2. Trial Abuse Prevention (Inside transaction for strict safety)
+        const existingTrial = await TrialTracking.findOne({
+          $or: [{ email }, { phoneNumber }]
+        }).session(isReplicaSet ? session : null);
 
-      // Check if email already used in User model
-      const existingUser = await User.findOne({ email }).session(isReplicaSet ? session : null);
-      if (existingUser) {
-        throw new AppError('Email already registered.', 409);
-      }
-
-      // 2. Create Organization
-      logger.info(`Creating organization: ${organizationName}`);
-      const organization = (await Organization.create([{
-        name: organizationName
-      }], { session: isReplicaSet ? session : null }))[0];
-
-      // 2.1 Create Default Settings for Organization
-      logger.info(`Creating default settings for organization: ${organization._id}`);
-      await Settings.create([{
-        organizationId: organization._id,
-        organization: {
-          companyName: organizationName
-        },
-        branding: {
-          organizationName: organizationName
+        if (existingTrial) {
+          throw new AppError('You have already used your free trial.', 400);
         }
-      }], { session: isReplicaSet ? session : null });
 
-      // 2.2 Create Default Roles for Organization
-      logger.info(`Creating default roles for organization: ${organization._id}`);
-      const defaultRoles = [
-        {
-          name: 'Admin',
-          permissions: { all: { all: ['all'] } },
-          isSystemRole: true,
-        },
-        {
-          name: 'Employee',
-          permissions: { 
-            timesheets: { 
-              dashboard: ['view'],
-              entry: ['view', 'create', 'edit'],
-              history: ['view']
-            } 
+        // 3. Create Organization
+        logger.info(`Creating organization: ${organizationName}`);
+        const organization = (await Organization.create([{
+          name: organizationName
+        }], { session: isReplicaSet ? session : null }))[0];
+
+        // 4. Create Default Settings For Organization
+        logger.info(`Creating default settings for organization: ${organization._id}`);
+        await Settings.create([{
+          organizationId: organization._id,
+          organization: {
+            companyName: organizationName
           },
-          isSystemRole: false,
-        },
-        {
-          name: 'Finance',
-          permissions: { payroll: { all: ['view', 'approve'] } },
-          isSystemRole: false,
-        }
-      ];
+          branding: {
+            organizationName: organizationName
+          }
+        }], { session: isReplicaSet ? session : null });
 
-      let adminRole;
-      for (const roleDef of defaultRoles) {
-        try {
+        // 5. Create Default Roles
+        logger.info(`Creating default roles for organization: ${organization._id}`);
+        const defaultRoles = [
+          {
+            name: 'Admin',
+            permissions: { all: { all: ['all'] } },
+            isSystemRole: true,
+          },
+          {
+            name: 'Employee',
+            permissions: { 
+              timesheets: { 
+                dashboard: ['view'],
+                entry: ['view', 'create', 'edit'],
+                history: ['view']
+              } 
+            },
+            isSystemRole: false,
+          },
+          {
+            name: 'Finance',
+            permissions: { payroll: { all: ['view', 'approve'] } },
+            isSystemRole: false,
+          }
+        ];
+
+        let adminRole;
+        for (const roleDef of defaultRoles) {
+          // Check existence first to avoid poisoning the transaction with a write error
+          const existingRole = await Role.findOne({ 
+            name: roleDef.name, 
+            organizationId: organization._id 
+          }).session(isReplicaSet ? session : null);
+
+          if (existingRole) {
+            if (roleDef.name === 'Admin') adminRole = existingRole;
+            continue;
+          }
+
           const r = (await Role.create([{
             ...roleDef,
             organizationId: organization._id
           }], { session: isReplicaSet ? session : null }))[0];
           
-          if (roleDef.name === 'Admin') {
-            adminRole = r;
-            logger.info(`Admin role created: ${r._id}`);
-          }
-        } catch (err) {
-          // If role already exists, try to fetch it
-          if (err.code !== 11000) {
-            logger.error(`Error creating role ${roleDef.name}:`, err);
-            throw err;
-          }
-          logger.info(`Role ${roleDef.name} already exists, fetching...`);
-          const existingRole = await Role.findOne({ 
-            name: roleDef.name, 
-            organizationId: organization._id 
-          }).session(isReplicaSet ? session : null);
-          
-          if (roleDef.name === 'Admin') {
-            adminRole = existingRole;
-            logger.info(`Admin role found: ${existingRole?._id}`);
-          }
+          if (roleDef.name === 'Admin') adminRole = r;
         }
+
+        if (!adminRole) {
+          throw new AppError('Critical Error: Admin role could not be initialized.', 500);
+        }
+
+        // 6. Create Admin User
+        logger.info(`Creating admin user: ${email}`);
+        const user = (await User.create([{
+          email,
+          password,
+          name,
+          phoneNumber,
+          organizationId: organization._id,
+          role: ROLES.ADMIN,
+          roleId: adminRole._id,
+          provider: 'local',
+          providers: ['local'],
+          isActive: true,
+          isOnboardingComplete: true,
+          isOwner: true,
+          lastLogin: new Date()
+        }], { session: isReplicaSet ? session : null }))[0];
+
+        // 7. Create Trial Subscription
+        const subscription = (await Subscription.create([{
+          organizationId: organization._id,
+          planType: 'TRIAL',
+          status: 'ACTIVE'
+        }], { session: isReplicaSet ? session : null }))[0];
+
+        // 8. Save Trial Tracking info
+        await TrialTracking.create([{
+          email,
+          phoneNumber,
+          ipAddress,
+          deviceFingerprint
+        }], { session: isReplicaSet ? session : null });
+
+        // Carry result out of transaction
+        result = { user, subscription, organizationId: organization._id };
+      };
+
+      if (isReplicaSet) {
+        await session.withTransaction(executeRegistration);
+      } else {
+        await executeRegistration();
       }
 
-      if (!adminRole) {
-        logger.error(`Admin role could not be created or found for organization ${organization._id}`);
-        throw new AppError('Admin role could not be created or found during signup.', 500);
-      }
-
-      // 3. Create Admin User
-      logger.info(`Creating admin user: ${email}`);
-      const user = (await User.create([{
-        email,
-        password,
-        name,
-        phoneNumber,
-        organizationId: organization._id,
-        role: ROLES.ADMIN,
-        roleId: adminRole._id,
-        provider: 'local',
-        providers: ['local'],
-        isActive: true,
-        isOnboardingComplete: true,
-        isOwner: true,
-        lastLogin: new Date()
-      }], { session: isReplicaSet ? session : null }))[0];
-
-      // 4. Create 28-Day Trial Subscription
-      const subscription = (await Subscription.create([{
-        organizationId: organization._id,
-        planType: 'TRIAL',
-        status: 'ACTIVE'
-      }], { session: isReplicaSet ? session : null }))[0];
-
-      // 5. Save Trial Tracking info
-      await TrialTracking.create([{
-        email,
-        phoneNumber,
-        ipAddress,
-        deviceFingerprint
-      }], { session: isReplicaSet ? session : null });
-
-      if (isReplicaSet) await session.commitTransaction();
-
-      // Log signup activity (using req for activity logger)
+      // 9. Post-Transaction Operations (Logging)
       await logActivity({
-        userId: user._id,
-        organizationId: organization._id,
+        userId: result.user._id,
+        organizationId: result.organizationId,
         action: 'SIGNUP_TRIAL',
-        details: {
-          plan: 'TRIAL',
-          organizationName
-        },
+        details: { plan: 'TRIAL', organizationName },
         req: { ip: ipAddress, headers: { 'user-agent': deviceFingerprint } }
       });
 
-      return { user, subscription };
+      return { user: result.user, subscription: result.subscription };
     } catch (err) {
-      if (isReplicaSet) await session.abortTransaction();
+      logger.error('Registration Transaction Failed:', err);
+      // Detailed error reporting
+      if (err.code === 11000) {
+        throw new AppError('Conflict detected: Some data (Email or Phone) is already registered.', 409);
+      }
       throw err;
     } finally {
       session.endSession();

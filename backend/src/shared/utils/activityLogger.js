@@ -6,7 +6,7 @@ const logger = require('./logger');
 /**
  * Log a user activity to the database
  */
-const logActivity = async ({ userId, organizationId, action, entityType, entityId, details, req }) => {
+const logActivity = async ({ userId, organizationId, action, entityType, entityId, details, req, session }) => {
   // Safe Logging Wrapper: Only log to database if organizationId is present.
   // New users (e.g., from Google OAuth) don't have an organizationId until after onboarding.
   if (!organizationId) {
@@ -14,7 +14,7 @@ const logActivity = async ({ userId, organizationId, action, entityType, entityI
   }
 
   try {
-    await UserActivityLog.create({
+    await UserActivityLog.create([{
       userId,
       organizationId,
       action,
@@ -23,7 +23,7 @@ const logActivity = async ({ userId, organizationId, action, entityType, entityI
       details,
       ipAddress: req?.ip,
       userAgent: req?.headers['user-agent'],
-    });
+    }], { session });
   } catch (err) {
     logger.error('Failed to log user activity:', err);
   }

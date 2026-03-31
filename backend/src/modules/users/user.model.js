@@ -283,9 +283,12 @@ userSchema.pre('save', async function (next) {
 userSchema.pre('save', async function (next) {
   if (this.employeeId || !this.isNew || !this.organizationId) return next();
   
-  const count = await mongoose.model('User').countDocuments({ 
-    organizationId: this.organizationId 
-  });
+  // Use session if it exists to ensure consistency within transactions
+  const session = this.$session();
+  const count = await mongoose.model('User').countDocuments(
+    { organizationId: this.organizationId },
+    { session }
+  );
   
   this.employeeId = `EMP${String(count + 1).padStart(4, '0')}`;
   next();
