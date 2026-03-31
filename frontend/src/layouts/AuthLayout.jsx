@@ -82,10 +82,10 @@ export default function AuthLayout() {
                 <SupportFloatingButton />
 
                 {/* Footer */}
-                <div className="py-6 text-center text-sm text-slate-500 dark:text-slate-400 font-medium tracking-wide border-t border-slate-100 dark:border-slate-800">
+                {/* <div className="py-6 text-center text-sm text-slate-500 dark:text-slate-400 font-medium tracking-wide border-t border-slate-100 dark:border-slate-800">
                     Developed by{' '}
                     <span className="text-primary font-bold">Caldim</span>
-                </div>
+                </div> */}
             </div>
         </div >
     )
