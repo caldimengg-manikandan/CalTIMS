@@ -68,7 +68,7 @@ export default function EmployeeFormPage() {
         if (!formData.accountNumber?.trim() || !/^\d+$/.test(formData.accountNumber)) newErrors.accountNumber = true
         if (!formData.branchName?.trim()) newErrors.branchName = true
         if (!formData.ifscCode?.trim() || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(formData.ifscCode)) newErrors.ifscCode = true
-        if (!formData.uan?.trim()) newErrors.uan = true
+        if (!formData.uan?.trim() || !/^\d{12}$/.test(formData.uan)) newErrors.uan = true
 
         // Personal Details Validation
         if (!formData.pan?.trim() || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.pan)) newErrors.pan = true
@@ -250,7 +250,7 @@ export default function EmployeeFormPage() {
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">UAN Number *</label>
                         <input name="uan" className={getInputClass('uan')} placeholder="e.g. 123456789012"
-                            value={formData.uan} onChange={handleChange} />
+                            value={formData.uan} onChange={handleChange} maxLength={12} />
                     </div>
 
                     {/* Personal Details */}
@@ -273,8 +273,8 @@ export default function EmployeeFormPage() {
 
                 <div className="pt-4 flex items-center justify-end gap-3">
                     <Link to="/employees" className="btn-secondary">Cancel</Link>
-                    <button type="submit" disabled={mutation.isLoading} className="btn-primary min-w-[120px]">
-                        {mutation.isLoading ? 'Saving...' : (
+                    <button type="submit" disabled={mutation.isPending} className="btn-primary min-w-[120px]">
+                        {mutation.isPending ? 'Saving...' : (
                             <>
                                 <Save size={18} /> Save Employee
                             </>

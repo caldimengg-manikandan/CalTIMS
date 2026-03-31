@@ -40,7 +40,7 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
+      required: false, // Optional for OAuth users
       minlength: [8, 'Password must be at least 8 characters'],
       select: false,
     },
@@ -52,8 +52,25 @@ const userSchema = new mongoose.Schema(
     organizationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Organization',
-      required: [true, 'Organization is required for all users'],
+      required: false, // Optional during onboarding
       index: true
+    },
+    isOnboardingComplete: {
+      type: Boolean,
+      default: false,
+    },
+    isOwner: {
+      type: Boolean,
+      default: false,
+    },
+    provider: {
+      type: String,
+      enum: ['local', 'google', 'microsoft'],
+      default: 'local',
+    },
+    providers: {
+      type: [String],
+      default: ['local'],
     },
     phoneNumber: {
       type: String,
@@ -230,6 +247,10 @@ userSchema.methods.toPublicJSON = function () {
     isLocked: this.isLocked,
     isTrialUser: this.isTrialUser,
     organizationId: this.organizationId,
+    isOnboardingComplete: this.isOnboardingComplete,
+    isOwner: this.isOwner,
+    provider: this.provider,
+    providers: this.providers || [],
     phoneNumber: this.phoneNumber,
     lastLogin: this.lastLogin,
     trialStartDate: this.trialStartDate,
@@ -245,6 +266,14 @@ userSchema.methods.toPublicJSON = function () {
     aadhaar: this.aadhaar,
   };
 };
+
+// Ensure providers array is initialized
+userSchema.pre('save', async function (next) {
+  if (!this.providers || this.providers.length === 0) {
+    this.providers = [this.provider || 'local'];
+  }
+  next();
+});
 
 // Auto-generate employeeId before save if not set (scoped to organization)
 userSchema.pre('save', async function (next) {

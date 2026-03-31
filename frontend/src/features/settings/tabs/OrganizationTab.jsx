@@ -141,44 +141,64 @@ export default function OrganizationTab() {
         }
     }, [data])
 
+    const logoInputRef = React.useRef(null)
+    const [logoFile, setLogoFile] = useState(null)
+
     const saveMutation = useMutation({
-        mutationFn: () => settingsAPI.updateSettings({
-            organization: {
-                companyName: form.companyName,
-                timezone: form.timezone,
-                dateFormat: form.dateFormat,
-                companyLogo: form.companyLogo,
-                address: form.address,
-                country: form.country,
-                currency: form.currency,
-                fiscalYearStart: form.fiscalYearStart,
-                workWeek: form.workWeek,
-            },
-            general: {
-                companyName: form.companyName,
-                timezone: form.timezone,
-                workingHoursPerDay: form.workingHoursPerDay,
-                strictDailyHours: form.strictDailyHours,
-                isWeekendWorkable: form.isWeekendWorkable,
-                weekStartDay: form.weekStartDay,
-                dateFormat: form.dateFormat,
+        mutationFn: async () => {
+            let finalLogoUrl = form.companyLogo
+
+            if (logoFile) {
+                const fData = new FormData()
+                fData.append('file', logoFile)
+                const res = await settingsAPI.uploadBranding(fData)
+                finalLogoUrl = res.data.data.url
             }
-        }),
+
+            return settingsAPI.updateSettings({
+                organization: {
+                    ...form,
+                    companyLogo: finalLogoUrl
+                },
+                general: {
+                    companyName: form.companyName,
+                    timezone: form.timezone,
+                    workingHoursPerDay: form.workingHoursPerDay,
+                    strictDailyHours: form.strictDailyHours,
+                    isWeekendWorkable: form.isWeekendWorkable,
+                    weekStartDay: form.weekStartDay,
+                    dateFormat: form.dateFormat,
+                }
+            })
+        },
         onSuccess: () => {
             toast.success('Organization settings saved!')
             updateGeneralSettings(form)
+            setLogoFile(null)
             qc.invalidateQueries(['settings'])
         },
         onError: e => toast.error(e.response?.data?.message || 'Save failed'),
     })
 
-    const upd = (k, v) => setForm(f => ({ ...f, [k]: v }))
-
+    const handleLogoUpload = (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setLogoFile(file)
+        const url = URL.createObjectURL(file)
+        upd('companyLogo', url)
+    }
 
     if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
 
     return (
         <div className="space-y-8 pb-10">
+            <input 
+                type="file" 
+                ref={logoInputRef} 
+                className="hidden" 
+                accept="image/*" 
+                onChange={handleLogoUpload} 
+            />
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Organization Landscape</h2>
@@ -312,7 +332,10 @@ export default function OrganizationTab() {
                 <div className="lg:col-span-4 space-y-8">
                     <SectionCard title="Company Logo" subtitle="Brand assets for system reporting" icon={Globe}>
                         <div className="flex flex-col items-center gap-6 py-4">
-                            <div className="w-full aspect-square max-w-[200px] rounded-[2.5rem] bg-slate-50 dark:bg-white/5 border-2 border-dashed border-slate-200 dark:border-white/10 flex flex-col items-center justify-center text-center p-6 group hover:border-primary/50 transition-all cursor-pointer relative overflow-hidden">
+                            <div 
+                                onClick={() => logoInputRef.current?.click()}
+                                className="w-full aspect-square max-w-[200px] rounded-[2.5rem] bg-slate-50 dark:bg-white/5 border-2 border-dashed border-slate-200 dark:border-white/10 flex flex-col items-center justify-center text-center p-6 group hover:border-primary/50 transition-all cursor-pointer relative overflow-hidden"
+                            >
                                 {form.companyLogo ? (
                                     <img src={form.companyLogo} alt="Logo" className="w-full h-full object-contain" />
                                 ) : (
@@ -324,7 +347,10 @@ export default function OrganizationTab() {
                                     </>
                                 )}
                             </div>
-                            <button className="text-[11px] font-black text-primary hover:underline transition-all uppercase tracking-widest">
+                            <button 
+                                onClick={() => logoInputRef.current?.click()}
+                                className="text-[11px] font-black text-primary hover:underline transition-all uppercase tracking-widest"
+                            >
                                 Upload New Logo
                             </button>
                         </div>

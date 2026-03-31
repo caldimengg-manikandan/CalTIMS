@@ -40,6 +40,7 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // Admin-only: Get ALL announcements (including inactive/expired) for management view
 router.get('/admin', authorize('admin'), asyncHandler(async (req, res) => {
+  const { page, limit, skip } = parsePagination(req.query);
   const filter = { organizationId: req.organizationId };
   const [announcements, total] = await Promise.all([
     Announcement.find(filter)

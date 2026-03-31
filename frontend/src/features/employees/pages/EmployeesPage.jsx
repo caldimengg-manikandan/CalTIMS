@@ -189,7 +189,7 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">UAN Number *</label>
-                        <input name="uan" className={getInputClass('uan')} placeholder="e.g. 123456789012" value={formData.uan || ''} onChange={onChange} />
+                        <input name="uan" className={getInputClass('uan')} placeholder="e.g. 123456789012" value={formData.uan || ''} onChange={onChange} maxLength={12} />
                     </div>
                 </div>
             </div>
@@ -311,7 +311,7 @@ export default function EmployeesPage() {
         if (!data.accountNumber?.trim() || !/^\d+$/.test(data.accountNumber)) errors.accountNumber = true
         if (!data.branchName?.trim()) errors.branchName = true
         if (!data.ifscCode?.trim() || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(data.ifscCode)) errors.ifscCode = true
-        if (!data.uan?.trim()) errors.uan = true
+        if (!data.uan?.trim() || !/^\d{12}$/.test(data.uan)) errors.uan = true
 
         // Personal Details Validation
         if (!data.pan?.trim() || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(data.pan)) errors.pan = true
@@ -630,7 +630,7 @@ export default function EmployeesPage() {
                                         <td className="text-sm text-slate-500 whitespace-nowrap">
                                             {emp.joinDate ? format(new Date(emp.joinDate), 'MMM d, yyyy') : '—'}
                                         </td>
-                                        <td><StatusBadge status={emp.isActive ? 'active' : 'draft'} /></td>
+                                        <td><StatusBadge status={emp.isActive ? 'active' : 'inactive'} /></td>
                                         <td className="text-right">
                                             <div className="flex justify-end gap-1">
                                                 <button
@@ -728,7 +728,7 @@ export default function EmployeesPage() {
                                         <h3 className="text-xl font-bold text-slate-800 dark:text-white">{viewEmp.name}</h3>
                                         <div className="flex items-center gap-2 mt-1">
                                             <StatusBadge status={viewEmp.role} />
-                                            <StatusBadge status={viewEmp.isActive ? 'active' : 'draft'} />
+                                            <StatusBadge status={viewEmp.isActive ? 'active' : 'inactive'} />
                                         </div>
                                     </div>
                                 </div>

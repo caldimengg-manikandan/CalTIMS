@@ -9,6 +9,7 @@ const mongoSanitize = require('express-mongo-sanitize');
 // ─── Body Parsing & Sanitization ─────────────────────────────────────────────
 const { errorHandler, notFound } = require('./middleware/error.middleware');
 const logger = require('./shared/utils/logger');
+const passport = require('./config/passport');
 
 // Route imports
 const authRoutes = require('./modules/auth/auth.routes');
@@ -36,7 +37,9 @@ const app = express();
 app.set('etag', false);
 
 // ─── Security Middleware ─────────────────────────────────────────────────────
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+}));
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -63,6 +66,7 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(mongoSanitize()); // NoSQL injection prevention
 app.use(compression());
+app.use(passport.initialize());
 
 const path = require('path');
 

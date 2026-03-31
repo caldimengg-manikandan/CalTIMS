@@ -483,6 +483,10 @@ export default function TimesheetEntryPage() {
 
     const submitWeekMutation = useMutation({
         mutationFn: async () => {
+            if (!submissionRestriction.allowed) {
+                throw new Error(`Submission for the current week is restricted. Please submit on or after ${submissionRestriction.dayName}.`)
+            }
+
             // Basic validation: must have some hours somewhere, unless there's a holiday or leave
             const hasAnyHours = rows.some(r => r.dayHours.some(h => h !== '00:00'))
             const hasHolidayOrLeave = holidays.size > 0 || rows.some(r => r.isLeaveRow)
@@ -572,6 +576,14 @@ export default function TimesheetEntryPage() {
 
     const handleAddRow = () => {
         if (isWeekSubmitted) return
+
+        // Prevent adding multiple empty project rows
+        const hasEmptyRow = rows.some(r => !r.isLeaveRow && !isPermissionRow(r.taskType) && (r.projectId === '' || r.taskType === 'Select Task'))
+        if (hasEmptyRow) {
+            toast.error('Please complete the existing empty row first')
+            return
+        }
+
         setRows([...rows, { id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00') }])
         setIsDirty(true)
     }
@@ -588,11 +600,36 @@ export default function TimesheetEntryPage() {
     }
 
     const handleRemoveRow = (id) => {
+        const workRows = rows.filter(r => !r.isLeaveRow)
+        if (workRows.length === 1 && workRows[0].id === id) {
+            toast.error('You cannot delete the last remaining project row. Each week requires at least one entry.')
+            return
+        }
         setRows(rows.filter(r => r.id !== id))
         setIsDirty(true)
     }
 
     const handleUpdateRow = (id, field, value) => {
+        const currentRow = rows.find(r => r.id === id)
+        if (!currentRow) return
+
+        let nextProjectId = field === 'projectId' ? value : (currentRow.projectId?._id || currentRow.projectId)
+        let nextTaskType = field === 'taskType' ? value : currentRow.taskType
+
+        // Check for duplicates - avoid checking if everything isn't selected yet
+        if (nextProjectId && nextTaskType && nextTaskType !== 'Select Task') {
+            const isDuplicate = rows.some(r => {
+                if (r.id === id) return false
+                const pid = r.projectId?._id || r.projectId
+                return pid === nextProjectId && r.taskType === nextTaskType
+            })
+
+            if (isDuplicate) {
+                toast.error('This project and task combination already exists in your timesheet.')
+                return
+            }
+        }
+
         setRows(rows.map(r => {
             if (r.id !== id) return r
             setIsDirty(true)
@@ -731,6 +768,35 @@ export default function TimesheetEntryPage() {
         return currentWeekTs ? ['submitted', 'approved', 'frozen', 'admin_filled'].includes(currentWeekTs.status) : false
     }, [existingTimesheets, weekStart])
 
+    const isCurrentWeek = useMemo(() => {
+        return isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn }))
+    }, [weekStart, weekStartsOn])
+
+    const submissionRestriction = useMemo(() => {
+        if (!isCurrentWeek) return { allowed: true }
+        if (!tsSettings?.submissionDeadline) return { allowed: true }
+
+        const daysLookup = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
+        const deadlineParts = (tsSettings.submissionDeadline || 'Friday').toLowerCase().split(' ');
+        const targetDayName = deadlineParts[0];
+        let targetDayIndex = daysLookup[targetDayName] ?? 5; // Default Friday
+        let currentDayIndex = new Date().getDay();
+
+        // Handle Monday week start normalization
+        if (weekStartDay === 'monday') {
+            if (currentDayIndex === 0) currentDayIndex = 7;
+            if (targetDayIndex === 0) targetDayIndex = 7;
+        }
+
+        if (currentDayIndex < targetDayIndex) {
+            return {
+                allowed: false,
+                dayName: targetDayName.charAt(0).toUpperCase() + targetDayName.slice(1)
+            }
+        }
+        return { allowed: true }
+    }, [isCurrentWeek, tsSettings, weekStartDay])
+
     const isWeekFrozen = useMemo(() => {
         const weekStr = format(weekStart, 'yyyy-MM-dd')
         const currentWeekTs = existingTimesheets?.find(t => format(new Date(t.weekStartDate), 'yyyy-MM-dd') === weekStr)
@@ -839,8 +905,8 @@ export default function TimesheetEntryPage() {
                     <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
                         <button
                             onClick={handleAddRow}
-                            disabled={isWeekSubmitted}
-                            title={isWeekSubmitted ? 'Timesheet already submitted' : 'Add a new project row'}
+                            disabled={isWeekSubmitted || rows.some(r => !r.isLeaveRow && !isPermissionRow(r.taskType) && (r.projectId === '' || r.taskType === 'Select Task'))}
+                            title={isWeekSubmitted ? 'Timesheet already submitted' : rows.some(r => !r.isLeaveRow && !isPermissionRow(r.taskType) && (r.projectId === '' || r.taskType === 'Select Task')) ? 'Please complete the existing empty row first' : 'Add a new project row'}
                             className="flex items-center gap-2 px-3 lg:px-4 py-2 btn-primary hover:bg-primary-700 text-white rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none flex-1 lg:flex-none justify-center"
                         >
                             <Plus size={16} /> <span className="hidden sm:inline">ADD PROJECT</span><span className="sm:hidden">PROJECT</span>
@@ -906,16 +972,18 @@ export default function TimesheetEntryPage() {
                                                     </span>
                                                 )}
                                                 {calculateDayTotal(i) < workingHoursPerDay && calculateDayTotal(i) > 0 && (
-                                                    <div className="absolute -top-1 -right-1 group/warn">
-                                                        <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                                                        <div className="hidden group-hover/warn:block absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white text-[10px] py-1 px-2 rounded-lg whitespace-nowrap shadow-xl">
-                                                            Low hours: {formatHours(calculateDayTotal(i))}
+                                                    <div className="mt-2 flex items-center justify-center gap-1 px-2 py-1 bg-amber-500 text-white rounded-lg shadow-lg shadow-amber-200 dark:shadow-none animate-bounce scale-110 ring-2 ring-white">
+                                                        <AlertTriangle size={12} strokeWidth={3} />
+                                                        <span className="text-[9px] font-black tracking-tighter uppercase whitespace-nowrap">Low Hours</span>
+                                                        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white text-[10px] py-1 px-2 rounded-lg whitespace-nowrap shadow-xl hidden group-hover/warn:block">
+                                                            {formatHours(calculateDayTotal(i))} of {workingHoursPerDay}h
                                                         </div>
                                                     </div>
                                                 )}
                                                 {calculateDayTotal(i) > 24 && (
-                                                    <div className="absolute -top-1 -right-1">
-                                                        <div className="w-2 h-2 rounded-full bg-red-500" />
+                                                    <div className="mt-2 flex items-center justify-center gap-1 px-2 py-1 bg-red-600 text-white rounded-lg shadow-lg animate-pulse scale-110 ring-2 ring-white">
+                                                        <Clock size={12} strokeWidth={3} />
+                                                        <span className="text-[9px] font-black tracking-tighter uppercase">Exceeded</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -1231,8 +1299,8 @@ export default function TimesheetEntryPage() {
 
                 <button
                     onClick={() => submitWeekMutation.mutate()}
-                    disabled={submitWeekMutation.isPending || (totalWeekHours === 0 && holidays.size === 0 && !rows.some(r => r.isLeaveRow)) || isWeekSubmitted}
-                    title={isWeekSubmitted ? 'This week has already been submitted' : ''}
+                    disabled={submitWeekMutation.isPending || !submissionRestriction.allowed || (totalWeekHours === 0 && holidays.size === 0 && !rows.some(r => r.isLeaveRow)) || isWeekSubmitted}
+                    title={isWeekSubmitted ? 'This week has already been submitted' : !submissionRestriction.allowed ? `Submission allowed starting ${submissionRestriction.dayName}` : ''}
                     className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 btn-primary hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:pointer-events-none"
                 >
                     {submitWeekMutation.isPending ? (

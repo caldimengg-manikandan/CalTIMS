@@ -273,9 +273,6 @@ export default function MyPayslipsPage() {
                             <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Statement Not Found</h3>
                             <p className="text-slate-500 font-medium">Payslip has not been generated for <span className="text-primary-600 font-bold">{months[selectedMonth-1]} {selectedYear}</span> yet.</p>
                         </div>
-                        <div className="text-primary-600 font-bold text-sm bg-primary-50 dark:bg-primary-500/10 px-6 py-3 rounded-2xl border border-primary-200 dark:border-primary-500/20">
-                            Please contact admin.
-                        </div>
                     </div>
                 )}
 

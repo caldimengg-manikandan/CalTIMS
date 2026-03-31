@@ -75,6 +75,11 @@ const projectService = {
     if (requestor.role === ROLES.MANAGER && project.managerId.toString() !== requestor._id.toString()) {
       throw new AppError('Managers can only update their own projects', 403);
     }
+
+    if (data.code && data.code.toUpperCase() !== project.code) {
+      const existing = await Project.findOne({ code: data.code.toUpperCase(), organizationId, _id: { $ne: id } });
+      if (existing) throw new AppError(`Project with code '${data.code}' already exists`, 409);
+    }
     Object.assign(project, data);
     await project.save();
 

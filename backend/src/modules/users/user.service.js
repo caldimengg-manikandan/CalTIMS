@@ -46,6 +46,11 @@ const userService = {
   async create(data, requestorId, organizationId, ipAddress) {
     const existing = await User.findOne({ email: data.email, organizationId });
     if (existing) throw new AppError('An account with this email already exists in this organization', 409);
+
+    if (data.employeeId) {
+      const existingEmpId = await User.findOne({ employeeId: data.employeeId, organizationId });
+      if (existingEmpId) throw new AppError(`Employee ID '${data.employeeId}' already exists in this organization`, 409);
+    }
     
     data.organizationId = organizationId;
     // Store plain password to send in email before it gets hashed by pre-save hook
@@ -110,6 +115,11 @@ const userService = {
     // Only admins can change roles
     if (data.role && requestorRole !== 'admin') {
       throw new AppError('Only admins can change user roles', 403);
+    }
+
+    if (data.employeeId && data.employeeId !== user.employeeId) {
+      const existingEmpId = await User.findOne({ employeeId: data.employeeId, organizationId, _id: { $ne: id } });
+      if (existingEmpId) throw new AppError(`Employee ID '${data.employeeId}' already exists in this organization`, 409);
     }
 
     // Disallow editing someone else's profile unless admin

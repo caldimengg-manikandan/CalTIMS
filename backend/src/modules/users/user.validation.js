@@ -11,7 +11,9 @@ const createUserSchema = Joi.object({
   department: Joi.string().trim().max(100),
   designation: Joi.string().trim().max(100),
   managerId: Joi.string().hex().length(24).allow(null, ''),
-  phone: Joi.string().trim().max(20),
+  phone: Joi.string().trim().pattern(/^\d{10}$/).messages({
+    'string.pattern.base': 'Phone number must be exactly 10 digits',
+  }),
   employeeId: Joi.string().trim().max(50),
   joinDate: Joi.date().iso(),
   bankName: Joi.string().trim().required(),
@@ -22,7 +24,9 @@ const createUserSchema = Joi.object({
   ifscCode: Joi.string().trim().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).required().messages({
     'string.pattern.base': 'Invalid IFSC code format',
   }),
-  uan: Joi.string().trim().required(),
+  uan: Joi.string().trim().pattern(/^\d{12}$/).required().messages({
+    'string.pattern.base': 'UAN number must be exactly 12 digits',
+  }),
   pan: Joi.string().trim().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).required().messages({
     'string.pattern.base': 'Invalid PAN number format',
   }),
@@ -36,7 +40,9 @@ const updateUserSchema = Joi.object({
   department: Joi.string().trim().max(100),
   designation: Joi.string().trim().max(100),
   managerId: Joi.string().hex().length(24).allow(null, ''),
-  phone: Joi.string().trim().max(20),
+  phone: Joi.string().trim().pattern(/^\d{10}$/).messages({
+    'string.pattern.base': 'Phone number must be exactly 10 digits',
+  }),
   employeeId: Joi.string().trim().max(50),
   avatar: Joi.string().uri(),
   role: Joi.string().valid(...Object.values(ROLES)),
@@ -49,7 +55,9 @@ const updateUserSchema = Joi.object({
   accountNumber: Joi.string().trim().pattern(/^\d+$/),
   branchName: Joi.string().trim(),
   ifscCode: Joi.string().trim().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/),
-  uan: Joi.string().trim(),
+  uan: Joi.string().trim().pattern(/^\d{12}$/).messages({
+    'string.pattern.base': 'UAN number must be exactly 12 digits',
+  }),
   pan: Joi.string().trim().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/),
   aadhaar: Joi.string().trim().pattern(/^\d{12}$/),
 }).min(1).unknown(true);

@@ -225,13 +225,6 @@ export default function NotificationsTab() {
                             </div>
                         </div>
                     </SectionCard>
-
-                    <div className="p-5 rounded-3xl btn-primary text-white shadow-xl shadow-primary/20">
-                        <p className="text-xs font-black uppercase tracking-widest opacity-80 mb-2">Delivery Note</p>
-                        <p className="text-[11px] font-medium leading-relaxed opacity-90">
-                            Scheduled notifications strictly follow the organization's primary timezone. Instant triggers (like approvals) are dispatched immediately.
-                        </p>
-                    </div>
                 </div>
             </div>
 

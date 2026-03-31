@@ -51,7 +51,7 @@ export default function LoginPage() {
             setAuth(user, accessToken, refreshToken, subscription)
             toast.success(`Welcome back, ${user.name.split(' ')[0]}!`)
             
-            // Redirect based on role
+            // Redirect logic is handled by ProtectedRoute, but we can nudge it
             const target = user.role === 'super_admin' ? '/admin/dashboard' : '/dashboard'
             navigate(target, { replace: true })
         },
@@ -62,6 +62,35 @@ export default function LoginPage() {
             setError('password', { type: 'manual', message: 'Incorrect password' })
         }
     })
+
+    const { mutate: socialLogin, isPending: isSocialPending } = useMutation({
+        mutationFn: (data) => authAPI.socialLogin(data),
+        onSuccess: (res) => {
+            const { accessToken, refreshToken, user } = res.data.data
+            setAuth(user, accessToken, refreshToken)
+            toast.success(`Authenticated with ${user.provider}!`)
+            navigate('/dashboard', { replace: true })
+        },
+        onError: (err) => {
+            const message = err.response?.data?.message || 'Social login failed'
+            toast.error(message)
+        }
+    })
+
+    const handleSocialLogin = (provider) => {
+        if (provider === 'google') {
+            // Standard OAuth redirect to backend
+            window.location.href = '/api/v1/auth/google'
+            return
+        }
+
+        // For Microsoft, we still use the mock for now
+        socialLogin({ 
+            email: `demo_${provider}@example.com`, 
+            name: `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
+            provider 
+        })
+    }
 
     return (
         <div className="w-full max-w-xl mx-auto space-y-12">
@@ -78,10 +107,20 @@ export default function LoginPage() {
                     </div>
 
                     <div className="flex gap-5">
-                        <button className="w-14 h-14 rounded-full border-2 border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-white/5 transition-all active:scale-95 shadow-md">
+                        <button 
+                            type="button"
+                            onClick={() => handleSocialLogin('google')}
+                            disabled={isSocialPending}
+                            className="w-14 h-14 rounded-full border-2 border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-white/5 transition-all active:scale-95 shadow-md disabled:opacity-50"
+                        >
                             <GoogleIcon />
                         </button>
-                        <button className="w-14 h-14 rounded-full border-2 border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-white/5 transition-all active:scale-95 shadow-md">
+                        <button 
+                            type="button"
+                            onClick={() => handleSocialLogin('microsoft')}
+                            disabled={isSocialPending}
+                            className="w-14 h-14 rounded-full border-2 border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-white/5 transition-all active:scale-95 shadow-md disabled:opacity-50"
+                        >
                             <MicrosoftIcon />
                         </button>
                     </div>

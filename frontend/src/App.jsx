@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -12,6 +12,8 @@ const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'))
 const SignupPage = lazy(() => import('@/features/auth/pages/SignupPage'))
 const ForgotPassword = lazy(() => import('@/features/auth/pages/ForgotPasswordPage'))
 const ResetPassword = lazy(() => import('@/features/auth/pages/ResetPasswordPage'))
+const OnboardingPage = lazy(() => import('@/features/auth/pages/OnboardingPage'))
+const OAuthSuccessPage = lazy(() => import('@/features/auth/pages/OAuthSuccessPage'))
 
 const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'))
 const EmployeesPage = lazy(() => import('@/features/employees/pages/EmployeesPage'))
@@ -56,10 +58,13 @@ const MyPayslips = lazy(() => import('@/features/payroll').then(m => ({ default:
 
 import { useFeatureAccess } from '@/hooks/useFeatureAccess'
 import { FEATURE_KEYS } from '@/constants/plans'
+import { useThemeStore } from '@/store/themeStore'
 
 // ─── Protected Route Guard ───────────────────────────────────────────────────
 const ProtectedRoute = ({ children, roles, featureKey }) => {
     const { isAuthenticated, isHydrating, user, subscription } = useAuthStore()
+    const location = useLocation()
+    const { hasAccess } = useFeatureAccess()
 
     // Wait for checkAuth to finish before making any redirect decisions.
     // Without this guard, the app redirects before the token is validated on refresh.
@@ -73,12 +78,21 @@ const ProtectedRoute = ({ children, roles, featureKey }) => {
 
     if (!isAuthenticated) return <Navigate to="/login" replace />
 
+    // Onboarding Guard: if user exists but onboarding is not complete, redirect to /onboarding
+    // Skip for super_admin
+    if (user && !user.isOnboardingComplete && location.pathname !== '/onboarding' && user.role !== 'super_admin') {
+        return <Navigate to="/onboarding" replace />
+    }
+
+    // Reverse Guard: if onboarding is complete, don't allow /onboarding
+    if (user && user.isOnboardingComplete && location.pathname === '/onboarding') {
+        return <Navigate to="/dashboard" replace />
+    }
+
     // Trial Expiration Check (Skip for Super Admin)
     if (user?.role !== 'super_admin' && subscription?.status === 'EXPIRED') {
         return <Paywall />
     }
-
-    const { hasAccess } = useFeatureAccess()
 
     if (user?.role === 'super_admin') return children
     
@@ -102,8 +116,6 @@ const PageSuspense = ({ children }) => (
     </Suspense>
 )
 
-import { useThemeStore } from '@/store/themeStore'
-
 export default function App() {
     const { checkAuth, isAuthenticated, isHydrating: authHydrating, user } = useAuthStore()
     const { fetchGeneralSettings, general, isLoading: settingsLoading } = useSettingsStore()
@@ -112,9 +124,24 @@ export default function App() {
 
     useEffect(() => {
         const init = async () => {
-            // First check auth
-            await checkAuth()
-            // Then fetch settings if we are authenticated
+            // 1. Check if we have tokens in the URL (OAuth Callback Case)
+            const params = new URLSearchParams(window.location.search)
+            const urlToken = params.get('token')
+            const urlRefreshToken = params.get('refreshToken')
+
+            if (urlToken && urlRefreshToken) {
+                // If found, update store and CLEAN the URL
+                await useAuthStore.getState().setAuthFromURL(urlToken, urlRefreshToken)
+                
+                // Clean URL parameters for security and cleaner UI
+                const newUrl = window.location.pathname
+                window.history.replaceState({}, document.title, newUrl)
+            } else {
+                // Regular Initialization: First check auth from persistence
+                await checkAuth()
+            }
+
+            // 2. Then fetch settings if we are authenticated
             if (useAuthStore.getState().isAuthenticated) {
                 await fetchGeneralSettings()
                 const branding = useSettingsStore.getState().general?.branding
@@ -155,7 +182,15 @@ export default function App() {
                     <Route path="/signup" element={<SignupPage />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password/:token" element={<ResetPassword />} />
+                    <Route path="/oauth-success" element={<OAuthSuccessPage />} />
                 </Route>
+
+                {/* Onboarding route (Standalone, no layout) */}
+                <Route path="/onboarding" element={
+                    <ProtectedRoute>
+                        <OnboardingPage />
+                    </ProtectedRoute>
+                } />
 
 
                 {/* App routes */}

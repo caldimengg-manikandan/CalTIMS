@@ -123,7 +123,9 @@ export default function SettingsLayout() {
                             <Search size={14} className="text-slate-400 group-focus-within:text-primary transition-colors" />
                         </div>
                         <input 
-                            type="text" 
+                            type="search" 
+                            name="settings-search-bar"
+                            autoComplete="off"
                             className="w-full bg-slate-100 dark:bg-white/5 border-none focus:ring-2 focus:ring-primary/20 rounded-2xl py-3 pl-11 pr-4 text-xs font-bold text-slate-700 dark:text-slate-200 placeholder:text-slate-400 transition-all shadow-inner"
                             placeholder="Find a setting..."
                             value={searchQuery}

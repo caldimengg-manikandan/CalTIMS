@@ -33,6 +33,13 @@ export const useAuthStore = create(
       setHasCompletedTour: (value) =>
         set({ hasCompletedTour: value }),
 
+      setAuthFromURL: async (accessToken, refreshToken) => {
+        set({ accessToken, refreshToken, isAuthenticated: true, isHydrating: true })
+        // After setting tokens, trigger checkAuth to fetch the actual user and subscription
+        const store = get()
+        await store.checkAuth()
+      },
+
       checkAuth: async () => {
         const { accessToken, isAuthenticated } = get()
         if (!accessToken || !isAuthenticated) {

@@ -13,7 +13,9 @@ const registerSchema = Joi.object({
   password: Joi.string().min(8).required(),
   name: Joi.string().trim().required(),
   organizationName: Joi.string().trim().required(),
-  phoneNumber: Joi.string().trim().required(),
+  phoneNumber: Joi.string().pattern(/^\d{10}$/).trim().required().messages({
+    'string.pattern.base': 'Phone number must be exactly 10 digits',
+  }),
 });
 
 const changePasswordSchema = Joi.object({

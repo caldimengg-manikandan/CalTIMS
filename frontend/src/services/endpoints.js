@@ -7,6 +7,8 @@ export const authAPI = {
   changePassword: (data) => api.post('/auth/change-password', data),
   forgotPassword: (data) => api.post('/auth/forgot-password', data),
   resetPassword: (token, data) => api.post(`/auth/reset-password/${token}`, data),
+  socialLogin: (data) => api.post('/auth/social-login', data),
+  completeOnboarding: (data) => api.post('/auth/onboarding', data),
 }
 
 export const userAPI = {

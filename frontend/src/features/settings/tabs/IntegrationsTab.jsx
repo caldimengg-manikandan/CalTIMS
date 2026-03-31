@@ -143,6 +143,7 @@ export default function IntegrationsTab() {
                                 <div className="relative group">
                                     <input
                                         type={app.field === 'apiKey' ? 'password' : 'text'}
+                                        autoComplete={app.field === 'apiKey' ? 'new-password' : 'off'}
                                         className="input w-full h-11 pr-10 font-mono text-xs font-bold bg-white dark:bg-black/20"
                                         placeholder={`Enter ${app.label}`}
                                         value={integrations[app.id][app.field]}
@@ -205,6 +206,7 @@ export default function IntegrationsTab() {
                                         <label className="text-[9px] font-black uppercase text-slate-500 mb-1 block">Artemis App Secret</label>
                                         <input 
                                             type="password" className="input h-9 text-xs" placeholder="Artemis Secret"
+                                            autoComplete="new-password"
                                             value={hardwareGateways.hikvision.appSecret}
                                             onChange={e => updHW('hikvision', 'appSecret', e.target.value)}
                                         />
@@ -221,6 +223,7 @@ export default function IntegrationsTab() {
                                         <label className="text-[9px] font-black uppercase text-slate-500 mb-1 block">Admin Password</label>
                                         <input 
                                             type="password" className="input h-9 text-xs" placeholder="••••••••"
+                                            autoComplete="new-password"
                                             value={hardwareGateways.hikvision.password}
                                             onChange={e => updHW('hikvision', 'password', e.target.value)}
                                         />

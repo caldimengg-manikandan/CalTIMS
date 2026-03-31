@@ -1,5 +1,6 @@
 'use strict';
 
+const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
@@ -33,34 +34,135 @@ const hashToken = (token) => crypto.createHash('sha256').update(token).digest('h
 
 
 const authService = {
-  /**
-   * Login user and return tokens
-   */
   async login({ email, password, macAddress, req }) {
-    const user = await User.findOne({ email, isActive: true })
-      .select('+password')
-      .populate('roleId');
+    const user = await User.findOne({ email }).select('+password').populate('roleId');
     if (!user || !(await user.comparePassword(password))) {
       throw new AppError('Invalid email or password', 401);
     }
 
-    // Update lastLogin on login
-    user.lastLogin = new Date();
-    const { accessToken, refreshToken } = generateTokens(user._id, user.role);
-    user.refreshTokenHash = hashToken(refreshToken);
-    await user.save({ validateBeforeSave: false });
+    if (!user.isActive) {
+      throw new AppError('Your account has been deactivated. Please contact your administrator.', 403);
+    }
 
     const subscription = await Subscription.findOne({ organizationId: user.organizationId });
 
-    // Log login activity
-    await logActivity({
-      userId: user._id,
-      organizationId: user.organizationId,
-      action: 'LOGIN',
-      req: req // Need to pass req from controller to service
-    });
+    return { user, subscription };
+  },
 
-    return { accessToken, refreshToken, user: user.toPublicJSON(), subscription };
+  /**
+   * Social Login (Google/Microsoft) with account linking
+   */
+  async socialLogin({ email, name, provider, req }) {
+    let user = await User.findOne({ email }).populate('roleId');
+
+    if (user) {
+      // Account linking: record provider if not already present in array
+      if (!user.providers.includes(provider)) {
+        user.providers.push(provider);
+      }
+    } else {
+      // Create new user with provider initialization
+      user = await User.create({
+        email,
+        name,
+        provider,
+        providers: [provider],
+        isOnboardingComplete: false,
+        isActive: true
+      });
+    }
+
+    if (user && !user.isActive) {
+      throw new AppError('Your account has been deactivated. Please contact your administrator.', 403);
+    }
+
+    return user;
+  },
+
+  /**
+   * Complete onboarding: Create Organization, Roles, Settings and link User
+   */
+  async completeOnboarding(userId, { organizationName, phoneNumber, req }) {
+    const session = await mongoose.startSession();
+    // Check if replica set is available for transactions
+    const isReplicaSet = !!(await mongoose.connection.db.admin().command({ isMaster: 1 })).setName;
+
+    if (isReplicaSet) session.startTransaction();
+
+    try {
+      const user = await User.findById(userId).session(isReplicaSet ? session : null);
+      if (!user) throw new AppError('User not found', 404);
+      if (user.isOnboardingComplete) throw new AppError('Onboarding already completed', 400);
+
+      // 1. Create Organization
+      const organization = (await Organization.create([{ name: organizationName }], { session }))[0];
+
+      // 2. Create Default Roles
+      const defaultRoles = [
+        {
+          name: 'Admin',
+          permissions: { all: { all: ['all'] } },
+          isSystemRole: true,
+        },
+        {
+          name: 'Employee',
+          permissions: { timesheets: { all: ['view', 'create', 'edit'] } },
+          isSystemRole: false,
+        },
+        {
+          name: 'Finance',
+          permissions: { payroll: { all: ['view', 'approve'] } },
+          isSystemRole: false,
+        }
+      ];
+
+      let adminRole;
+      for (const roleDef of defaultRoles) {
+        const r = (await Role.create([{ ...roleDef, organizationId: organization._id }], { session }))[0];
+        if (roleDef.name === 'Admin') adminRole = r;
+      }
+
+      // 3. Create Default Settings
+      await Settings.create([{
+        organizationId: organization._id,
+        organization: { companyName: organizationName },
+        branding: { organizationName: organizationName }
+      }], { session });
+
+      // 4. Update User
+      user.organizationId = organization._id;
+      user.role = ROLES.ADMIN;
+      user.roleId = adminRole._id;
+      user.phoneNumber = phoneNumber;
+      user.isOwner = true;
+      user.isOnboardingComplete = true;
+      await user.save({ session, validateBeforeSave: false });
+
+      // 5. Create Trial Subscription
+      await Subscription.create([{
+        organizationId: organization._id,
+        planType: 'TRIAL',
+        status: 'ACTIVE'
+      }], { session });
+
+      if (isReplicaSet) await session.commitTransaction();
+
+      // Log onboarding activity
+      await logActivity({
+        userId: user._id,
+        organizationId: organization._id,
+        action: 'ONBOARDING_COMPLETE',
+        details: { organizationName },
+        req
+      });
+
+      return user;
+    } catch (err) {
+      if (isReplicaSet) await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
   },
 
   /**
@@ -146,7 +248,11 @@ const authService = {
       organizationId: organization._id,
       role: ROLES.ADMIN,
       roleId: adminRole._id,
+      provider: 'local',
+      providers: ['local'],
       isActive: true,
+      isOnboardingComplete: true,
+      isOwner: true,
       lastLogin: new Date()
     });
 
@@ -165,17 +271,7 @@ const authService = {
       deviceFingerprint
     });
 
-    const { accessToken, refreshToken } = generateTokens(user._id, user.role);
-    user.refreshTokenHash = hashToken(refreshToken);
-    await user.save({ validateBeforeSave: false });
-
-    const publicUser = user.toPublicJSON();
-    if (user.roleId && user.roleId.permissions) {
-      publicUser.permissions = user.roleId.permissions;
-      publicUser.roleName = user.roleId.name;
-    }
-
-    // Log signup activity
+    // Log signup activity (using req for activity logger)
     await logActivity({
       userId: user._id,
       organizationId: organization._id,
@@ -184,10 +280,10 @@ const authService = {
         plan: 'TRIAL',
         organizationName
       },
-      req: { ip: ipAddress, headers: { 'user-agent': deviceFingerprint } } // Simplified req for signup
+      req: { ip: ipAddress, headers: { 'user-agent': deviceFingerprint } }
     });
 
-    return { accessToken, refreshToken, user: publicUser, subscription };
+    return { user, subscription };
   },
 
   /**
@@ -288,6 +384,46 @@ const authService = {
     user.refreshTokenHash = null;
     await user.save({ validateBeforeSave: false });
     return true;
+  },
+
+  /**
+   * Helper to generate tokens and update user state for any login method
+   */
+  async generateTokensForUser(user, req) {
+    if (!user || typeof user.save !== 'function') {
+      // If for some reason we get a plain object, we re-fetch from ID
+      // This is a safety net for the "save is not a function" error
+      const userId = user._id || user.id;
+      user = await User.findById(userId).populate('roleId');
+      if (!user) throw new AppError('User not found during token generation', 404);
+    }
+
+    if (!user.isActive) {
+      throw new AppError('Your account has been deactivated. Please contact your administrator.', 403);
+    }
+
+    user.lastLogin = new Date();
+    const { accessToken, refreshToken } = generateTokens(user._id, user.role);
+    user.refreshTokenHash = hashToken(refreshToken);
+    await user.save({ validateBeforeSave: false });
+
+    // Log login activity (Note: logActivity will only record if organizationId is present)
+    await logActivity({
+      userId: user._id,
+      organizationId: user.organizationId,
+      action: 'LOGIN',
+      req
+    });
+
+    const publicUser = user.toPublicJSON();
+    
+    // Add permissions if using a role model
+    if (user.roleId && user.roleId.permissions) {
+      publicUser.permissions = user.roleId.permissions;
+      publicUser.roleName = user.roleId.name;
+    }
+
+    return { accessToken, refreshToken, user: publicUser };
   },
 };
 

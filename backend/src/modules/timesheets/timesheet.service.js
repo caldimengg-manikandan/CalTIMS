@@ -284,13 +284,23 @@ const timesheetService = {
           ['annual', 'sick', 'casual', 'lop'].includes(r.category?.toLowerCase());
       });
 
-      const newWorkRows = rowsData.map(row => ({
-        projectId: row.projectId,
-        category: row.category || 'Development',
-        entries: row.entries
-      }));
+      // deduplicate rowsData to prevent duplicates being persisted
+      const seen = new Set();
+      const uniqueNewWorkRows = [];
+      for (const row of rowsData) {
+        const key = `${row.projectId}-${row.category || 'Development'}`;
+        if (seen.has(key)) {
+          throw new AppError(`Duplicate project and task category combination found. Each combination can only be added once per week.`, 400);
+        }
+        seen.add(key);
+        uniqueNewWorkRows.push({
+          projectId: row.projectId,
+          category: row.category || 'Development',
+          entries: row.entries
+        });
+      }
 
-      timesheet.rows = [...systemRows, ...newWorkRows];
+      timesheet.rows = [...systemRows, ...uniqueNewWorkRows];
 
       await this.validateLimits(timesheet);
       await timesheet.save();
@@ -343,13 +353,23 @@ const timesheetService = {
           ['annual', 'sick', 'casual', 'lop'].includes(r.category?.toLowerCase());
       });
 
-      const newWorkRows = rowsData.map(row => ({
-        projectId: row.projectId,
-        category: row.category || 'Development',
-        entries: row.entries
-      }));
+      // deduplicate rowsData to prevent duplicates being persisted
+      const seen = new Set();
+      const uniqueNewWorkRows = [];
+      for (const row of rowsData) {
+        const key = `${row.projectId}-${row.category || 'Development'}`;
+        if (seen.has(key)) {
+          throw new AppError(`Duplicate project and task category combination found. Each combination can only be added once per week.`, 400);
+        }
+        seen.add(key);
+        uniqueNewWorkRows.push({
+          projectId: row.projectId,
+          category: row.category || 'Development',
+          entries: row.entries
+        });
+      }
 
-      timesheet.rows = [...systemRows, ...newWorkRows];
+      timesheet.rows = [...systemRows, ...uniqueNewWorkRows];
 
       timesheet.status = TIMESHEET_STATUS.ADMIN_FILLED;
       timesheet.filledByAdmin = true;
@@ -507,12 +527,40 @@ const timesheetService = {
   },
 
   async bulkSubmit(dataArray, userId, organizationId) {
+    if (!dataArray.length) return [];
+
+    const settingsDoc = await Settings.findOne({ organizationId }).lean();
+    const tsPolicy = settingsDoc?.timesheet || {};
+    const { submissionDeadline = 'Friday 18:00' } = tsPolicy;
+    const wsd = settingsDoc?.general?.weekStartDay || 'monday';
+
+    // Restriction: Cannot submit current week's timesheet before the submission day
+    const today = new Date();
+    const currentWeekStart = getWeekStart(today, wsd);
+    
+    const daysMap = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
+    const targetDayName = (submissionDeadline || 'Friday').toLowerCase().split(' ')[0];
+    let targetDayIndex = daysMap[targetDayName] ?? 5; // Default Friday
+    let currentDayIndex = today.getDay();
+
+    // If week starts on Monday, treat Sunday (0) as 7 for proper comparison
+    if (wsd.toLowerCase() === 'monday') {
+      if (currentDayIndex === 0) currentDayIndex = 7;
+      if (targetDayIndex === 0) targetDayIndex = 7;
+    }
+
+    for (const data of dataArray) {
+      const ws = getWeekStart(data.weekStartDate, wsd);
+      if (ws.getTime() === currentWeekStart.getTime() && currentDayIndex < targetDayIndex) {
+        const formattedDay = targetDayName.charAt(0).toUpperCase() + targetDayName.slice(1);
+        throw new AppError(`Submission for the current week is restricted. Please submit on or after ${formattedDay}.`, 400);
+      }
+    }
+
     // Reuses bulkUpsert to save, then sets status to SUBMITTED
     const savedTimesheets = await this.bulkUpsert(dataArray, userId, organizationId);
 
     // ── Daily Hours Guardrail Enforcement on Submit ────────────────────────────
-    const settingsDoc = await Settings.findOne({ organizationId }).lean();
-    const tsPolicy = settingsDoc?.timesheet || {};
     const { minHoursPerDay = 0, maxHoursPerDay = 24, enforceMinHoursOnSubmit = false } = tsPolicy;
     const isWeekendWorkable = settingsDoc?.general?.isWeekendWorkable || false;
 
