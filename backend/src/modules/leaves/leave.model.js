@@ -83,8 +83,25 @@ const leaveSchema = new mongoose.Schema(
 leaveSchema.pre('save', async function (next) {
   if (this.leaveId || !this.isNew || !this.organizationId) return next();
   try {
-     const count = await this.constructor.countDocuments({ organizationId: this.organizationId });
-     this.leaveId = `LEV${String(count + 1).padStart(4, '0')}`;
+     const session = this.$session();
+     const count = await this.constructor.countDocuments(
+       { organizationId: this.organizationId },
+       { session }
+     );
+     
+     // Fetch organization to create a dynamic prefix
+     let prefix = 'LEV';
+     const org = await mongoose.model('Organization').findById(this.organizationId).select('name').session(session);
+     if (org && org.name) {
+       const cleanName = org.name.replace(/[^a-zA-Z0-9]/g, '');
+       if (cleanName.length >= 3) {
+         prefix = `${cleanName.substring(0, 3).toUpperCase()}-LEV`;
+       } else if (cleanName.length > 0) {
+         prefix = `${cleanName.toUpperCase()}-LEV`;
+       }
+     }
+     
+     this.leaveId = `${prefix}${String(count + 1).padStart(4, '0')}`;
      next();
   } catch (err) {
      next(err);

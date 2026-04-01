@@ -1,13 +1,13 @@
 import api from './api'
 
 export const authAPI = {
-  login: (data) => api.post('/auth/login', data),
-  register: (data) => api.post('/auth/register', data),
+  login: (data) => api.post('/auth/login', data, { skipToast: true }),
+  register: (data) => api.post('/auth/register', data, { skipToast: true }),
   logout: () => api.post('/auth/logout'),
   changePassword: (data) => api.post('/auth/change-password', data),
   forgotPassword: (data) => api.post('/auth/forgot-password', data),
   resetPassword: (token, data) => api.post(`/auth/reset-password/${token}`, data),
-  socialLogin: (data) => api.post('/auth/social-login', data),
+  socialLogin: (data) => api.post('/auth/social-login', data, { skipToast: true }),
   completeOnboarding: (data) => api.post('/auth/onboarding', data),
 }
 

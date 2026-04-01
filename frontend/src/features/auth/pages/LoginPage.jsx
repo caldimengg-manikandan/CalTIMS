@@ -50,7 +50,7 @@ export default function LoginPage() {
         },
         onError: (err) => {
             const message = err.response?.data?.message || 'Invalid email or password'
-            toast.error(message)
+            toast.error(message, { id: message })
             setError('email', { type: 'manual', message: 'Incorrect email' })
             setError('password', { type: 'manual', message: 'Incorrect password' })
         }

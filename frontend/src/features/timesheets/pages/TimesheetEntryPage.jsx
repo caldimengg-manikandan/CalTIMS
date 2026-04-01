@@ -502,6 +502,24 @@ export default function TimesheetEntryPage() {
                 throw new Error('Please enter some hours before submitting.')
             }
 
+            // Validate that no task/project row has zero total hours
+            const hasZeroHourProject = rows.some(r => {
+                if (r.isLeaveRow || isPermissionRow(r.taskType) || r.projectId === 'LEAVE-SYS') return false;
+                if (!r.projectId || r.taskType === 'Select Task') return false; 
+                
+                const total = r.dayHours.reduce((acc, time) => {
+                    if (!time || time === '-8' || time === '00:00') return acc;
+                    const [h, m] = time.split(':').map(Number);
+                    return acc + h + (m / 60);
+                }, 0);
+                
+                return total === 0;
+            });
+
+            if (hasZeroHourProject) {
+                throw new Error('Cannot submit timesheet with a project having 0 working hours. Please remove it or add hours.');
+            }
+
             // Future date validation
             const today = new Date();
             today.setHours(23, 59, 59, 999);

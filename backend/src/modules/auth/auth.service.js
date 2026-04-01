@@ -204,12 +204,20 @@ const authService = {
    */
   async register({ email, password, name, organizationName, phoneNumber, ipAddress, deviceFingerprint }) {
     // 1. Fail-fast duplicate checks (Outside transaction for performance and clarity)
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    const [existingEmail, existingPhone, existingOrg] = await Promise.all([
+      User.findOne({ email }),
+      User.findOne({ phoneNumber }),
+      Organization.findOne({ name: organizationName })
+    ]);
+
+    if (existingEmail) {
       throw new AppError('Email already registered. Please sign in instead.', 409);
     }
 
-    const existingOrg = await Organization.findOne({ name: organizationName });
+    if (existingPhone) {
+      throw new AppError('Phone number already registered. Please use another number.', 409);
+    }
+
     if (existingOrg) {
       throw new AppError('Organization name already taken. Please choose another.', 409);
     }
@@ -354,10 +362,14 @@ const authService = {
       return { user: result.user, subscription: result.subscription };
     } catch (err) {
       logger.error('Registration Transaction Failed:', err);
-      // Detailed error reporting
+      
+      // Detailed error reporting for MongoDB duplicate key errors
       if (err.code === 11000) {
-        throw new AppError('Conflict detected: Some data (Email or Phone) is already registered.', 409);
+        const field = Object.keys(err.keyValue || {})[0] || 'Some data';
+        const prettyField = field.charAt(0).toUpperCase() + field.slice(1);
+        throw new AppError(`Conflict detected: ${prettyField} is already registered or taken.`, 409);
       }
+      
       throw err;
     } finally {
       session.endSession();

@@ -49,15 +49,13 @@ export default function SignupPage() {
 
   const { mutate: signup, isPending } = useMutation({
     mutationFn: (data) => authAPI.register(data),
-    onSuccess: (res) => {
-      const { accessToken, refreshToken, user } = res.data.data
-      setAuth(user, accessToken, refreshToken)
-      toast.success('Account created! Welcome to CalTIMS.')
-      navigate('/dashboard', { replace: true })
+    onSuccess: () => {
+      toast.success('Account created successfully! Please log in.')
+      navigate('/login', { replace: true })
     },
     onError: (err) => {
       const message = err.response?.data?.message || 'Registration failed. Please try again.'
-      toast.error(message)
+      toast.error(message, { id: message })
     }
   })
 

@@ -59,6 +59,7 @@ const MyPayslips = lazy(() => import('@/features/payroll').then(m => ({ default:
 import { useFeatureAccess } from '@/hooks/useFeatureAccess'
 import { FEATURE_KEYS } from '@/constants/plans'
 import { useThemeStore } from '@/store/themeStore'
+import ToastLimit from '@/components/ui/ToastLimit'
 
 // ─── Protected Route Guard ───────────────────────────────────────────────────
 const ProtectedRoute = ({ children, roles, featureKey }) => {
@@ -172,6 +173,7 @@ export default function App() {
 
     return (
         <PageSuspense>
+            <ToastLimit limit={3} />
             <Routes>
                 {/* Public Landing Page / Redirect for Authed */}
                 <Route path="/" element={

@@ -555,6 +555,15 @@ const timesheetService = {
         const formattedDay = targetDayName.charAt(0).toUpperCase() + targetDayName.slice(1);
         throw new AppError(`Submission for the current week is restricted. Please submit on or after ${formattedDay}.`, 400);
       }
+
+      // Validate zero hours
+      const isSystemRow = !data.projectId || data.projectId === 'LEAVE-SYS' || data.category === 'Leave' || data.category === 'Holiday' || data.category === PERMISSION_MARKER;
+      if (!isSystemRow) {
+          const totalHours = data.entries?.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0) || 0;
+          if (totalHours === 0) {
+              throw new AppError('Cannot submit timesheet with a project having 0 working hours. Please remove it or add hours.', 400);
+          }
+      }
     }
 
     // Reuses bulkUpsert to save, then sets status to SUBMITTED
@@ -656,6 +665,18 @@ const timesheetService = {
 
     if (!isOwner && !isAdminOrManager) {
       throw new AppError('You do not have permission to submit this timesheet', 403);
+    }
+
+    // Validate zero hours
+    for (const row of ts.rows) {
+      const pId = row.projectId ? row.projectId.toString() : null;
+      const isSystemRow = !pId || pId === 'LEAVE-SYS' || row.category === 'Leave' || row.category === 'Holiday' || row.category === PERMISSION_MARKER;
+      if (!isSystemRow) {
+          const totalHours = row.entries?.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0) || 0;
+          if (totalHours === 0) {
+              throw new AppError('Cannot submit timesheet with a project having 0 working hours. Please remove it or add hours.', 400);
+          }
+      }
     }
 
     ts.status = TIMESHEET_STATUS.SUBMITTED;

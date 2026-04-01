@@ -22,7 +22,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       sparse: true,
       trim: true,
-      // No unique: true here to allow same IDs in different organizations
     },
     name: {
       type: String,
