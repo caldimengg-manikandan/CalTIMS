@@ -72,16 +72,15 @@ const processedPayrollSchema = new mongoose.Schema(
     grossYield: Number,
     liability: Number,
     netPay: Number,
-    status: {
-      type: String,
-      enum: ['Draft', 'Processing', 'Processed', 'Warning', 'Failed', 'Pending Approval', 'Approved', 'Paid', 'Locked', 'Completed'],
-      default: 'Draft',
+    isPaid: {
+      type: Boolean,
+      default: false,
       index: true
     },
-    paymentStatus: {
-      type: String,
-      enum: ['Pending', 'Initiated', 'Success', 'Failed'],
-      default: 'Pending',
+    paidAt: Date,
+    paidBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
     },
     paymentMethod: {
       type: String,
@@ -106,15 +105,17 @@ const processedPayrollSchema = new mongoose.Schema(
         pan: String,
         aadhaar: String,
     },
+    profileVersion: Number,
     processedAt: Date,
-    paidAt: Date,
     bankReference: String,
-    isLocked: { type: Boolean, default: false },
-    lockedAt: Date,
-    lockedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     isEmailSent: { type: Boolean, default: false },
     lastEmailSentAt: Date,
 
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
   },
   {
     timestamps: true,
@@ -123,6 +124,40 @@ const processedPayrollSchema = new mongoose.Schema(
 
 // Ensure only one processed entry per user/month/year per organization
 processedPayrollSchema.index({ organizationId: 1, user: 1, month: 1, year: 1 }, { unique: true });
+
+// --- Enterprise Schema-Level Immutability Locks ---
+processedPayrollSchema.pre('save', function(next) {
+    if (!this.isNew && this.isPaid) {
+        const modified = this.modifiedPaths() || [];
+        const allowed = ['isEmailSent', 'lastEmailSentAt'];
+        if (modified.some(p => !allowed.includes(p))) {
+            return next(new Error('Schema Error: Cannot edit a PAID ProcessedPayroll. Record is immutable.'));
+        }
+    }
+    next();
+});
+
+processedPayrollSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], async function(next) {
+    const update = this.getUpdate();
+    if (update.$set && update.$set.isPaid === true) return next();
+    
+    // Check if the record is already paid before applying update
+    const docs = await this.model.find(this.getQuery());
+    for (const doc of docs) {
+        if (doc.isPaid) {
+            if (update.$set) {
+                const keys = Object.keys(update.$set);
+                const allowed = ['isEmailSent', 'lastEmailSentAt'];
+                if (keys.some(k => !allowed.includes(k))) {
+                     return next(new Error('Schema Error: Failed direct mutation. PAID ProcessedBatches are immutable.'));
+                }
+            } else {
+                 return next(new Error('Schema Error: Failed direct mutation. PAID ProcessedBatches are immutable.'));
+            }
+        }
+    }
+    next();
+});
 
 const ProcessedPayroll = mongoose.model('ProcessedPayroll', processedPayrollSchema);
 

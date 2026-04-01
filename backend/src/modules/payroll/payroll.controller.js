@@ -69,21 +69,47 @@ exports.getStructureById = async (req, res, next) => {
 exports.createOrUpdateRoleStructure = async (req, res, next) => {
   try {
     const { _id, __v, createdAt, updatedAt, ...structureData } = req.body;
+    const organizationId = req.organizationId;
+    const now = new Date();
     
     // Clean up empty strings for component values
     if (structureData.earnings) {
-        structureData.earnings = structureData.earnings.map(e => ({ ...e, value: e.value === '' ? 0 : e.value }));
+        structureData.earnings = structureData.earnings.map(e => ({ ...e, value: e.value === '' ? 0 : e.value, organizationId }));
     }
     if (structureData.deductions) {
-        structureData.deductions = structureData.deductions.map(d => ({ ...d, value: d.value === '' ? 0 : d.value }));
+        structureData.deductions = structureData.deductions.map(d => ({ ...d, value: d.value === '' ? 0 : d.value, organizationId }));
     }
     
     let structure;
     if (_id) {
-       structure = await RoleSalaryStructure.findOneAndUpdate({ _id, organizationId: req.organizationId }, structureData, { new: true });
-       await auditService.log(req.user?.id, 'STRUCTURE_UPDATE', 'SalaryStructure', structure._id, structureData, 'SUCCESS', req.ip, req.organizationId);
+       // BANK-GRADE: Implementation of Append-Only Salary Structures
+       // 1. Find and close the current structure
+       const current = await RoleSalaryStructure.findOne({ _id, organizationId });
+       if (!current) return res.status(404).json({ success: false, message: 'Structure not found' });
+       
+       // Detect if anything actually changed before versioning
+       // (Simplified check for now: always version on edit for ironclad history)
+       current.effectiveTo = now;
+       current.isActive = false; // The old version is "archived" from new profile assignments
+       await current.save();
+
+       // 2. Create the new version
+       structure = await RoleSalaryStructure.create({ 
+           ...structureData, 
+           organizationId,
+           effectiveFrom: now,
+           isActive: true 
+       });
+
+       await auditService.log(req.user?.id, 'STRUCTURE_VERSION_CREATED', 'SalaryStructure', structure._id, { parentId: _id }, 'SUCCESS', req.ip, req.organizationId);
     } else {
-       structure = await RoleSalaryStructure.create({ ...structureData, organizationId: req.organizationId });
+       // New record
+       structure = await RoleSalaryStructure.create({ 
+           ...structureData, 
+           organizationId,
+           effectiveFrom: now,
+           isActive: true 
+       });
        await auditService.log(req.user?.id, 'STRUCTURE_CREATE', 'SalaryStructure', structure._id, structureData, 'SUCCESS', req.ip, req.organizationId);
     }
     res.status(200).json({ success: true, data: structure });
@@ -332,100 +358,20 @@ exports.savePayroll = async (req, res, next) => {
   }
 };
 
-exports.lockPayrollMonth = async (req, res, next) => {
-    // Legacy Alias for finalize
-    return exports.finalizePayroll(req, res, next);
-};
-
-exports.finalizePayroll = async (req, res, next) => {
-    // Legacy support for finalizing - now redirects to submitForApproval if HR
-    return exports.submitForApproval(req, res, next);
-};
-
-exports.submitForApproval = async (req, res, next) => {
-    try {
-        const { month, year } = req.body;
-        const organizationId = req.organizationId;
-        if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year required' });
-
-        const result = await payrollService.submitForApproval({
-            month: parseInt(month),
-            year: parseInt(year),
-            organizationId,
-            userId: req.user.id
-        });
-
-        await auditService.log(req.user?.id, 'SUBMIT_PAYROLL', 'Payroll', null, { month, year }, 'SUCCESS', req.ip, req.organizationId);
-        
-        res.status(200).json({ 
-            success: true, 
-            message: `Payroll for ${month}/${year} submitted for Finance approval.`,
-            data: result
-        });
-    } catch (err) {
-        next(err);
-    }
-};
-
-exports.approvePayroll = async (req, res, next) => {
-    try {
-        const { month, year } = req.body;
-        const organizationId = req.organizationId;
-        const result = await payrollService.approvePayroll({
-            month: parseInt(month),
-            year: parseInt(year),
-            organizationId,
-            userId: req.user.id
-        });
-
-        await auditService.log(req.user?.id, 'APPROVE_PAYROLL', 'Payroll', null, { month, year }, 'SUCCESS', req.ip, organizationId);
-
-        res.status(200).json({ 
-            success: true, 
-            message: `Payroll for ${month}/${year} approved by Finance.`,
-            data: result
-        });
-    } catch (err) {
-        next(err);
-    }
-};
-
-exports.reopenPayroll = async (req, res, next) => {
-    try {
-        const { month, year } = req.body;
-        const organizationId = req.organizationId;
-        const result = await payrollService.reopenPayroll({
-            month: parseInt(month),
-            year: parseInt(year),
-            organizationId,
-            userId: req.user.id
-        });
-
-        await auditService.log(req.user?.id, 'REOPEN_PAYROLL', 'Payroll', null, { month, year }, 'SUCCESS', req.ip, organizationId);
-
-        res.status(200).json({ 
-            success: true, 
-            message: `Payroll for ${month}/${year} reopened for corrections.`,
-            data: result
-        });
-    } catch (err) {
-        next(err);
-    }
-};
 
 exports.markAsPaid = async (req, res, next) => {
     try {
         const { month, year } = req.body;
         const organizationId = req.organizationId;
         
-        // 🛡️ DEFENSIVE VALIDATION: Explicitly check for 'disburse' permission as a backstop
+        // 🛡️ RBAC: Check for 'disburse' permission
         const settings = await Settings.findOne({ organizationId }).lean();
         const userRole = settings?.roles?.find(r => r.name.toLowerCase() === req.user.role?.toLowerCase());
         const hasDisbursePerm = userRole?.permissions?.['Payroll']?.['Payroll Engine']?.includes('disburse');
         const isAdmin = ['admin', 'super_admin'].includes(req.user.role?.toLowerCase());
 
         if (!isAdmin && !hasDisbursePerm) {
-            await auditService.log(req.user.id, 'UNAUTHORIZED_PAYMENT_ATTEMPT', 'Payroll', null, { month, year, role: req.user.role }, 'SECURITY_WARNING', req.ip, organizationId);
+            await auditService.log(req.user.id, 'UNAUTHORIZED_PAYMENT_ATTEMPT', 'Payroll', null, { month, year }, 'SECURITY_WARNING', req.ip, organizationId);
             return res.status(403).json({ 
                 success: false, 
                 message: 'Access Denied: You do not have the required "disburse" authority to mark payroll as paid.' 
@@ -436,10 +382,9 @@ exports.markAsPaid = async (req, res, next) => {
             month: parseInt(month),
             year: parseInt(year),
             organizationId,
-            processedBy: req.user.id
+            processedBy: req.user.id,
+            version: req.body.version // Pass version for Bank-Grade OCC
         });
-
-        await auditService.log(req.user?.id, 'MARK_AS_PAID', 'Payroll', null, { month, year }, 'SUCCESS', req.ip, organizationId);
 
         res.status(200).json({ 
             success: true, 
@@ -451,28 +396,6 @@ exports.markAsPaid = async (req, res, next) => {
     }
 };
 
-exports.hardLock = async (req, res, next) => {
-    try {
-        const { month, year } = req.body;
-        const organizationId = req.organizationId;
-        const result = await payrollService.hardLockMonth({
-            month: parseInt(month),
-            year: parseInt(year),
-            organizationId,
-            lockedBy: req.user.id
-        });
-
-        await auditService.log(req.user?.id, 'HARD_LOCK', 'Payroll', null, { month, year }, 'SUCCESS', req.ip, organizationId);
-
-        res.status(200).json({ 
-            success: true, 
-            message: `Payroll for ${month}/${year} is now permanently LOCKED.`,
-            data: result
-        });
-    } catch (err) {
-        next(err);
-    }
-};
 
 exports.processBulk = async (req, res, next) => {
     // Enterprise Alias for savePayroll
@@ -561,15 +484,20 @@ exports.getPayslipByUserId = async (req, res, next) => {
 exports.exportBankFile = async (req, res, next) => {
   try {
     const { month, year } = req.query;
-    const history = await ProcessedPayroll.find({ month, year, organizationId: req.organizationId, status: 'Completed' }).populate('user');
+    const history = await ProcessedPayroll.find({ 
+        month: parseInt(month), 
+        year: parseInt(year), 
+        organizationId: req.organizationId, 
+        isPaid: true 
+    }).populate('user');
     
     const exportData = history.map(p => ({
-      employeeId: p.user.employeeId,
-      name: p.user.name,
-      bankName: p.user.bankName,
-      accountNumber: p.user.accountNumber,
-      ifsc: p.user.ifscCode,
-      netPay: p.breakdown.netPay
+      employeeId: p.user?.employeeId,
+      name: p.user?.name,
+      bankName: p.user?.bankName,
+      accountNumber: p.user?.accountNumber,
+      ifsc: p.user?.ifscCode,
+      netPay: p.breakdown?.netPay || p.netPay
     }));
 
     res.status(200).json({ success: true, data: exportData });
@@ -611,13 +539,6 @@ exports.downloadPayslipPDF = async (req, res, next) => {
     
     if (!payroll) {
         return res.status(404).json({ success: false, message: 'Payslip record not found' });
-    }
-
-    if (!['Processed', 'Warning', 'Completed', 'Paid'].includes(payroll.status)) {
-        return res.status(400).json({ 
-            success: false, 
-            message: 'Payslip is not yet finalized. Status must be Processed, Completed or Paid.' 
-        });
     }
 
     const settings = await Settings.findOne();
@@ -673,38 +594,24 @@ exports.bulkSendPayslipEmails = async (req, res, next) => {
     if (!ids || !ids.length) return res.status(400).json({ success: false, message: 'No payslips selected' });
 
     const organizationId = req.organizationId;
-    const payrolls = await ProcessedPayroll.find({ _id: { $in: ids }, organizationId }).populate('user');
-    const settings = await Settings.findOne({ organizationId });
     
-    const bulkData = payrolls.map(p => ({
-        email: p.user?.email || p.employeeInfo?.email,
-        data: _mapPayrollToReportData(p, settings)
-    })).filter(x => x.email);
-
-    const bulkResults = await emailService.sendPayslipsBulk(bulkData);
-    
-    // Update database for all successful ones
-    if (bulkResults.sent > 0) {
-        const failedEmails = new Set(bulkResults.errors.map(e => e.email));
-        const successfulIds = payrolls
-            .filter(p => !failedEmails.has(p.user?.email || p.employeeInfo?.email))
-            .map(p => p._id);
-        
-        if (successfulIds.length > 0) {
-            await ProcessedPayroll.updateMany(
-                { _id: { $in: successfulIds } },
-                { $set: { isEmailSent: true, lastEmailSentAt: new Date() } }
-            );
-        }
-    }
+    // BANK-GRADE: Instead of blocking the request for a long email loop,
+    // we queue the job for background fault-tolerant processing.
+    const PayrollJob = require('./payrollJob.model');
+    const job = await PayrollJob.create({
+        organizationId,
+        type: 'SEND_PAYSLIP_EMAILS',
+        payload: { ids, organizationId },
+        priority: 10
+    });
     
     res.status(200).json({ 
         success: true, 
-        message: `${bulkResults.sent} payslips dispatched successfully, ${bulkResults.failed} failures.`,
-        data: bulkResults 
+        message: 'Your request to email payslips has been queued for background processing.',
+        data: { jobId: job._id }
     });
   } catch (err) {
-    logger.error(`[PayrollController] Fatal error in bulk dispatch: ${err.message}`, { stack: err.stack });
+    logger.error(`[PayrollController] Background job creation failed: ${err.message}`, { stack: err.stack });
     next(err);
   }
 };

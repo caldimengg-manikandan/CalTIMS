@@ -53,14 +53,30 @@ const salaryStructureSchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    /** Append-Only Effective Dating */
+    effectiveFrom: {
+      type: Date,
+      default: Date.now,
+      index: true
+    },
+    effectiveTo: {
+      type: Date,
+      default: null,
+    },
+    /** Soft Delete Strategy */
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Unique name per organization
-salaryStructureSchema.index({ organizationId: 1, name: 1 }, { unique: true });
+// Updated Index to support versioning. name is only unique for the same period.
+salaryStructureSchema.index({ organizationId: 1, name: 1, effectiveFrom: 1 }, { unique: true });
 
 const RoleSalaryStructure = mongoose.model('RoleSalaryStructure', salaryStructureSchema);
 

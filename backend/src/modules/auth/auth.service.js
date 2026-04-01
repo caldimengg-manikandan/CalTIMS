@@ -204,10 +204,11 @@ const authService = {
    */
   async register({ email, password, name, organizationName, phoneNumber, ipAddress, deviceFingerprint }) {
     // 1. Fail-fast duplicate checks (Outside transaction for performance and clarity)
+    // Use case-insensitive checks for email and organization name
     const [existingEmail, existingPhone, existingOrg] = await Promise.all([
-      User.findOne({ email }),
+      User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } }),
       User.findOne({ phoneNumber }),
-      Organization.findOne({ name: organizationName })
+      Organization.findOne({ name: { $regex: new RegExp(`^${organizationName}$`, 'i') } })
     ]);
 
     if (existingEmail) {
@@ -231,12 +232,16 @@ const authService = {
       const executeRegistration = async () => {
         // 2. Trial Abuse Prevention (Inside transaction for strict safety)
         const existingTrial = await TrialTracking.findOne({
-          $or: [{ email }, { phoneNumber }]
+          $or: [
+            { email: { $regex: new RegExp(`^${email}$`, 'i') } },
+            { phoneNumber }
+          ]
         }).session(isReplicaSet ? session : null);
 
         if (existingTrial) {
           throw new AppError('You have already used your free trial.', 400);
         }
+// ... [rest of the function omitted for brevity in instruction, will be handled by tool]
 
         // 3. Create Organization
         logger.info(`Creating organization: ${organizationName}`);
@@ -363,11 +368,17 @@ const authService = {
     } catch (err) {
       logger.error('Registration Transaction Failed:', err);
       
-      // Detailed error reporting for MongoDB duplicate key errors
+      // Detailed error reporting for MongoDB duplicate key errors (code 11000)
       if (err.code === 11000) {
-        const field = Object.keys(err.keyValue || {})[0] || 'Some data';
-        const prettyField = field.charAt(0).toUpperCase() + field.slice(1);
-        throw new AppError(`Conflict detected: ${prettyField} is already registered or taken.`, 409);
+        const field = Object.keys(err.keyValue || {})[0] || 'some data';
+        let friendlyField = field.charAt(0).toUpperCase() + field.slice(1);
+        
+        // Specialize for organization name
+        if (field === 'name') friendlyField = 'Organization name';
+        if (field === 'email') friendlyField = 'Work Email';
+        if (field === 'phoneNumber') friendlyField = 'Phone Number';
+
+        throw new AppError(`Conflict detected: ${friendlyField} is already registered or taken.`, 409);
       }
       
       throw err;

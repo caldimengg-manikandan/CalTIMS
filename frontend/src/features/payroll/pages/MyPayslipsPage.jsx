@@ -164,7 +164,7 @@ export default function MyPayslipsPage() {
                         { label: 'Net Pay', value: payslip?.breakdown?.netPay, icon: Wallet, color: 'text-primary-600', bg: 'bg-primary-50 dark:bg-primary-500/10' },
                         { label: 'Gross Pay', value: payslip?.breakdown?.earnings?.grossEarnings, icon: FileText, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
                         { label: 'Total Deductions', value: payslip?.breakdown?.deductions?.totalDeductions, icon: TrendingDown, color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-500/10' },
-                        { label: 'Status', value: payslip?.status || 'Pending', icon: CheckCircle2, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-500/10', isStatus: true },
+                        { label: 'Status', value: payslip?.isPaid ? 'Paid' : 'Pending', icon: CheckCircle2, color: payslip?.isPaid ? 'text-emerald-600' : 'text-amber-600', bg: payslip?.isPaid ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-amber-50 dark:bg-amber-500/10', isStatus: true },
                     ].map((card, i) => (
                         <div key={i} className="bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 p-6 rounded-2xl flex items-center justify-between transition-all hover:shadow-lg hover:-translate-y-1 group">
                             <div className="space-y-1">
@@ -316,9 +316,9 @@ export default function MyPayslipsPage() {
                                         <td className="px-10 py-6">
                                             <span className={clsx(
                                                 "text-[10px] font-black tracking-widest px-3 py-1 rounded-full uppercase",
-                                                h.status === 'Completed' || h.status === 'Paid' ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                                                h.isPaid ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
                                             )}>
-                                                {h.status}
+                                                {h.isPaid ? 'Paid' : 'Pending'}
                                             </span>
                                         </td>
                                         <td className="px-10 py-6 text-right">

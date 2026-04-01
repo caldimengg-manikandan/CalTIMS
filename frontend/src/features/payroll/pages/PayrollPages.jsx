@@ -478,7 +478,17 @@ export const EmployeePayrollProfiles = () => {
          // Payroll Status Logic
          let payrollStatus = 'Not Configured';
          if (profile) {
-            payrollStatus = profile.isActive ? 'Active' : 'Error'; // Using Error for inactive if needed, or stick to Active/Error
+            // Check if there is an explicit or implicit salary structure link
+            const hasExplicitLink = !!profile.salaryStructureId;
+            const hasRoleFallback = profile.salaryMode === 'Role-Based' && 
+               structures?.some(s => s.name?.toLowerCase() === u.role?.toLowerCase() && s.type === 'Role-Based');
+
+            // A profile is in Error if it's active but has no identifiable salary structure
+            if (profile.isActive && !hasExplicitLink && !hasRoleFallback) {
+               payrollStatus = 'Error';
+            } else {
+               payrollStatus = profile.isActive ? 'Active' : 'Inactive';
+            }
          }
 
          return {
@@ -995,9 +1005,10 @@ export const EmployeePayrollProfiles = () => {
                   </div>
 
                   <div className="p-6 border-t border-slate-100 flex gap-4 bg-white sticky bottom-0">
-                     <button
+                      <button
+                        disabled={formData.salaryMode === 'Employee-Based' && !formData.salaryStructureId}
                         onClick={() => profileMutation.mutate({ userId: selectedUser._id, ...formData })}
-                        className="flex-1 bg-indigo-600 text-white hover:bg-indigo-700 py-4 rounded-xl font-black text-sm transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
+                        className="flex-1 bg-indigo-600 text-white hover:bg-indigo-700 py-4 rounded-xl font-black text-sm transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                      >
                         <Check size={18} /> Save
                      </button>

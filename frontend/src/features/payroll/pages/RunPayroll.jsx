@@ -17,34 +17,6 @@ import { useSettingsStore } from '@/store/settingsStore';
 
 const COLORS = ['#4f46e5', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6'];
 
-const ApprovalTimeline = ({ approvals, status }) => {
-    const steps = [
-        { key: 'hr', label: 'HR', icon: Users, approved: approvals?.hrApproved },
-        { key: 'finance', label: 'Finance', icon: ShieldCheck, approved: approvals?.financeApproved },
-        { key: 'admin', label: 'Admin', icon: Lock, approved: approvals?.adminApproved },
-    ];
-
-    return (
-        <div className="flex items-center gap-6 py-2">
-            {steps.map((step, i) => (
-                <React.Fragment key={step.key}>
-                    <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${step.approved ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-100' : 'bg-slate-100 text-slate-400'}`}>
-                            {step.approved ? <Check size={16} strokeWidth={3} /> : <step.icon size={16} />}
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">{step.label}</p>
-                            <p className={`text-xs font-bold ${step.approved ? 'text-emerald-600' : 'text-slate-500'}`}>
-                                {step.approved ? 'Verified' : 'Waiting...'}
-                            </p>
-                        </div>
-                    </div>
-                    {i < steps.length - 1 && <div className={`h-px w-8 ${steps[i+1].approved ? 'bg-emerald-500' : 'bg-slate-200'}`} />}
-                </React.Fragment>
-            ))}
-        </div>
-    );
-};
 
 const RunPayroll = () => {
     const { user: currentUser } = useAuthStore();
@@ -99,18 +71,15 @@ const RunPayroll = () => {
 
     const historyData = historyRes?.data || [];
     const batch = dashboardRes?.batch || null;
-    const currentStatus = batch?.status || 'Draft';
+    const isPaid = batch?.isPaid || false;
+    const currentStatus = isPaid ? 'Paid' : (historyData.length > 0 ? 'Calculated' : 'Draft');
     
     // Derivations & Status
     const hasData = historyData.length > 0;
-    const isProcessed = currentStatus === 'Processed' || currentStatus === 'Warning';
-    const isPendingApproval = currentStatus === 'Pending Approval';
-    const isApproved = currentStatus === 'Approved';
-    const isPaid = currentStatus === 'Paid';
-    const isLocked = currentStatus === 'Locked';
+    const isLocked = isPaid; // After payment, it's effectively locked
     
     const departments = ['All', ...new Set(historyData.map(d => d.employeeInfo?.department || d.user?.department).filter(Boolean))];
-    const statuses = ['All', 'Draft', 'Processing', 'Processed', 'Completed', 'Paid', 'Locked', 'Failed', 'Warning'];
+    const statuses = ['All', 'Paid', 'Unpaid'];
 
     // Primary Analytics
     const totalGross = historyData.reduce((acc, curr) => acc + (curr.grossYield || 0), 0);
@@ -123,7 +92,7 @@ const RunPayroll = () => {
     const netPays = historyData.map(d => d.breakdown?.netPay || 0).filter(n => n > 0);
     const highestPaid = netPays.length > 0 ? Math.max(...netPays) : 0;
     const lowestPaid = netPays.length > 0 ? Math.min(...netPays) : 0;
-    const failedCount = historyData.filter(d => d.status === 'Failed' || (d.breakdown?.executionLog || []).some(log => log.error)).length;
+    const failedCount = historyData.filter(d => (d.breakdown?.executionLog || []).some(log => log.error)).length;
 
     // Chart Computations
     const deptCostData = useMemo(() => {
@@ -159,7 +128,8 @@ const RunPayroll = () => {
                 d.user?.name?.toLowerCase().includes(search.toLowerCase()) || 
                 d.user?.employeeId?.toLowerCase().includes(search.toLowerCase());
             const matchesDept = filterDept === 'All' || d.user?.department === filterDept;
-            const matchesStatus = filterStatus === 'All' || d.status === filterStatus;
+            const matchesStatus = filterStatus === 'All' || 
+                (filterStatus === 'Paid' ? d.isPaid : !d.isPaid);
             const matchesLop = !filterLop || (d.attendance?.lopDays > 0);
             return matchesSearch && matchesDept && matchesStatus && matchesLop;
         });
@@ -196,25 +166,6 @@ const RunPayroll = () => {
         onError: (err) => toast.error(err.response?.data?.message || err.message)
     });
 
-    const finalizeMutation = useMutation({
-        mutationFn: () => payrollAPI.submitApproval({ month, year }),
-        onSuccess: (res) => {
-             queryClient.invalidateQueries({ queryKey: ['payrollHistory'] });
-             queryClient.invalidateQueries({ queryKey: ['payrollDashboard'] });
-             toast.success("Payroll results submitted for Finance approval!");
-        },
-        onError: (err) => toast.error(err.response?.data?.message || err.message)
-    });
-
-    const approveMutation = useMutation({
-        mutationFn: () => payrollAPI.approve({ month, year }),
-        onSuccess: (res) => {
-             queryClient.invalidateQueries({ queryKey: ['payrollHistory'] });
-             queryClient.invalidateQueries({ queryKey: ['payrollDashboard'] });
-             toast.success("Payroll successfully approved by Finance!");
-        },
-        onError: (err) => toast.error(err.response?.data?.message || err.message)
-    });
 
     const markPaidMutation = useMutation({
         mutationFn: (params) => payrollAPI.markPaid({ month, year, ...params }),
@@ -226,25 +177,6 @@ const RunPayroll = () => {
         onError: (err) => toast.error(err.response?.data?.message || err.message)
     });
 
-    const reopenMutation = useMutation({
-        mutationFn: () => payrollAPI.reopen({ month, year }),
-        onSuccess: (res) => {
-             queryClient.invalidateQueries({ queryKey: ['payrollHistory'] });
-             queryClient.invalidateQueries({ queryKey: ['payrollDashboard'] });
-             toast.success("Payroll reopened for HR corrections!");
-        },
-        onError: (err) => toast.error(err.response?.data?.message || err.message)
-    });
-
-    const hardLockMutation = useMutation({
-        mutationFn: () => payrollAPI.hardLock({ month, year }),
-        onSuccess: (res) => {
-             queryClient.invalidateQueries({ queryKey: ['payrollHistory'] });
-             queryClient.invalidateQueries({ queryKey: ['payrollDashboard'] });
-             toast.success("Period hard-locked for audit compliance!");
-        },
-        onError: (err) => toast.error(err.response?.data?.message || err.message)
-    });
 
     // Template Selection
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -333,28 +265,6 @@ const RunPayroll = () => {
 
     return (
         <div className="p-10 max-w-[1600px] mx-auto space-y-10">
-            {/* Header Section *                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                        <div className="space-y-1">
-                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">Enterprise Payroll Console</h1>
-                            <p className="text-slate-500 font-medium flex items-center gap-2 text-sm">
-                                <Clock size={16} className="text-indigo-500" />
-                                Reporting Period: 
-                                <span className="text-indigo-600 font-bold underline decoration-indigo-200 underline-offset-4 ml-1">
-                                    {new Date(year, month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}
-                                </span>
-                            </p>
-                        </div>
-                        
-                        <div className="flex flex-col sm:flex-row items-center gap-6">
-                            <ApprovalTimeline approvals={batch?.approvals} status={currentStatus} />
-                            
-                            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                                <button className="p-2.5 bg-white shadow-sm rounded-lg text-slate-600 hover:text-indigo-600 transition-colors">
-                                    <DownloadCloud size={20} />
-                                </button>
-                                {isAdmin && (isProcessed || isPendingApproval || isApproved) && (
-                                    <button 
-                                        onClick={() => reopenMutation.mutate()}
             {/* Header Section */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 bg-white dark:bg-slate-800 p-8 rounded-[32px] border border-slate-200/60 dark:border-white/5 shadow-subtle overflow-hidden relative group">
                 <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform pointer-events-none">
@@ -368,8 +278,8 @@ const RunPayroll = () => {
                         <div className="flex items-center gap-3">
                             <h1 className="text-2xl font-black text-slate-900 dark:text-gray-100 tracking-tight">Enterprise Payroll Console</h1>
                             <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all 
-                                ${currentStatus === 'Locked' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-500/20'}`}>
-                                {currentStatus === 'Locked' ? 'Ledger Locked' : (hasData ? (historyData.some(h => h.status === 'Warning' || h.status === 'Failed') ? 'Anomalies Detected' : 'Simulation active') : 'Ready for Trace')}
+                                ${isPaid ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-500/20'}`}>
+                                {isPaid ? 'Ledger Finalized' : (hasData ? (historyData.some(h => (h.breakdown?.executionLog || []).some(log => log.error)) ? 'Anomalies Detected' : 'Calculation complete') : 'Ready for Trace')}
                             </span>
                         </div>
                         <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mt-1.5 flex items-center gap-2">
@@ -379,8 +289,6 @@ const RunPayroll = () => {
                 </div>
 
                 <div className="relative z-10 flex flex-wrap gap-4 items-center w-full md:w-auto">
-                    <ApprovalTimeline approvals={batch?.approvals} status={currentStatus} />
-                    
                     {!isLocked && (
                         <div className="flex bg-slate-50 dark:bg-slate-900/50 p-1.5 rounded-xl border border-slate-200/50 dark:border-white/5 items-center">
                             <select value={month} onChange={e => setMonth(Number(e.target.value))} className="bg-transparent px-3 py-1.5 text-[10px] font-black text-slate-600 dark:text-slate-400 outline-none cursor-pointer uppercase tracking-widest">
@@ -396,70 +304,9 @@ const RunPayroll = () => {
                             </select>
                         </div>
                     )}
-
-                    {(isAdmin || isHR || isFinance) && (currentStatus !== 'Draft' && currentStatus !== 'Locked') && (
-                        <button 
-                            onClick={() => reopenMutation.mutate()}
-                            disabled={reopenMutation.isPending}
-                            className="px-4 py-3 bg-white dark:bg-slate-800 border border-rose-100 dark:border-rose-500/20 text-rose-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center gap-2"
-                        >
-                            <RefreshCw size={14} className={reopenMutation.isPending ? 'animate-spin' : ''} />
-                            REOPEN
-                        </button>
-                    )}
                 </div>
             </div>
 
-            {/* Lifecycle Stepper */}
-            <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] border border-slate-200/60 dark:border-white/5 shadow-subtle">
-                <div className="flex justify-between items-center relative">
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-slate-100 dark:bg-slate-900 rounded-full z-0" />
-                    
-                    <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ 
-                            width: currentStatus === 'Draft' ? '0%' : 
-                                   currentStatus === 'Processed' ? '20%' :
-                                   currentStatus === 'Pending Approval' ? '40%' :
-                                   currentStatus === 'Approved' ? '60%' :
-                                   currentStatus === 'Paid' ? '80%' : '100%'
-                        }}
-                        className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-indigo-600 dark:bg-indigo-500 rounded-full z-10 transition-all duration-1000"
-                    />
-
-                    {[
-                        { key: 'Draft', label: 'Draft', icon: Play },
-                        { key: 'Processed', label: 'Calculated', icon: Calculator },
-                        { key: 'Pending Approval', label: 'Submitted', icon: Users },
-                        { key: 'Approved', label: 'Approved', icon: ShieldCheck },
-                        { key: 'Paid', label: 'Disbursed', icon: Wallet },
-                        { key: 'Locked', label: 'Archived', icon: Lock }
-                    ].map((step, idx) => {
-                        const stepOrder = ['Draft', 'Processed', 'Pending Approval', 'Approved', 'Paid', 'Locked'];
-                        const currentIdx = stepOrder.indexOf(currentStatus);
-                        const stepIdx = stepOrder.indexOf(step.key);
-                        
-                        const isDone = currentIdx > stepIdx || currentStatus === 'Locked';
-                        const isActive = currentIdx === stepIdx;
-                        
-                        return (
-                            <div key={step.key} className="relative z-20 flex flex-col items-center gap-3">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 border-4 
-                                    ${isDone ? 'bg-indigo-600 text-white border-indigo-100 dark:border-indigo-500/20 shadow-lg' : 
-                                      isActive ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border-indigo-600 dark:border-indigo-500 shadow-xl' : 
-                                      'bg-slate-50 dark:bg-slate-900 text-slate-300 dark:text-slate-600 border-slate-100 dark:border-white/5'}`}>
-                                    {isDone ? <Check size={20} strokeWidth={3} /> : <step.icon size={20} />}
-                                </div>
-                                <div className="text-center">
-                                    <p className={`text-[10px] font-black uppercase tracking-widest ${isActive ? 'text-indigo-600 dark:text-indigo-400' : isDone ? 'text-slate-900 dark:text-gray-100' : 'text-slate-400 dark:text-slate-600'}`}>
-                                        {step.label}
-                                    </p>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
 
             {/* KPI Section */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
@@ -556,42 +403,21 @@ const RunPayroll = () => {
                                 </div>
 
                                 <div className="flex items-center gap-3">
-                                    {currentStatus === 'Draft' && (isAdmin || isHR) && (
-                                        <button onClick={() => runMutation.mutate({ month, year, companyId: settings?.companyId })}
-                                            className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-base font-black transition-all shadow-xl shadow-indigo-200">
-                                            <Play size={20} fill="currentColor" /> EXECUTE WORKFORCE COMPUTE
-                                        </button>
-                                    )}
-
-                                    {(currentStatus === 'Processed' || currentStatus === 'Warning') && (isAdmin || isHR) && (
-                                        <button onClick={() => finalizeMutation.mutate({ month, year, companyId: settings?.companyId })}
-                                            className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-base font-black transition-all shadow-xl shadow-indigo-200">
-                                            <Send size={20} /> SUBMIT FOR FINANCE APPROVAL
-                                        </button>
-                                    )}
-
-                                    {currentStatus === 'Pending Approval' && (isAdmin || isFinance) && (
-                                        <button onClick={() => approveMutation.mutate({ month, year, companyId: settings?.companyId })}
-                                            className="flex items-center gap-2 px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-base font-black transition-all shadow-xl shadow-emerald-200">
-                                            <ShieldCheck size={20} /> APPROVE PAYROLL DISBURSEMENT
-                                        </button>
-                                    )}
-
-                                    {currentStatus === 'Approved' && isAdmin && (
+                                    {(isAdmin || isHR) && (
                                         <button 
-                                            onClick={() => readiness.issues.length > 0 ? setShowOverrideModal(true) : markPaidMutation.mutate({ month, year, companyId: settings?.companyId })}
-                                            className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-base font-black transition-all shadow-xl shadow-indigo-200"
-                                            title={readiness.issues.length > 0 ? `Warnings: ${readiness.issues.length} discrepancies detected` : ""}
-                                        >
-                                            {readiness.issues.length > 0 && <ShieldAlert size={20} className="animate-pulse" />}
-                                            EXECUTE PAYMENTS
+                                            onClick={handleRunUX}
+                                            disabled={isSimulating}
+                                            className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-base font-black transition-all shadow-xl shadow-indigo-200 disabled:opacity-50">
+                                            <Play size={20} fill="currentColor" /> {hasData ? 'RE-CALCULATE WORKFORCE COMPUTE' : 'EXECUTE WORKFORCE COMPUTE'}
                                         </button>
                                     )}
 
-                                    {currentStatus === 'Paid' && isAdmin && (
-                                        <button onClick={() => hardLockMutation.mutate({ month, year, companyId: settings?.companyId })}
-                                            className="flex items-center gap-2 px-8 py-4 bg-slate-900 hover:bg-black text-white rounded-2xl text-base font-black transition-all shadow-xl">
-                                            <Lock size={20} /> HARD-LOCK PERIOD
+                                    {!isPaid && hasData && isAdmin && (
+                                        <button 
+                                            onClick={() => readiness.issues.length > 0 ? setShowOverrideModal(true) : markPaidMutation.mutate({ month, year })}
+                                            className="flex items-center gap-2 px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-base font-black transition-all shadow-xl shadow-emerald-200"
+                                        >
+                                            <Wallet size={20} /> MARK AS PAID
                                         </button>
                                     )}
                                 </div>
@@ -666,10 +492,13 @@ const RunPayroll = () => {
                                                     </td>
                                                     <td className="px-8 py-5 text-center">
                                                         <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider inline-flex items-center gap-1.5 
-                                                            ${hasError || d.status === 'Warning' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                                            <div className={`w-1.5 h-1.5 rounded-full ${hasError || d.status === 'Warning' ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
-                                                            {hasError ? 'Fault Detonated' : d.status}
+                                                            ${d.isPaid ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                                                            <div className={`w-1.5 h-1.5 rounded-full ${d.isPaid ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                                                            {d.isPaid ? 'Paid' : 'Unpaid'}
                                                         </span>
+                                                        {hasError && (
+                                                            <div className="mt-1 text-[8px] font-black text-rose-500 uppercase">Engine Fault</div>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             );
@@ -758,11 +587,6 @@ const RunPayroll = () => {
                                 <p className="text-sm text-gray-500 font-medium">Engine Trace • {new Date(0, month-1).toLocaleString('default',{month:'long'})} {year}</p>
                             </div>
                             <div className="flex gap-3 items-center">
-                                {(['Processed', 'Warning', 'Completed', 'Paid'].includes(selectedUser.status)) && (
-                                    <button onClick={() => handleDownloadPayslip(selectedUser._id)} className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-blue-200 dark:border-blue-500/30">
-                                        <DownloadCloud size={14}/> PDF Payslip
-                                    </button>
-                                )}
                                 <button onClick={() => setSelectedUser(null)} className="p-2 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 transition-colors rounded-full">
                                     <X size={20} />
                                 </button>

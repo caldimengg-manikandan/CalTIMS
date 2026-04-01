@@ -33,12 +33,8 @@ router.post('/process/simulate', requireFeature('payroll'), payrollController.si
 router.post('/process/save', requireFeature('payroll'), checkPermission('Payroll', 'Payroll Engine', 'run'), payrollController.savePayroll);
 router.post('/process', requireFeature('payroll'), checkPermission('Payroll', 'Payroll Engine', 'run'), payrollController.savePayroll);
 
-// Approval Workflow
-router.post('/submit-approval', requireFeature('payroll'), checkPermission('Payroll', 'Payroll Engine', 'submit'), payrollController.submitForApproval);
-router.post('/approve', requireFeature('payroll'), checkPermission('Payroll', 'Payroll Engine', 'approve'), payrollController.approvePayroll);
-router.post('/reopen', requireFeature('payroll'), checkPermission('Payroll', 'Payroll Engine', 'approve'), payrollController.reopenPayroll);
+// Simplified Actions
 router.post('/mark-paid', requireFeature('payroll'), checkPermission('Payroll', 'Payroll Engine', 'disburse'), payrollController.markAsPaid);
-router.post('/hard-lock', requireFeature('payroll'), checkPermission('Payroll', 'Payroll Engine', 'approve'), payrollController.hardLock);
 router.get('/history', requireFeature('payroll'), checkPermission('Payroll', 'Execution Ledger', 'view'), payrollController.getPayrollHistory);
 
 // ─── Payslips ────────────────────────────────────────────────────────────────

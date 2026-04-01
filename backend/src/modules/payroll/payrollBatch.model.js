@@ -49,35 +49,18 @@ const payrollBatchSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['Draft', 'Processing', 'Processed', 'Warning', 'Failed', 'Pending Approval', 'Approved', 'Paid', 'Locked', 'Completed'],
-      default: 'Draft',
+      enum: ['Processing', 'Completed', 'Error'],
+      default: 'Completed',
       index: true
     },
-    approvals: {
-      hrApproved: { type: Boolean, default: false },
-      financeApproved: { type: Boolean, default: false },
-      adminApproved: { type: Boolean, default: false },
-      
-      approvedBy: {
-        hr: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-        finance: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-        admin: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
-      },
-      
-      timestamps: {
-        hr: Date,
-        finance: Date,
-        admin: Date
-      }
-    },
-    isLocked: {
+    isPaid: {
       type: Boolean,
       default: false,
     },
-    lockedAt: {
+    paidAt: {
       type: Date,
     },
-    lockedBy: {
+    paidBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
@@ -129,6 +112,11 @@ const payrollBatchSchema = new mongoose.Schema(
       of: Number,
       default: {},
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
   },
   {
     timestamps: true,
@@ -137,6 +125,28 @@ const payrollBatchSchema = new mongoose.Schema(
 
 // Unique per month/year per organization — upsert will update in-place on re-runs
 payrollBatchSchema.index({ organizationId: 1, month: 1, year: 1 }, { unique: true });
+
+// --- Enterprise Schema-Level Immutability Locks ---
+payrollBatchSchema.pre('save', function(next) {
+    if (!this.isNew && this.isPaid && this.isModified() && !this.isModified('isPaid')) {
+        return next(new Error('Schema Error: Cannot edit a PAID PayrollBatch. Record is immutable.'));
+    }
+    next();
+});
+
+payrollBatchSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], async function(next) {
+    const update = this.getUpdate();
+    if (update.$set && update.$set.isPaid === true) return next();
+    
+    // Check if the batch is already paid before applying update
+    const docs = await this.model.find(this.getQuery());
+    for (const doc of docs) {
+        if (doc.isPaid) {
+            return next(new Error('Schema Error: Failed direct mutation. PAID PayrollBatches are immutable.'));
+        }
+    }
+    next();
+});
 
 const PayrollBatch = mongoose.model('PayrollBatch', payrollBatchSchema);
 

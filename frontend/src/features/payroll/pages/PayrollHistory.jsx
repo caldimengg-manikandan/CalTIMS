@@ -82,7 +82,8 @@ const PayrollHistory = () => {
                 label.includes(searchTerm.toLowerCase()) ||
                 `${run.year}-${String(run.month).padStart(2, '0')}`.includes(searchTerm.toLowerCase());
             const matchesStatus =
-                statusFilter === 'all' || run.status.toLowerCase() === statusFilter.toLowerCase();
+                statusFilter === 'all' || 
+                (statusFilter === 'Paid' ? run.isPaid : !run.isPaid);
             return matchesSearch && matchesStatus;
         });
     }, [runs, searchTerm, statusFilter]);
@@ -132,19 +133,10 @@ const PayrollHistory = () => {
         },
     ], [selectedRun, runs, activeAudit]);
 
-    const getStatusStyles = (status) => {
-        switch (status) {
-            case 'Completed':
-            case 'Paid':
-                return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-            case 'Failed':
-                return 'bg-red-50 text-red-700 border-red-200';
-            case 'Draft':
-            case 'Processed':
-                return 'bg-blue-50 text-blue-700 border-blue-200';
-            default:
-                return 'bg-slate-50 text-slate-700 border-slate-200';
-        }
+    const getStatusStyles = (isPaid) => {
+        return isPaid 
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            : 'bg-amber-50 text-amber-700 border-amber-200';
     };
 
     const handleExport = (type) => {
@@ -323,11 +315,9 @@ const PayrollHistory = () => {
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
                                 >
-                                    <option value="all">All Statuses</option>
-                                    <option value="Completed">Completed</option>
+                                    <option value="all">All Cycles</option>
                                     <option value="Paid">Paid</option>
-                                    <option value="Failed">Failed</option>
-                                    <option value="Processed">Processed</option>
+                                    <option value="Unpaid">Unpaid</option>
                                 </select>
                             </div>
                         </div>
@@ -399,8 +389,8 @@ const PayrollHistory = () => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusStyles(run.status)}`}>
-                                                        {run.status}
+                                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusStyles(run.isPaid)}`}>
+                                                        {run.isPaid ? 'Paid' : 'Unpaid'}
                                                     </span>
                                                     {run.failedCount > 0 && (
                                                         <span className="text-[10px] font-bold text-rose-500">
@@ -511,8 +501,8 @@ const PayrollHistory = () => {
                                                     <p className="font-black text-slate-800 text-sm">
                                                         {currencySymbol}{formatCurrency(rec.breakdown?.netPay || 0)}
                                                     </p>
-                                                    <span className={`text-[9px] font-bold ${rec.status === 'Failed' ? 'text-red-500' : 'text-emerald-500'}`}>
-                                                        {rec.status}
+                                                    <span className={`text-[9px] font-bold ${rec.isPaid ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                                        {rec.isPaid ? 'Paid' : 'Unpaid'}
                                                     </span>
                                                 </div>
                                                 <button 

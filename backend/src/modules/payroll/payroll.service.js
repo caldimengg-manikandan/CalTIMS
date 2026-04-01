@@ -6,6 +6,7 @@ const PayrollProfile = require('./payrollProfile.model');
 const RoleSalaryStructure = require('./roleSalaryStructure.model');
 const ProcessedPayroll = require('./processedPayroll.model');
 const PayrollBatch = require('./payrollBatch.model');
+const PayrollLedger = require('./payrollLedger.model');
 const Settings = require('../settings/settings.model');
 const Timesheet = require('../timesheets/timesheet.model');
 const Leave = require('../leaves/leave.model');
@@ -150,8 +151,12 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
   // Calculate based on business rules: 
   // Paid leave -> dynamic hoursPerDay
   const totalHours = approvedHours + (paidLeaveDays * hoursPerDay);
-  // Timesheet hours -> payable days
-  const payableDays = totalHours / hoursPerDay;
+  
+  // BANK-GRADE FIX: If no timesheets are recorded, default to full working days minus LOP.
+  // This ensures fixed-salary employees (no timesheets) are still paid correctly.
+  const payableDays = (totalHours > 0 || paidLeaveDays > 0) 
+    ? (totalHours / hoursPerDay) 
+    : (workingDays - lopDays);
 
   const standardMonthlyHours = workingDays * hoursPerDay;
   let overtimeHours = 0;
@@ -166,7 +171,7 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
  * Pipeline Step 2: Calculate Salary
  * Returns earnings, deductions, grossEarnings, totalDeductions, netPay, lopDeduction
  */
-const calculateSalary = (policy, profile, attendance, contextData) => {
+const calculateSalary = (policy, profile, attendance, contextData, salaryStructure = null) => {
   const { userCTC, effectivePayrollType, totalDaysInMonth, startDate } = contextData;
   const { totalHours, payableDays, lopDays, overtimeHours, workingDays, hoursPerDay } = attendance;
 
@@ -191,8 +196,16 @@ const calculateSalary = (policy, profile, attendance, contextData) => {
   context.CTC = contextData.userCTC;
 
   if (effectivePayrollType === 'Monthly' || effectivePayrollType === 'Yearly') {
-    // 1. Calculate Earnings from Unified Policy
-    const earnings = policy.salaryComponents.filter(c => c.type === 'EARNING');
+    // 1. Calculate Earnings from Profile (or Structure/Policy if no profile components defined)
+    const earnings = (profile?.earnings?.length > 0)
+        ? profile.earnings
+        : (salaryStructure?.earnings?.length > 0) 
+            ? salaryStructure.earnings 
+            : policy.salaryComponents.filter(c => c.type === 'EARNING');
+    
+    // Add type EARNING to structure components if missing
+    earnings.forEach(e => { if(!e.type) e.type = 'EARNING'; });
+
     const orderedEarnings = resolveExecutionOrder(earnings);
 
     orderedEarnings.forEach(comp => {
@@ -306,9 +319,15 @@ const calculateSalary = (policy, profile, attendance, contextData) => {
         context.TDS = tdsVal;
     }
 
-    // 4. Other Deductions from Policy
-    const otherDeductions = policy.salaryComponents.filter(c => c.type === 'DEDUCTION' && !c.isStatutory);
-    otherDeductions.forEach(comp => {
+    // 4. Other Deductions from Profile/Policy/Structure
+    const structuralDeductions = (profile?.deductions?.length > 0)
+        ? profile.deductions
+        : (salaryStructure?.deductions?.length > 0)
+            ? salaryStructure.deductions
+            : policy.salaryComponents.filter(c => c.type === 'DEDUCTION' && !c.isStatutory);
+    
+    structuralDeductions.forEach(comp => {
+        if (!comp.type) comp.type = 'DEDUCTION';
         let val = 0;
         try {
             if (comp.condition && !evaluateCondition(comp.condition, context)) return;
@@ -376,8 +395,37 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
 
   const policy = await getPolicy(organizationId);
 
+  const payrollDate = new Date(year, month - 1, 1);
   let profile = await PayrollProfile.findOne({ user: userId, organizationId }).lean();
   
+  // Bank-Grade: Resolve Effective-Dated Salary Structure (Fallback if Profile is not yet migrated)
+  let salaryStructure = null;
+  if (!profile?.earnings?.length && !profile?.deductions?.length) {
+    if (profile?.salaryStructureId) {
+        const baseStructure = await RoleSalaryStructure.findById(profile.salaryStructureId).lean();
+        if (baseStructure) {
+            salaryStructure = await RoleSalaryStructure.findOne({
+                organizationId,
+                name: baseStructure.name,
+                isDeleted: false,
+                effectiveFrom: { $lte: payrollDate },
+                $or: [{ effectiveTo: null }, { effectiveTo: { $gte: payrollDate } }]
+            }).sort({ effectiveFrom: -1 }).lean();
+        }
+    } else if (profile?.salaryMode === 'Role-Based' && user.role) {
+        // Fallback: Resolve by Role Name if no direct ID is linked
+        salaryStructure = await RoleSalaryStructure.findOne({
+            organizationId,
+            name: user.role, 
+            type: 'Role-Based',
+            isDeleted: false,
+            isActive: true,
+            effectiveFrom: { $lte: payrollDate },
+            $or: [{ effectiveTo: null }, { effectiveTo: { $gte: payrollDate } }]
+        }).sort({ effectiveFrom: -1 }).lean();
+    }
+  }
+
   const effectivePayrollType = policy.attendance?.calculationBasis || profile?.payrollType || 'Monthly';
   
   let calcMonthlyCTC = profile?.monthlyCTC || 0;
@@ -401,8 +449,7 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
     startDate,
     user
   };
-  const breakdown = calculateSalary(policy, profile, attendance, contextData);
-
+  const breakdown = calculateSalary(policy, profile, attendance, contextData, salaryStructure);
   const { lopDays, approvedHours, workedDays, payableWeeks, overtimeHours } = attendance;
 
   return {
@@ -422,6 +469,7 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
       pan: user.pan,
       aadhaar: user.aadhaar
     },
+    profileVersion: profile?.profileVersion || 1,
     month,
     year,
     currencySymbol: policy.currencySymbol || '₹',
@@ -441,7 +489,7 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
 
 /**
  * Ensures a PayrollBatch exists for the given period.
- * Default status is 'Draft'.
+ * Default status is 'Completed'.
  */
 const ensureBatchExists = async (month, year, organizationId) => {
     let batch = await PayrollBatch.findOne({ month, year, organizationId });
@@ -450,169 +498,13 @@ const ensureBatchExists = async (month, year, organizationId) => {
             month,
             year,
             organizationId,
-            status: 'Draft',
+            status: 'Completed',
             executionSummary: `Cycle initialized for ${month}/${year}`
         });
     }
     return batch;
 };
 
-const lockPayroll = async (month, year, userId) => {
-    // Legacy support - internal alias
-    return await finalizePayroll({ month, year, processedBy: userId });
-};
-/**
- * HR Submits payroll for approval.
- * Moves status from 'Processed' to 'Pending Approval'.
- */
-const submitForApproval = async ({ month, year, organizationId, userId }) => {
-    const batch = await PayrollBatch.findOneAndUpdate(
-        { month, year, organizationId, status: 'Processed' },
-        { 
-            $set: { 
-                status: 'Pending Approval',
-                'approvals.hrApproved': true,
-                'approvals.approvedBy.hr': userId,
-                'approvals.timestamps.hr': new Date()
-            } 
-        },
-        { new: true }
-    );
-
-    if (!batch) {
-        const existing = await PayrollBatch.findOne({ month, year, companyId });
-        if (!existing) throw new Error('Payroll batch not found');
-        if (existing.status === 'Pending Approval') return existing; // Already submitted
-        throw new AppError(`Cannot submit for approval from ${existing.status} state. Must be Processed.`, 400);
-    }
-
-    await ProcessedPayroll.updateMany(
-        { month, year, organizationId },
-        { $set: { status: 'Pending Approval' } }
-    );
-
-    await auditService.log(userId, 'SUBMIT_PAYROLL_APPROVAL', 'PayrollBatch', batch._id, { month, year }, 'SUCCESS');
-
-    return batch;
-};
-
-/**
- * Finance Approves payroll.
- * Moves status from 'Pending Approval' to 'Approved'.
- */
-const approvePayroll = async ({ month, year, organizationId, userId }) => {
-    const batch = await PayrollBatch.findOneAndUpdate(
-        { month, year, organizationId, status: 'Pending Approval' },
-        { 
-            $set: { 
-                status: 'Approved',
-                'approvals.financeApproved': true,
-                'approvals.approvedBy.finance': userId,
-                'approvals.timestamps.finance': new Date()
-            } 
-        },
-        { new: true }
-    );
-
-    if (!batch) {
-        const existing = await PayrollBatch.findOne({ month, year, companyId });
-        if (!existing) throw new Error('Payroll batch not found');
-        if (existing.status === 'Approved') return existing; // Already approved
-        throw new AppError(`Cannot approve from ${existing.status} state. Must be Pending Approval.`, 400);
-    }
-
-    await ProcessedPayroll.updateMany(
-        { month, year, organizationId },
-        { $set: { status: 'Approved' } }
-    );
-
-    await auditService.log(userId, 'APPROVE_PAYROLL_FINANCE', 'PayrollBatch', batch._id, { month, year }, 'SUCCESS');
-
-    return batch;
-};
-
-/**
- * Admin Reopens payroll for corrections.
- * Resets status to 'Draft' or 'Processed'.
- */
-const reopenPayroll = async ({ month, year, organizationId, userId }) => {
-    const batch = await PayrollBatch.findOne({ month, year, organizationId });
-    if (!batch) throw new AppError('Payroll batch not found', 404);
-    if (batch.status === 'Locked') throw new AppError('Cannot reopen a locked period.', 400);
-
-    batch.status = 'Draft';
-    batch.approvals.hrApproved = false;
-    batch.approvals.financeApproved = false;
-    batch.approvals.adminApproved = false;
-    await batch.save();
-
-    await ProcessedPayroll.updateMany(
-        { month, year, organizationId },
-        { $set: { status: 'Draft' } }
-    );
-
-    await auditService.log(userId, 'REOPEN_PAYROLL', 'PayrollBatch', batch._id, { month, year }, 'WARNING');
-
-    return batch;
-};
-
-/**
- * Moves a payroll batch from PROCESSED to COMPLETED.
- * This locks individual employee records and creates the next month's DRAFT batch.
- */
-const finalizePayroll = async ({ month, year, organizationId, processedBy }) => {
-    const session = await mongoose.startSession();
-    const isReplicaSet = !!(await mongoose.connection.db.admin().command({ isMaster: 1 })).setName;
-
-    if (isReplicaSet) session.startTransaction();
-
-    try {
-        const batch = await PayrollBatch.findOne({ month, year, companyId }).session(isReplicaSet ? session : null);
-        if (!batch) throw new AppError('Payroll batch not found', 404);
-        if (batch.status !== 'Processed' && batch.status !== 'Warning' && batch.status !== 'Approved') {
-            throw new AppError(`Cannot finalize payroll in ${batch.status} state. Must be Processed or Approved first.`, 400);
-        }
-
-        // 1. Lock all processed records
-        await ProcessedPayroll.updateMany(
-            { month, year, organizationId },
-            { 
-                $set: { 
-                    status: 'Completed',
-                    isLocked: true, 
-                    lockedAt: new Date(),
-                    lockedBy: processedBy,
-                    organizationId
-                } 
-            },
-            { session }
-        );
-
-        // 2. Update Batch to Completed
-        batch.status = 'Completed';
-        batch.isLocked = true;
-        batch.lockedAt = new Date();
-        batch.lockedBy = processedBy;
-        await batch.save({ session });
-
-        // 3. Auto-create next month's DRAFT cycle
-        let nextMonth = month + 1;
-        let nextYear = year;
-        if (nextMonth > 12) {
-            nextMonth = 1;
-            nextYear += 1;
-        }
-        await ensureBatchExists(nextMonth, nextYear, organizationId);
-
-        if (isReplicaSet) await session.commitTransaction();
-        return batch;
-    } catch (err) {
-        if (isReplicaSet) await session.abortTransaction();
-        throw err;
-    } finally {
-        session.endSession();
-    }
-};
 
 /**
  * Central Payroll Execution Pipeline
@@ -628,16 +520,11 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
   try {
     logger.info(`Enterprise Payroll Execution Started - ${month}/${year}`);
     // 1. Lifecycle Check & Batch Update to PROCESSING
-    let batch = await ensureBatchExists(month, year, organizationId); // This creates if not exists, status 'Draft'
-    // Now, fetch it with the session and update its status
+    let batch = await ensureBatchExists(month, year, organizationId);
     batch = await PayrollBatch.findOne({ _id: batch._id }).session(isReplicaSet ? session : null);
 
-    if (batch.isLocked) {
-        throw new AppError(`Idempotency Lock: Payroll for ${month}/${year} is LOCKED. Re-runs prohibited.`, 400);
-    }
-
     batch.status = 'Processing';
-    batch.processedBy = processedBy; // Ensure processedBy is set
+    batch.processedBy = processedBy;
     await batch.save({ session });
 
     // 2. Fetch dependencies
@@ -646,6 +533,24 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
     const activeEmployees = await User.find(query).lean();
     if (!activeEmployees || activeEmployees.length === 0) {
         throw new Error('No active employees found for processing.');
+    }
+
+    // Safety: Find already paid records to skip
+    const paidRecords = await ProcessedPayroll.find({ 
+        month, 
+        year, 
+        organizationId, 
+        isPaid: true 
+    }).select('user').lean();
+    const paidUserIds = new Set(paidRecords.map(r => r.user.toString()));
+
+    const employeesToProcess = activeEmployees.filter(u => !paidUserIds.has(u._id.toString()));
+
+    if (employeesToProcess.length === 0) {
+        batch.status = 'Completed';
+        await batch.save({ session });
+        if (isReplicaSet) await session.commitTransaction();
+        return { success: true, message: 'All active employees for this period are already paid.', details: [] };
     }
 
     const settings = await Settings.findOne({ organizationId }).lean();
@@ -663,8 +568,8 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
     const batchErrors = [];
     let anomalyCount = 0;
 
-    // 4. Parallel Simulation (Read-only part)
-    const results = await Promise.all(activeEmployees.map(async (user) => {
+    // 4. Parallel Simulation
+    const results = await Promise.all(employeesToProcess.map(async (user) => {
         try {
             const payrollData = await simulateUserPayroll(user._id, month, year, organizationId);
             const hasAnomalies = payrollData.breakdown.executionLog.some(log => log.error);
@@ -693,7 +598,8 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
                 grossYield: Math.round((payrollData.breakdown.summary.gross || 0) * 100) / 100,
                 liability: Math.round((payrollData.breakdown.summary.deductions || 0) * 100) / 100,
                 netPay: Math.round((payrollData.breakdown.summary.net || 0) * 100) / 100,
-                status: hasAnomalies ? 'Warning' : 'Processed',
+                profileVersion: payrollData.profileVersion || 1,
+                isPaid: false,
                 processedAt: new Date(),
                 payslipTemplateId: payslipTemplateId || null,
                 employeeInfo: {
@@ -730,14 +636,12 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
         throw new Error(`Zero-record execution: ${batchErrors.length} critical failures prevented processing.`);
     }
 
-    // 6. Persistence within Transaction
-    await ProcessedPayroll.deleteMany({ month, year, organizationId }, { session });
+    // 6. Persistence within Transaction - Only delete non-paid records
+    await ProcessedPayroll.deleteMany({ month, year, organizationId, isPaid: false }, { session });
     const saved = await ProcessedPayroll.insertMany(payrollResults, { session });
     
-    // 7. Update Batch Final State (Processed)
-    const successCount = saved.length;
-    const failedCount = activeEmployees.length - successCount;
-    const finalBatchStatus = (failedCount > 0) ? 'Failed' : (anomalyCount > 0 ? 'Warning' : 'Processed');
+    // 7. Update Batch Final State
+    const finalBatchStatus = (batchErrors.length > 0) ? 'Error' : 'Completed';
 
     const departmentTotals = {};
     payrollResults.forEach(pr => {
@@ -745,35 +649,41 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
         departmentTotals[dept] = (departmentTotals[dept] || 0) + pr.netPay;
     });
 
-    batch.totalEmployees = successCount;
+    batch.totalEmployees = saved.length + paidUserIds.size;
     batch.totalGross = Math.round(summaryStats.totalGross * 100) / 100;
     batch.totalNet = Math.round(summaryStats.totalNetPay * 100) / 100;
     batch.totalDeductions = Math.round(summaryStats.totalDeductions * 100) / 100;
-    batch.failedCount = failedCount;
+    batch.failedCount = batchErrors.length;
     batch.status = finalBatchStatus;
     batch.processedAt = new Date();
     batch.processedBy = processedBy;
     batch.errors = batchErrors;
     batch.departmentDistribution = departmentTotals;
-    batch.executionSummary = `Enterprise run complete. ${successCount} successful, ${anomalyCount} warnings, ${failedCount} hard failures.`;
+    batch.executionSummary = `Enterprise run complete. ${saved.length} successful, ${anomalyCount} warnings, ${batchErrors.length} failures. ${paidUserIds.size} skipped (already paid).`;
     batch.organizationId = organizationId;
     
-    batch.audit = {
-        bankReconciliation: summaryStats.totalNetPay > 0 ? 'Verified' : 'Required',
-        taxCompliance: summaryStats.totalDeductions > 0 ? 'Verified' : 'Required',
-        varianceAnalysis: 'Pending',
-        discrepancies: failedCount + anomalyCount
-    };
-
     await batch.save({ session });
+
+    // Bank-Grade: Immutable Audit Ledger
+    await PayrollLedger.create([{
+        organizationId,
+        action: 'PAYROLL_RUN',
+        batchId: batch._id,
+        performedBy: processedBy,
+        metadata: {
+            employees: saved.length,
+            totalNet: summaryStats.totalNetPay,
+            errors: batchErrors.length
+        }
+    }], { session });
 
     if (isReplicaSet) await session.commitTransaction();
     logger.info(`[PAYROLL PIPELINE] Committed ${finalBatchStatus} for cycle ${month}/${year}`);
 
     return {
-        success: failedCount === 0,
+        success: batchErrors.length === 0,
         batchStatus: finalBatchStatus,
-        totalEmployeesProcessed: successCount,
+        totalEmployeesProcessed: saved.length,
         summaryStats,
         errors: batchErrors,
         details: payrollResults
@@ -798,11 +708,12 @@ const saveProcessedPayroll = async (payrollData, organizationId) => {
   const payrollConfig = settings?.payroll || {};
 
   const existingPayroll = await ProcessedPayroll.findOne({ user: userId, month: payrollData.month, year: payrollData.year, organizationId });
-  if (existingPayroll && existingPayroll.status === 'Completed' && !payrollData.forceUpdate) {
-      throw new Error(`Execution halted: Payroll for ${userData.name} is Locked and Completed. Modifications rejected.`);
+  
+  if (existingPayroll && existingPayroll.isPaid) {
+      throw new Error(`Execution halted: Payroll for ${userData.name} is ALREADY PAID. Modifications prohibited.`);
   }
 
-  // Instead of throwing error, we now update the existing record to allow re-processing
+  // Update or Create
   return await ProcessedPayroll.findOneAndUpdate(
     { user: userId, month: payrollData.month, year: payrollData.year, organizationId },
     { 
@@ -812,13 +723,9 @@ const saveProcessedPayroll = async (payrollData, organizationId) => {
       grossYield: payrollData.breakdown.summary ? payrollData.breakdown.summary.gross : (payrollData.breakdown.grossYield || 0),
       liability: payrollData.breakdown.summary ? payrollData.breakdown.summary.deductions : (payrollData.breakdown.liability || 0),
       netPay: payrollData.breakdown.summary ? payrollData.breakdown.summary.net : (payrollData.breakdown.netPay || 0),
-      status: payrollData.status || 'Completed', 
+      isPaid: false, 
       processedAt: new Date(),
       currencySymbol: payrollConfig.currencySymbol || '₹',
-      payslipTemplate: {
-          url: payrollConfig.payslipTemplateUrl || '',
-          templateType: payrollConfig.payslipTemplateType || 'Default'
-      },
       employeeInfo: {
         name: userData.name,
         employeeId: userData.employeeId,
@@ -926,7 +833,7 @@ const getPayrollDashboard = async (month, year, organizationId) => {
         totalEarnings: { $sum: "$grossYield" },
         totalDeductions: { $sum: "$liability" },
         processedEmployees: { $sum: 1 },
-        paidPayments: { $sum: { $cond: [{ $in: ["$status", ["Paid", "Completed"]] }, 1, 0] } },
+        paidPayments: { $sum: { $cond: ["$isPaid", 1, 0] } },
 
         tds: { $sum: { 
             $reduce: {
@@ -967,7 +874,7 @@ const getPayrollDashboard = async (month, year, organizationId) => {
   // Efficiently find users who have active profiles with structures
   const validProfileUserIds = await PayrollProfile.distinct("user", { 
     organizationId,
-    $or: [{ salaryStructureId: { $ne: null } }, { salaryMode: "Role-Based" }] 
+    salaryStructureId: { $ne: null } 
   });
   const usersWithMissingStructure = activeEmployeesCount - validProfileUserIds.length;
 
@@ -1205,61 +1112,55 @@ const getPayrollBatches = async (organizationId) => {
 /**
  * Marks a payroll batch as PAID.
  */
-const markAsPaid = async ({ month, year, organizationId, processedBy, isOverride }) => {
+const markAsPaid = async ({ month, year, organizationId, processedBy, version }) => {
+    let checkBatch = await PayrollBatch.findOne({ month, year, organizationId });
+    if (!checkBatch) throw new Error('Payroll batch not found');
+    if (checkBatch.isPaid) throw new Error('Payroll batch is already paid');
+
+    // Bank-Grade: Optimistic Concurrency Control (OCC)
+    // If version is provided, we ensure we are updating the document the user saw.
+    const query = { month, year, organizationId, isPaid: false };
+    if (typeof version !== 'undefined') {
+        query.__v = version;
+    }
+
     const batch = await PayrollBatch.findOneAndUpdate(
-        { month, year, organizationId, status: 'Approved' },
+        query,
         { 
             $set: { 
-                status: 'Paid',
-                'approvals.adminApproved': true,
-                'approvals.approvedBy.admin': processedBy,
-                'approvals.timestamps.admin': new Date()
+                isPaid: true,
+                paidAt: new Date(),
+                paidBy: processedBy
             } 
         },
         { new: true }
     );
 
     if (!batch) {
-        const existing = await PayrollBatch.findOne({ month, year, organizationId });
-        if (!existing) throw new Error('Payroll batch not found');
-        if (existing.status === 'Paid') return existing; // Already paid
-        throw new AppError(`Payroll must be Approved by Finance before marking as Paid. Current state: ${existing.status}`, 400);
+        throw new Error('Transaction Conflict: Payroll batch was modified by another process. Please refresh and try again.');
     }
 
-    // Auto-Cycle: Ensure next Month exists as Draft
-    let nextMonth = month + 1;
-    let nextYear = year;
-    if (nextMonth > 12) {
-        nextMonth = 1;
-        nextYear++;
-    }
-    await ensureBatchExists(nextMonth, nextYear, organizationId);
-    
     await ProcessedPayroll.updateMany(
-        { month, year, organizationId },
-        { $set: { status: 'Paid', paidAt: new Date() } }
+        { month, year, organizationId, isPaid: false },
+        { 
+            $set: { 
+                isPaid: true, 
+                paidAt: new Date(),
+                paidBy: processedBy
+            } 
+        }
     );
 
-    const auditAction = isOverride ? 'FORCE_DISBURSEMENT' : 'MARK_PAYROLL_PAID';
-    await auditService.log(processedBy, auditAction, 'PayrollBatch', batch._id, { month, year, isOverride }, 'SUCCESS', null, organizationId);
+    // Bank-Grade: Immutable Audit Ledger
+    await PayrollLedger.create({
+        organizationId,
+        action: 'PAYROLL_MARK_PAID',
+        batchId: batch._id,
+        performedBy: processedBy,
+        metadata: { month, year, totalNet: batch.totalNet }
+    });
 
-    return batch;
-};
-
-/**
- * Hard-locks a payroll month. No further changes possible.
- */
-const hardLockMonth = async ({ month, year, organizationId, lockedBy }) => {
-    const batch = await PayrollBatch.findOne({ month, year, organizationId });
-    if (!batch) throw new Error('Payroll batch not found');
-
-    batch.status = 'Locked';
-    batch.isLocked = true;
-    batch.lockedAt = new Date();
-    batch.lockedBy = lockedBy;
-    await batch.save();
-
-    await auditService.log(lockedBy, 'LOCK_PAYROLL_PERIOD', 'PayrollBatch', batch._id, { month, year }, 'SUCCESS', null, organizationId);
+    await auditService.log(processedBy, 'MARK_PAYROLL_PAID', 'PayrollBatch', batch._id, { month, year }, 'SUCCESS', null, organizationId);
 
     return batch;
 };
@@ -1267,13 +1168,7 @@ const hardLockMonth = async ({ month, year, organizationId, lockedBy }) => {
 module.exports = {
   simulateUserPayroll,
   saveProcessedPayroll,
-  lockPayroll: finalizePayroll,
-  finalizePayroll, // Keep for backward compatibility if needed
-  submitForApproval,
-  approvePayroll,
   markAsPaid,
-  hardLockMonth,
-  reopenPayroll,
   ensureBatchExists,
   getPayrollSummary,
   getDepartmentCostAnalysis,

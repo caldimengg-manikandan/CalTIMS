@@ -71,7 +71,7 @@ const migrateToUnifiedPolicy = async (organizationId = null) => {
     
     const migratedPolicy = {
       ...defaultPolicy,
-      companyId,
+      organizationId,
       statutory: {
         ...defaultPolicy.statutory,
         pf: {

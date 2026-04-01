@@ -16,12 +16,13 @@ const User = require('../users/user.model');
  */
 const log = async (userId, action, entity, entityId, metadata = {}, status = 'SUCCESS', ipAddress = '') => {
     try {
-        const user = await User.findById(userId).populate('roleId');
-        const roleName = user?.roleId?.name || user?.role || 'Unknown';
+        const user = await User.findById(userId);
+        const roleName = user?.role || 'Unknown';
         const userName = user?.name || 'System';
 
         const auditLog = await AuditLog.create({
             performedBy: userId,
+            organizationId: user?.organizationId, // Ensure mandatory org indexing
             action,
             role: roleName,
             entity,
@@ -34,6 +35,7 @@ const log = async (userId, action, entity, entityId, metadata = {}, status = 'SU
         // Emit real-time activity
         socketService.emit('activity', {
             _id: auditLog._id,
+            organizationId: user?.organizationId,
             action,
             user: userName,
             role: roleName,

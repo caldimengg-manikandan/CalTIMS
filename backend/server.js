@@ -180,6 +180,10 @@ const startServer = async () => {
     const templateService = require('./src/modules/payroll/payslipTemplate.service');
     await templateService.seedTemplates();
 
+    // BANK-GRADE: Start the Background Payroll Worker
+    const payrollWorker = require('./src/modules/payroll/payroll.worker');
+    payrollWorker.startWorker();
+
     const server = http.createServer(app);
     const socketService = require('./src/shared/services/socket.service');
     socketService.init(server);
