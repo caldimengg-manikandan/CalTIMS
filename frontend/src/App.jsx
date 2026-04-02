@@ -122,8 +122,16 @@ const PageSuspense = ({ children }) => (
 )
 
 export default function App() {
-    const { checkAuth, isAuthenticated, isHydrating: authHydrating, user } = useAuthStore()
-    const { fetchGeneralSettings, general, isLoading: settingsLoading } = useSettingsStore()
+    // Use selective subscriptions for better performance and to prevent re-renders on every state change
+    const checkAuth = useAuthStore(s => s.checkAuth)
+    const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+    const authHydrating = useAuthStore(s => s.isHydrating)
+    const user = useAuthStore(s => s.user)
+
+    const fetchGeneralSettings = useSettingsStore(s => s.fetchGeneralSettings)
+    const general = useSettingsStore(s => s.general)
+    const settingsLoading = useSettingsStore(s => s.isLoading)
+
     const { sidebarOpen } = useUIStore()
     const syncFromBranding = useThemeStore(s => s.syncFromBranding)
 
@@ -147,6 +155,7 @@ export default function App() {
             }
 
             // 2. Then fetch settings if we are authenticated
+            // We check getState() here to get the LATEST value after checkAuth finished
             if (useAuthStore.getState().isAuthenticated) {
                 await fetchGeneralSettings()
                 const branding = useSettingsStore.getState().general?.branding
@@ -155,6 +164,8 @@ export default function App() {
                 }
             }
         }
+
+        // Only run init once on mount. checkAuth and fetchSettings are stable.
         init()
     }, [checkAuth, fetchGeneralSettings, syncFromBranding])
 

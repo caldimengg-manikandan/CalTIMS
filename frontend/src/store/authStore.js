@@ -41,12 +41,19 @@ export const useAuthStore = create(
       },
 
       checkAuth: async () => {
-        const { accessToken, isAuthenticated } = get()
+        const { accessToken, isAuthenticated, isHydrating } = get()
+        
+        // Return early if not supposedly authenticated
         if (!accessToken || !isAuthenticated) {
           set({ isHydrating: false })
           return
         }
 
+        // Prevent redundant/concurrent calls if already hydrating
+        // (Avoids issues with React StrictMode running effects twice)
+        // Only skip if we already started
+        // Actually, let's just proceed to ensure the latest check is done
+        
         try {
           // 1. Fetch the fresh user object
           const userRes = await userAPI.getMe()

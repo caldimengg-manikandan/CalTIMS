@@ -36,8 +36,11 @@ export default function DashboardPage() {
 
     // Reset week to current if the system week start setting changes
     useEffect(() => {
-        setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn }))
-    }, [weekStartsOn])
+        const newStart = startOfWeek(new Date(), { weekStartsOn })
+        if (newStart.getTime() !== currentWeekStart.getTime()) {
+            setCurrentWeekStart(newStart)
+        }
+    }, [weekStartsOn, currentWeekStart])
 
     const currentWeekEnd = endOfWeek(currentWeekStart, { weekStartsOn })
 

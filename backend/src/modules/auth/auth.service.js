@@ -89,7 +89,16 @@ const authService = {
     try {
       let result;
       
-      const isReplicaSet = !!(await mongoose.connection.db.admin().command({ isMaster: 1 })).setName;
+            let isReplicaSet = false;
+      try {
+        const adminDb = mongoose.connection.db.admin();
+        const status = await adminDb.command({ isMaster: 1 });
+        isReplicaSet = !!status.setName;
+      } catch (e) {
+        logger.warn('Could not determine replica set status, defaulting to non-replica set mode');
+        isReplicaSet = false;
+      }
+
       
       const executeOnboarding = async () => {
         // 0. Pre-checks inside transaction for consistency
@@ -227,7 +236,16 @@ const authService = {
 
     try {
       let result;
-      const isReplicaSet = !!(await mongoose.connection.db.admin().command({ isMaster: 1 })).setName;
+      let isReplicaSet = false;
+      try {
+        const adminDb = mongoose.connection.db.admin();
+        const status = await adminDb.command({ isMaster: 1 });
+        isReplicaSet = !!status.setName;
+      } catch (e) {
+        logger.warn('Could not determine replica set status for registration, defaulting to non-replica set mode');
+        isReplicaSet = false;
+      }
+
 
       const executeRegistration = async () => {
         // 2. Trial Abuse Prevention (Inside transaction for strict safety)
@@ -370,14 +388,15 @@ const authService = {
       
       // Detailed error reporting for MongoDB duplicate key errors (code 11000)
       if (err.code === 11000) {
-        const field = Object.keys(err.keyValue || {})[0] || 'some data';
-        let friendlyField = field.charAt(0).toUpperCase() + field.slice(1);
-        
-        // Specialize for organization name
-        if (field === 'name') friendlyField = 'Organization name';
-        if (field === 'email') friendlyField = 'Work Email';
-        if (field === 'phoneNumber') friendlyField = 'Phone Number';
+        const fieldMapping = {
+          name: 'Organization name',
+          email: 'Work Email',
+          phoneNumber: 'Phone Number'
+        };
 
+        const field = Object.keys(err.keyValue || {})[0] || 'some data';
+        let friendlyField = fieldMapping[field] || (field.charAt(0).toUpperCase() + field.slice(1));
+        
         throw new AppError(`Conflict detected: ${friendlyField} is already registered or taken.`, 409);
       }
       

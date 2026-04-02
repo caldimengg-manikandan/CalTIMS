@@ -69,6 +69,8 @@ api.interceptors.response.use(
 
       try {
         const { refreshToken } = useAuthStore.getState()
+        if (!refreshToken) throw new Error('No refresh token')
+
         const { data } = await axios.post('/api/v1/auth/refresh', { refreshToken })
         const { accessToken, refreshToken: newRefreshToken } = data.data
         useAuthStore.getState().setAccessToken(accessToken)
@@ -78,8 +80,16 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch (err) {
         processQueue(err, null)
+        
+        // --- Loop Prevention Fix ---
+        // 1. Clear state locally FIRST
         useAuthStore.getState().logout()
-        window.location.href = '/login'
+        localStorage.removeItem('timesheet-auth') // Explicit clear for persistence
+
+        // 2. Only redirect if NOT already at /login
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
         return Promise.reject(err)
       } finally {
         isRefreshing = false

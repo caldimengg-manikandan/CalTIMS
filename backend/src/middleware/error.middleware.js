@@ -9,8 +9,29 @@ const { HTTP_STATUS } = require('../constants');
  */
 const handleCastErrorDB = (err) => new AppError(`Invalid ${err.path}: ${err.value}`, 400);
 const handleDuplicateFieldsDB = (err) => {
-  const field = Object.keys(err.keyValue)[0];
-  return new AppError(`Duplicate field value: '${err.keyValue[field]}'. Please use another value for ${field}.`, 409);
+  // Try to get the field from keyValue (Mongoose) or error message (Native Mongo)
+  let field = 'data';
+  let value = 'unknown';
+
+  if (err.keyValue) {
+    field = Object.keys(err.keyValue)[0];
+    value = err.keyValue[field];
+  } else if (err.errmsg) {
+    // Fallback for native driver error messages
+    const match = err.errmsg.match(/index: (.+)_1/);
+    if (match) field = match[1];
+  }
+
+  // Prettify common field names
+  const fieldMapping = {
+    name: 'Organization name',
+    email: 'Work Email',
+    phoneNumber: 'Phone Number'
+  };
+
+  const friendlyField = fieldMapping[field] || (field.charAt(0).toUpperCase() + field.slice(1));
+
+  return new AppError(`Conflict detected: ${friendlyField} '${value}' is already registered or taken.`, 409);
 };
 const handleValidationErrorDB = (err) => {
   const errors = Object.values(err.errors).map((e) => e.message);
