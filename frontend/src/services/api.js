@@ -3,7 +3,7 @@ import { useAuthStore } from '@/store/authStore'
 import toast from 'react-hot-toast'
 
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: '/caltims/api/v1',
   headers: { 'Content-Type': 'application/json' },
   timeout: 60000,
 })
