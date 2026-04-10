@@ -4,10 +4,8 @@ const express = require('express');
 const router = express.Router();
 const asyncHandler = require('../../shared/utils/asyncHandler');
 const ApiResponse = require('../../shared/utils/apiResponse');
-const ReportSchedule = require('./reportSchedule.model');
-const User = require('../users/user.model');
+const { prisma } = require('../../config/database');
 const emailService = require('../../shared/services/email.service');
-const Settings = require('../settings/settings.model');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/rbac.middleware');
 
@@ -16,17 +14,31 @@ router.use(authorize('admin', 'manager'));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 async function getCompanyName(organizationId) {
-  const s = await Settings.findOne({ organizationId }).lean();
-  return s?.general?.companyName || 'TimesheetPro';
+  const s = await prisma.systemSetting.findFirst({ where: { organizationId, key: 'companyName' } });
+  return s?.value || 'TimesheetPro';
 }
 
 // ── GET /api/v1/report-schedules — list all ──────────────────────────────────
 router.get('/', asyncHandler(async (req, res) => {
-  const schedules = await ReportSchedule.find({ organizationId: req.organizationId })
-    .populate('recipientIds', 'name email')
-    .sort({ createdAt: -1 })
-    .lean();
-  ApiResponse.success(res, { data: schedules });
+  const schedules = await prisma.reportSchedule.findMany({
+    where: { organizationId: req.organizationId },
+    orderBy: { createdAt: 'desc' }
+  });
+  
+  // Enforce manual recipient enrichment since we don't have populate
+  const userIds = [...new Set(schedules.flatMap(s => s.recipientIds))];
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, email: true }
+  });
+  const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+
+  const enrichedSchedules = schedules.map(s => ({
+    ...s,
+    recipientIds: s.recipientIds.map(rid => userMap[rid] || rid)
+  }));
+
+  ApiResponse.success(res, { data: enrichedSchedules });
 }));
 
 // ── POST /api/v1/report-schedules — create ───────────────────────────────────
@@ -40,16 +52,18 @@ router.post('/', asyncHandler(async (req, res) => {
     return ApiResponse.error(res, { message: 'At least one recipient is required', statusCode: 400 });
   }
 
-  const schedule = await ReportSchedule.create({
-    name: name.trim(),
-    frequency: frequency || 'weekly',
-    scheduledTime: scheduledTime || '09:00',
-    reportType: reportType || 'approved',
-    recipientIds: recipientIds || [],
-    projectIds: projectIds || [],
-    isActive: isActive !== false,
-    createdBy: req.user._id,
-    organizationId: req.organizationId,
+  const schedule = await prisma.reportSchedule.create({
+    data: {
+      name: name.trim(),
+      frequency: frequency || 'weekly',
+      scheduledTime: scheduledTime || '09:00',
+      reportType: reportType || 'approved',
+      recipientIds: recipientIds || [],
+      projectIds: projectIds || [],
+      isActive: isActive !== false,
+      createdById: req.user.id,
+      organizationId: req.organizationId,
+    }
   });
 
   ApiResponse.success(res, { message: 'Schedule created', data: schedule, statusCode: 201 });
@@ -59,42 +73,42 @@ router.post('/', asyncHandler(async (req, res) => {
 router.put('/:id', asyncHandler(async (req, res) => {
   const { name, frequency, scheduledTime, reportType, recipientIds, projectIds, isActive } = req.body;
 
-  const schedule = await ReportSchedule.findOneAndUpdate(
-    { _id: req.params.id, organizationId: req.organizationId },
-    {
-      $set: {
-        ...(name !== undefined && { name: name.trim() }),
-        ...(frequency !== undefined && { frequency }),
-        ...(scheduledTime !== undefined && { scheduledTime }),
-        ...(reportType !== undefined && { reportType }),
-        ...(recipientIds !== undefined && { recipientIds }),
-        ...(projectIds !== undefined && { projectIds }),
-        ...(isActive !== undefined && { isActive }),
-      },
-    },
-    { new: true, runValidators: true }
-  ).populate('recipientIds', 'name email');
-
-  if (!schedule) {
-    return ApiResponse.notFound(res, 'Schedule not found');
-  }
+  const schedule = await prisma.reportSchedule.update({
+    where: { id_organizationId: { id: req.params.id, organizationId: req.organizationId } },
+    data: {
+      name: name?.trim(),
+      frequency,
+      scheduledTime,
+      reportType,
+      recipientIds,
+      projectIds,
+      isActive
+    }
+  });
 
   ApiResponse.success(res, { message: 'Schedule updated', data: schedule });
 }));
 
 // ── DELETE /api/v1/report-schedules/:id — delete (stops auto-send) ───────────
 router.delete('/:id', asyncHandler(async (req, res) => {
-  const schedule = await ReportSchedule.findOneAndDelete({ _id: req.params.id, organizationId: req.organizationId });
+  const schedule = await prisma.reportSchedule.delete({
+    where: { id_organizationId: { id: req.params.id, organizationId: req.organizationId } }
+  });
   if (!schedule) return ApiResponse.notFound(res, 'Schedule not found');
   ApiResponse.success(res, { message: 'Schedule deleted. Auto-send has been stopped.' });
 }));
 
 // ── POST /api/v1/report-schedules/:id/send-now — manual fire ─────────────────
 router.post('/:id/send-now', asyncHandler(async (req, res) => {
-  const schedule = await ReportSchedule.findOne({ _id: req.params.id, organizationId: req.organizationId }).lean();
+  const schedule = await prisma.reportSchedule.findUnique({
+    where: { id_organizationId: { id: req.params.id, organizationId: req.organizationId } }
+  });
   if (!schedule) return ApiResponse.notFound(res, 'Schedule not found');
 
-  const users = await User.find({ _id: { $in: schedule.recipientIds }, organizationId: req.organizationId }, 'email name').lean();
+  const users = await prisma.user.findMany({
+    where: { id: { in: schedule.recipientIds }, organizationId: req.organizationId },
+    select: { email: true, name: true }
+  });
   const emails = users.map(u => u.email).filter(Boolean);
 
   if (!emails.length) {
@@ -103,32 +117,45 @@ router.post('/:id/send-now', asyncHandler(async (req, res) => {
 
   const companyName = await getCompanyName(req.organizationId);
   
-  const settings = await Settings.findOne({ organizationId: req.organizationId }).lean();
-  const format = settings?.report?.defaultFormat || 'PDF';
+  const settings = await prisma.orgSettings.findUnique({ where: { organizationId: req.organizationId } });
+  const format = settings?.data?.report?.defaultFormat || 'PDF';
 
-  let result;
   try {
     result = await emailService.sendReportEmail(emails, schedule.reportType, companyName, schedule.projectIds || [], format, req.organizationId);
+    
+    // Save success history
+    const history = Array.isArray(schedule.history) ? schedule.history : [];
+    history.push({ date: new Date(), status: 'success', recipientCount: result.sent, reportTitle: result.reportTitle });
+    
+    await prisma.reportSchedule.update({
+        where: { id_organizationId: { id: schedule.id, organizationId: req.organizationId } },
+        data: { history, lastSentAt: new Date() }
+    });
   } catch (err) {
     // Save failed history
-    const doc = await ReportSchedule.findOne({ _id: schedule._id, organizationId: req.organizationId });
-    if (doc) await doc.addHistory({ status: 'failed', recipientCount: 0, reportTitle: schedule.reportType, error: err.message });
+    const history = Array.isArray(schedule.history) ? schedule.history : [];
+    history.push({ date: new Date(), status: 'failed', recipientCount: 0, reportTitle: schedule.reportType, error: err.message });
+    
+    await prisma.reportSchedule.update({
+        where: { id_organizationId: { id: schedule.id, organizationId: req.organizationId } },
+        data: { history }
+    });
+
     return ApiResponse.error(res, {
       message: err.message.includes('SMTP') ? 'SMTP not configured. Check .env file.' : `Email failed: ${err.message}`,
       statusCode: 400,
     });
   }
 
-  // Save success history
-  const doc = await ReportSchedule.findOne({ _id: schedule._id, organizationId: req.organizationId });
-  if (doc) await doc.addHistory({ status: 'success', recipientCount: result.sent, reportTitle: result.reportTitle });
-
   ApiResponse.success(res, { message: `Report sent to ${result.sent} recipient(s)`, data: result });
 }));
 
 // ── GET /api/v1/report-schedules/:id/history — history for one schedule ──────
 router.get('/:id/history', asyncHandler(async (req, res) => {
-  const schedule = await ReportSchedule.findOne({ _id: req.params.id, organizationId: req.organizationId }, 'name history').lean();
+  const schedule = await prisma.reportSchedule.findUnique({
+    where: { id_organizationId: { id: req.params.id, organizationId: req.organizationId } },
+    select: { name: true, history: true }
+  });
   if (!schedule) return ApiResponse.notFound(res, 'Schedule not found');
   ApiResponse.success(res, { data: schedule.history });
 }));

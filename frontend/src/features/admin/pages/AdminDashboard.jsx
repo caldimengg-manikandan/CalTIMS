@@ -156,15 +156,15 @@ const AdminDashboard = () => {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {organizations.map((org) => (
-                <tr key={org._id} className="hover:bg-slate-50/50 transition-colors group">
+                <tr key={org.id} className="hover:bg-slate-50/50 transition-colors group">
                   <td className="px-8 py-5">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center font-bold text-slate-500 uppercase tracking-tighter shadow-sm border border-slate-100">
-                        {org.name.substring(0, 2)}
+                        {org.name?.substring(0, 2) || '??'}
                       </div>
                       <div>
                         <div className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{org.name}</div>
-                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{org._id.substring(0, 8)}</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{org.id?.substring(0, 8) || 'N/A'}</div>
                       </div>
                     </div>
                   </td>

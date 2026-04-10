@@ -5,11 +5,38 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
-const mongoSanitize = require('express-mongo-sanitize');
-// ─── Body Parsing & Sanitization ─────────────────────────────────────────────
+const rateLimit = require('express-rate-limit');
+
+// ─── Rate Limiting ───────────────────────────────────────────────────────────
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5000, // Increased to 5000 requests per 15 mins
+  message: 'Too many requests from this IP, please try again after 15 minutes',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 100, // Increased to 100 requests per hour for login
+  message: 'Too many login attempts, please try again after an hour',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const financeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 1000, // Increased to 1000 requests per hour for sensitive data
+  message: 'Too many payroll/report requests, please try again after an hour',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// ─── Body Parsing ─────────────────────────────────────────────────────────────
 const { errorHandler, notFound } = require('./middleware/error.middleware');
 const logger = require('./shared/utils/logger');
 const passport = require('./config/passport');
+
 
 // Route imports
 const authRoutes = require('./modules/auth/auth.routes');
@@ -46,14 +73,22 @@ app.use(
       const allowedOrigins = [
         process.env.CLIENT_URL,
         'http://localhost:3000',
-        'http://127.0.0.1:3000'
+        'http://127.0.0.1:3000',
+        'http://192.168.1.15:3000'
       ].filter(Boolean);
       
+      // Allow system origins
       if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+        return callback(null, true);
       }
+      
+      // Allow local network IPs in development/private environments
+      const isLocalIP = origin.match(/^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/);
+      if (isLocalIP) {
+        return callback(null, true);
+      }
+
+      callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -61,10 +96,9 @@ app.use(
   })
 );
 
-// ─── Body Parsing & Sanitization ─────────────────────────────────────────────
+// ─── Body Parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
-app.use(mongoSanitize()); // NoSQL injection prevention
 app.use(compression());
 app.use(passport.initialize());
 
@@ -96,7 +130,19 @@ app.get('/api/v1/health', (req, res) => {
 });
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
-app.use('/api/v1/auth', authRoutes);
+const { authenticate } = require('./middleware/auth.middleware');
+const { checkSubscription } = require('./middleware/subscription.middleware');
+
+// Apply general limiter for all API requests
+app.use('/api/v1', generalLimiter);
+
+// Protect sensitive endpoints with stricter limits
+app.use('/api/v1/auth', authLimiter, authRoutes);
+app.use('/api/v1/payroll', financeLimiter);
+app.use('/api/v1/reports', financeLimiter);
+
+// Apply protection to all subsequent routes
+app.use('/api/v1', authenticate, checkSubscription);
 
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/roles', roleRoutes);

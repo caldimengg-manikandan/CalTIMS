@@ -11,37 +11,37 @@ const { authorize, checkPermission } = require('../../middleware/rbac.middleware
 router.use(authenticate);
 
 router.get('/', asyncHandler(async (req, res) => {
-  const { projects, pagination } = await projectService.getAll(req.query, req.user, req.organizationId);
+  const { projects, pagination } = await projectService.getAll(req.query, req.context);
   ApiResponse.success(res, { data: projects, pagination });
 }));
 
-router.post('/', checkPermission('manageProjects'), asyncHandler(async (req, res) => {
-  const project = await projectService.create(req.body, req.user._id, req.organizationId);
+router.post('/', checkPermission('Projects', 'Project List', 'create'), asyncHandler(async (req, res) => {
+  const project = await projectService.create(req.body, req.context.organizationId);
   ApiResponse.created(res, { message: 'Project created', data: project });
 }));
 
 router.get('/:id', asyncHandler(async (req, res) => {
-  const project = await projectService.getById(req.params.id, req.organizationId);
+  const project = await projectService.getById(req.params.id, req.context.organizationId);
   ApiResponse.success(res, { data: project });
 }));
 
-router.put('/:id', checkPermission('manageProjects'), asyncHandler(async (req, res) => {
-  const project = await projectService.update(req.params.id, req.body, req.user, req.organizationId);
+router.put('/:id', checkPermission('Projects', 'Project List', 'edit'), asyncHandler(async (req, res) => {
+  const project = await projectService.update(req.params.id, req.body, req.context);
   ApiResponse.success(res, { message: 'Project updated', data: project });
 }));
 
-router.patch('/:id/allocate', checkPermission('manageProjects'), asyncHandler(async (req, res) => {
-  const project = await projectService.allocate(req.params.id, req.body.allocations, req.user, req.organizationId);
+router.patch('/:id/allocate', checkPermission('Projects', 'Project List', 'edit'), asyncHandler(async (req, res) => {
+  const project = await projectService.allocate(req.params.id, req.body.allocations, req.context.organizationId);
   ApiResponse.success(res, { message: 'Employees allocated', data: project });
 }));
 
-router.delete('/:id/allocate/:userId', checkPermission('manageProjects'), asyncHandler(async (req, res) => {
-  const project = await projectService.deallocate(req.params.id, req.params.userId, req.organizationId);
+router.delete('/:id/allocate/:userId', checkPermission('Projects', 'Project List', 'edit'), asyncHandler(async (req, res) => {
+  const project = await projectService.deallocate(req.params.id, req.params.userId, req.context.organizationId);
   ApiResponse.success(res, { message: 'Employee removed from project', data: project });
 }));
 
-router.delete('/:id', authorize('admin'), asyncHandler(async (req, res) => {
-  await projectService.delete(req.params.id, req.user, req.organizationId);
+router.delete('/:id', checkPermission('Projects', 'Project List', 'delete'), asyncHandler(async (req, res) => {
+  await projectService.delete(req.params.id, req.context);
   ApiResponse.success(res, { message: 'Project deleted successfully' });
 }));
 

@@ -82,23 +82,22 @@ export const useAuthStore = create(
 
       // Getters
       getRole: () => get().user?.role,
-      isAdmin: () => get().user?.role === 'admin',
-      isManager: () => get().user?.role === 'manager',
-      isEmployee: () => get().user?.role === 'employee',
       isTrial: () => get().subscription?.planType === 'TRIAL',
       isPro: () => {
         const { user, subscription } = get();
-        if (user?.role === 'super_admin') return true;
-        return subscription?.planType === 'PRO';
+        const role = user?.role?.toLowerCase();
+        // Super Admin and Owner always have Pro access
+        if (role === 'super_admin' || user?.isOwner) return true;
+        
+        const plan = subscription?.planType || 'TRIAL';
+        return plan === 'PRO' || plan === 'TRIAL'; // Trial is all-access
       },
       canAccess: (feature) => {
         const { user, subscription } = get();
-        if (user?.role === 'super_admin') return true;
+        if (user?.role === 'super_admin' || user?.isOwner) return true;
         const plan = subscription?.planType || 'TRIAL';
-        if (plan === 'PRO') return true;
-        if (feature === 'advanced_reports') return plan === 'PRO';
-        if (feature === 'ai' || feature === 'payroll') return plan === 'PRO';
-        return true; // default access for basic features
+        const { PLAN_FEATURES } = require('@/constants/plans');
+        return PLAN_FEATURES[plan]?.[feature] === true;
       },
     }),
     {

@@ -22,9 +22,7 @@ export default function AppLayout() {
     }, [applyTheme])
 
     useEffect(() => {
-        if (general?.companyName) {
-            document.title = `${general.companyName} — Timesheet Management System`
-        }
+        document.title = `CALTIMS — Timesheet Management System`
         if (general?.weekStartDay) {
             import('moment').then(m => {
                 const moment = m.default || m

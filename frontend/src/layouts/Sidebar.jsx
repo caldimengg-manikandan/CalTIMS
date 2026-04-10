@@ -4,7 +4,7 @@ import {
     LayoutDashboard, Clock, List, CheckSquare, Users, FolderOpen,
     Megaphone, BarChart3, ChevronLeft, ChevronRight,
     Timer, ClipboardList, Settings2, ListTodo, AlertCircle,
-    Banknote, ChevronDown, Shield, Activity, LogOut
+    Banknote, ChevronDown, Shield, Activity, LogOut, Calendar
 } from 'lucide-react'
 
 import { useAuthStore } from '@/store/authStore'
@@ -60,11 +60,9 @@ const navSections = [
                 subItems: [
                     { to: '/payroll/dashboard', label: 'Dashboard', permission: { module: 'Payroll', submodule: 'Dashboard', action: 'view' } },
                     { to: '/payroll/profiles', label: 'Payroll Profiles', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'view' } },
-                    { to: '/payroll/salary-structures', label: 'Salary Structures', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'view' } },
-                    { to: '/payroll/run', label: 'Payroll Engine', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'view' } },
+                    { to: '/payroll/run', label: 'Payroll Engine', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'run' } },
                     { to: '/payroll/history', label: 'Execution Ledger', permission: { module: 'Payroll', submodule: 'Execution Ledger', action: 'view' } },
                     { to: '/payroll/payslip', label: 'Payslip Generation', permission: { module: 'Payroll', submodule: 'Payslip Generation', action: 'view' } },
-                    { to: '/payroll/taxes', label: 'Taxes & Deductions', permission: { module: 'Payroll', submodule: 'Payroll Engine', action: 'view' } },
                     { to: '/payroll/reports', label: 'Payroll Reports', permission: { module: 'Payroll', submodule: 'Payroll Reports', action: 'view' } },
                     { to: '/payroll/export', label: 'Bank Export', permission: { module: 'Payroll', submodule: 'Bank Export', action: 'view' } },
                 ]
@@ -72,6 +70,13 @@ const navSections = [
             { to: '/reports', icon: BarChart3, label: 'Reports', permission: { module: 'Reports', submodule: 'Reports Dashboard', action: 'view' }, featureKey: FEATURE_KEYS.REPORTS, tourId: 'tour-reports' },
             { to: '/audit-logs', icon: Shield, label: 'Audit Logs', permission: { module: 'Settings', submodule: 'Audit Logs', action: 'view' }, featureKey: FEATURE_KEYS.AUDIT_LOGS },
             { to: '/settings', icon: Settings2, label: 'Settings', permission: { module: 'Settings', submodule: 'Users & Roles', action: 'view' }, tourId: 'tour-settings' },
+            { 
+                to: '/settings?tab=rbac', 
+                icon: Shield, 
+                label: 'Access Control', 
+                permission: { module: 'Settings', submodule: 'Users & Roles', action: 'view' },
+                hide: (general) => !general?.enableEnterpriseRBAC
+            },
         ]
     },
 ]
@@ -87,10 +92,6 @@ export default function Sidebar() {
     useEffect(() => {
         if (!general) fetchGeneralSettings()
         if (!payroll) fetchPayrollSettings()
-        // Debug: Log user state to help identify missing role/permissions
-        console.log('[Sidebar Debug] User:', user);
-        console.log('[Sidebar Debug] Role:', user?.role);
-        console.log('[Sidebar Debug] Permissions:', user?.permissions);
     }, [user])
 
     // Auto-expand Payroll when on any payroll route
@@ -117,7 +118,7 @@ export default function Sidebar() {
         return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz }).format(currentTime)
     }
 
-    const companyName = general?.companyName || 'CALTIMS'
+    const companyName = 'CALTIMS'
 
     // Analog clock
     const secondsDeg = currentTime.getSeconds() * 6
@@ -213,13 +214,13 @@ export default function Sidebar() {
                 {(sidebarOpen) && (
                     <div className="overflow-hidden min-w-0">
                         <span className="font-bold text-sm text-slate-800 dark:text-white block leading-tight truncate">{companyName}</span>
-                        <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">Payroll Suite</span>
+                        {/* <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">Payroll Suite</span> */}
                     </div>
                 )}
                 {!sidebarOpen && (
                     <div className="overflow-hidden w-0 group-hover/sidebar:w-auto transition-all duration-300 opacity-0 group-hover/sidebar:opacity-100 flex flex-col min-w-0">
                         <span className="font-bold text-sm text-slate-800 dark:text-white block leading-tight whitespace-nowrap">{companyName}</span>
-                        <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase whitespace-nowrap">Payroll Suite</span>
+                        {/* <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase whitespace-nowrap">Payroll Suite</span> */}
                     </div>
                 )}
             </div>
@@ -231,7 +232,7 @@ export default function Sidebar() {
                         if (item.label === 'Payroll' && item.subItems) {
                             const isHourly = payroll?.calculationBasis === 'Hourly Rate'
                             let subs = item.subItems.filter(sub => {
-                                if (isHourly && sub.label === 'Salary Structures') return false
+                                if (isHourly && sub.label === 'Payroll Templates') return false
                                 return true
                             })
                             if (isHourly) {
@@ -239,7 +240,7 @@ export default function Sidebar() {
                                 if (!subs.find(s => s.label === 'Hour Management')) {
                                     subs.splice(procIdx >= 0 ? procIdx : 2, 0, {
                                         to: '/payroll/hour-management', label: 'Hour Management',
-                                        roles: ['admin', 'manager', 'finance', 'hr']
+                                        permission: { module: 'Payroll', submodule: 'Hour Management', action: 'view' }
                                     })
                                 }
                             }
@@ -249,6 +250,9 @@ export default function Sidebar() {
                     })
 
                     const visibleItems = sectionItems.filter(item => {
+                        // 0. Hide check (e.g. for feature flags)
+                        if (item.hide && item.hide(general)) return false
+
                         // 1. Role Check
                         if (item.roles && !item.roles.includes(user?.role)) {
                             // Even if role is missing, super_admin can see it (if we want that)
@@ -387,9 +391,6 @@ export default function Sidebar() {
                                         >
                                             {({ isActive }) => (
                                                 <>
-                                                    {isActive && (
-                                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary-600 dark:bg-primary-400 rounded-r-full" />
-                                                    )}
                                                     <item.icon
                                                         size={17}
                                                         className={clsx(

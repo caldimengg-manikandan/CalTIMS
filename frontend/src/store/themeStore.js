@@ -50,15 +50,21 @@ function applyTheme(state) {
     prefersDark ? root.classList.add('dark') : root.classList.remove('dark')
   }
 
-  // Accent color
-  const preset = ACCENT_PRESETS[state.accentPreset]
-  const primary = state.customColor || preset?.primary || '#6366f1'
-  const primaryHover = preset?.primaryHover || adjustColor(primary, -20)
-  const primaryLight = preset?.primaryLight || `${primary}15` // 15 is ~8% opacity in hex
+  // Accent color logic
+  // We MUST ensure that when a custom color is used, all derived colors (hover, light, rgb) 
+  // are calculated from that custom color, OTHERWISE it falls back to the last selected preset 
+  // (which defaults to 'indigo'/violet), causing the "merged" look.
+  const preset = ACCENT_PRESETS[state.accentPreset] || ACCENT_PRESETS.indigo
+  const isCustom = !!state.customColor
+  
+  const primary = isCustom ? state.customColor : preset.primary
+  const primaryHover = isCustom ? adjustColor(primary, -20) : preset.primaryHover
+  const primaryLight = isCustom ? `${primary}15` : preset.primaryLight
 
   root.style.setProperty('--color-primary', primary)
   root.style.setProperty('--color-primary-rgb', hexToRgb(primary))
   root.style.setProperty('--color-primary-hover', primaryHover)
+  root.style.setProperty('--color-primary-hover-rgb', hexToRgb(primaryHover))
   root.style.setProperty('--color-primary-light', primaryLight)
 }
 
@@ -79,12 +85,26 @@ export const useThemeStore = create(
         set({ customColor: hex })
       },
       syncFromBranding: (branding) => {
-        if (!branding) return
-        if (branding.primaryColor) {
-           set({ customColor: branding.primaryColor })
+        if (!branding || !branding.primaryColor) return
+        
+        // Try to find if this color matches a known preset for better UI integration
+        const matchingPreset = Object.entries(ACCENT_PRESETS).find(
+          ([_, p]) => p.primary.toLowerCase() === branding.primaryColor.toLowerCase()
+        )
+        
+        if (matchingPreset) {
+          set({ accentPreset: matchingPreset[0], customColor: null })
+        } else {
+          set({ customColor: branding.primaryColor })
         }
       },
-      applyTheme: () => applyTheme(get()),
+      applyTheme: (forceDefaults = false) => {
+        if (forceDefaults) {
+          applyTheme({ mode: 'light', accentPreset: 'indigo', customColor: null })
+        } else {
+          applyTheme(get())
+        }
+      },
     }),
     { 
       name: 'timesheet-theme',

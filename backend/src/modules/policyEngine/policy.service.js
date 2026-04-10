@@ -1,6 +1,4 @@
-const PayrollPolicy = require('./payrollPolicy.model');
-const Settings = require('../settings/settings.model');
-const OrganizationPolicy = require('./organizationPolicy.model');
+const { prisma } = require('../../config/database');
 const logger = require('../../shared/utils/logger');
 
 const defaultPolicy = {
@@ -62,10 +60,11 @@ const defaultPolicy = {
  */
 const migrateToUnifiedPolicy = async (organizationId = null) => {
   try {
-    const settings = await Settings.findOne(organizationId ? { organizationId } : {}).lean();
-    const orgPolicy = await OrganizationPolicy.findOne(organizationId ? { organizationId } : {}).lean();
+    const settings = organizationId 
+       ? await prisma.orgSettings.findUnique({ where: { organizationId } }) 
+       : await prisma.orgSettings.findFirst();
     
-    if (!settings && !orgPolicy) return { ...defaultPolicy, organizationId };
+    if (!settings) return { ...defaultPolicy, organizationId };
 
     const legacyPayroll = settings?.payroll || {};
     
@@ -91,6 +90,10 @@ const migrateToUnifiedPolicy = async (organizationId = null) => {
           regime: legacyPayroll.taxRegime || 'OLD',
           threshold: legacyPayroll.tdsThreshold || 50000,
           slabs: legacyPayroll.taxSlabs || defaultPolicy.statutory.tds.slabs
+        },
+        pt: {
+          enabled: legacyPayroll.taxToggles?.pt ?? true,
+          slabs: legacyPayroll.ptSlabs || defaultPolicy.statutory.pt.slabs
         }
       },
       attendance: {
@@ -111,8 +114,8 @@ const migrateToUnifiedPolicy = async (organizationId = null) => {
         allowBackdatedEntries: settings?.compliance?.allowBackdatedEntries ?? true
       },
       leave: {
-        types: orgPolicy?.leave?.types || defaultPolicy.leave.types,
-        allowNegativeBalance: orgPolicy?.leave?.allowNegativeBalance || false
+        types: defaultPolicy.leave.types,
+        allowNegativeBalance: false
       },
       organizationId
     };
@@ -129,19 +132,20 @@ const migrateToUnifiedPolicy = async (organizationId = null) => {
  */
 const getPolicy = async (organizationId = null) => {
   try {
-    const query = { isActive: true };
-    if (organizationId) query.organizationId = organizationId;
+    const where = { isActive: true };
+    if (organizationId) where.organizationId = organizationId;
     
-    let policy = await PayrollPolicy.findOne(query).lean();
+    let policy = await prisma.payrollPolicy.findFirst({ where });
     if (!policy) {
-      const migratedData = await migrateToUnifiedPolicy(organizationId);
-      policy = await PayrollPolicy.create(migratedData);
+       return { ...defaultPolicy, organizationId };
     }
     
-    return policy;
+    // Flatten rules into the root object for the frontend
+    const { rules, ...rest } = policy;
+    return { ...rest, ...((rules && typeof rules === 'object') ? rules : {}) };
   } catch (err) {
     logger.error(`Error fetching policy: ${err.message}`);
-    return defaultPolicy;
+    return { ...defaultPolicy, organizationId };
   }
 };
 
@@ -149,17 +153,26 @@ const getPolicy = async (organizationId = null) => {
  * Creates a new policy version.
  */
 const createPolicyVersion = async (policyData, organizationId = null) => {
-  const latestPolicy = await PayrollPolicy.findOne(organizationId ? { organizationId } : {}).sort({ version: -1 });
+  const latestPolicy = await prisma.payrollPolicy.findFirst({
+    where: organizationId ? { organizationId } : {},
+    orderBy: { version: 'desc' }
+  });
   const nextVersion = latestPolicy ? latestPolicy.version + 1 : 1;
 
-  const newPolicy = new PayrollPolicy({
-    ...policyData,
-    organizationId,
-    version: nextVersion,
-    isActive: true
+  // Explicitly extract config fields to avoid nesting
+  const { statutory, attendance, overtime, rounding, salaryComponents, leave, compliance } = policyData;
+  const rules = { statutory, attendance, overtime, rounding, salaryComponents, leave, compliance };
+
+  const newPolicy = await prisma.payrollPolicy.create({
+    data: {
+      name: policyData.name || 'Unified Payroll Policy',
+      rules: rules,
+      organizationId,
+      version: nextVersion,
+      isActive: true
+    }
   });
 
-  await newPolicy.save();
   return newPolicy;
 };
 
@@ -167,32 +180,93 @@ const createPolicyVersion = async (policyData, organizationId = null) => {
  * Updates the existing active policy.
  */
 const updatePolicy = async (policyData, organizationId = null) => {
-  const query = { isActive: true };
-  if (organizationId) query.organizationId = organizationId;
+  const where = { isActive: true };
+  if (organizationId) where.organizationId = organizationId;
 
-  let policy = await PayrollPolicy.findOne(query);
+  let policy = await prisma.payrollPolicy.findFirst({ where });
+  
   if (!policy) {
     return await createPolicyVersion(policyData, organizationId);
   }
 
-  // Update fields with a shallow merge for top level, but handle common nested objects
-  const nestedKeys = ['compliance', 'attendance', 'statutory', 'leave', 'overtime'];
-  
-  Object.keys(policyData).forEach(key => {
-    if (nestedKeys.includes(key) && typeof policyData[key] === 'object' && policyData[key] !== null) {
-      policy[key] = { ...policy[key], ...policyData[key] };
-    } else {
-      policy[key] = policyData[key];
-    }
+  // Explicitly extract config fields to avoid nesting
+  const { statutory, attendance, overtime, rounding, salaryComponents, leave, compliance } = policyData;
+  const rules = { statutory, attendance, overtime, rounding, salaryComponents, leave, compliance };
+
+  const dataToSave = {
+    name: policyData.name || policy.name,
+    rules: rules,
+    isActive: policyData.isActive !== undefined ? policyData.isActive : true
+  };
+
+  const updated = await prisma.payrollPolicy.update({
+    where: { id: policy.id },
+    data: dataToSave
   });
 
-  await policy.save();
-  return policy;
+  // Return flattened for immediate UI use
+  const { rules: updatedRules, ...rest } = updated;
+  return { ...rest, ...updatedRules };
+};
+
+/**
+ * Syncs legacy payroll settings from OrgSettings to the active PayrollPolicy.
+ */
+const syncLegacyPayrollToPolicy = async (legacyPayroll, organizationId) => {
+  try {
+    const activePolicy = await getPolicy(organizationId);
+    
+    const updatedStatutory = {
+      ...(activePolicy.statutory || defaultPolicy.statutory),
+      pf: {
+        enabled: legacyPayroll.taxToggles?.pf ?? (activePolicy.statutory?.pf?.enabled ?? true),
+        employeeRate: legacyPayroll.pfRate || (activePolicy.statutory?.pf?.employeeRate || 12),
+        employerRate: legacyPayroll.pfEmployerRate || (activePolicy.statutory?.pf?.employerRate || 12),
+        wageLimit: legacyPayroll.pfWageLimit || (activePolicy.statutory?.pf?.wageLimit || 15000)
+      },
+      esi: {
+        enabled: legacyPayroll.taxToggles?.esi ?? (activePolicy.statutory?.esi?.enabled ?? true),
+        employeeRate: legacyPayroll.esiRate || (activePolicy.statutory?.esi?.employeeRate || 0.75),
+        employerRate: legacyPayroll.esiEmployerRate || (activePolicy.statutory?.esi?.employerRate || 3.25),
+        wageLimit: legacyPayroll.esiLimit || (activePolicy.statutory?.esi?.wageLimit || 21000)
+      },
+      tds: {
+        enabled: legacyPayroll.taxToggles?.tds ?? (activePolicy.statutory?.tds?.enabled ?? true),
+        regime: legacyPayroll.taxRegime || (activePolicy.statutory?.tds?.regime || 'OLD'),
+        threshold: legacyPayroll.tdsThreshold || (activePolicy.statutory?.tds?.threshold || 50000),
+        slabs: legacyPayroll.taxSlabs || (activePolicy.statutory?.tds?.slabs || defaultPolicy.statutory.tds.slabs)
+      }
+    };
+
+    const updatedAttendance = {
+      ...(activePolicy.attendance || defaultPolicy.attendance),
+      workingDaysPerMonth: legacyPayroll.workingDaysPerMonth || (activePolicy.attendance?.workingDaysPerMonth || 22),
+      workingHoursPerDay: legacyPayroll.workingHoursPerDay || (activePolicy.attendance?.workingHoursPerDay || 8),
+      lopCalculation: legacyPayroll.lopCalculation || (activePolicy.attendance?.lopCalculation || 'PER_DAY'),
+      prorateSalary: legacyPayroll.salaryProration ?? (activePolicy.attendance?.prorateSalary ?? true)
+    };
+
+    await updatePolicy({
+      ...activePolicy,
+      statutory: updatedStatutory,
+      attendance: updatedAttendance,
+      overtime: {
+        enabled: legacyPayroll.overtimeEnabled ?? (activePolicy.overtime?.enabled ?? false),
+        multiplier: legacyPayroll.overtimeMultiplier || (activePolicy.overtime?.multiplier || 1.5)
+      }
+    }, organizationId);
+
+    return true;
+  } catch (err) {
+    logger.error(`Sync failed: ${err.message}`);
+    return false;
+  }
 };
 
 module.exports = {
   getPolicy,
   updatePolicy,
   createPolicyVersion,
+  syncLegacyPayrollToPolicy,
   defaultPolicy
 };

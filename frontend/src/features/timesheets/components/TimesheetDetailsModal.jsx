@@ -144,7 +144,7 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
                     </div>
 
                     {timesheets.data[0].rows.map((row) => (
-                        <div key={row._id} className="bg-slate-50 dark:bg-black/50 rounded-2xl border border-slate-100 dark:border-white overflow-hidden">
+                        <div key={row.id || row._id} className="bg-slate-50 dark:bg-black/50 rounded-2xl border border-slate-100 dark:border-white overflow-hidden">
                             {/* Row Header */}
                             <div className="px-6 py-4 bg-white dark:bg-black border-b border-slate-100 dark:border-white flex flex-wrap items-center justify-between gap-4">
                                 <div className="flex items-center gap-3">
@@ -183,11 +183,11 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
                                                 </div>
                                                 
                                                 {/* Swipe Hours Display */}
-                                                {(isAttendanceEnabled || swipeHrs > 0) && (
+                                                {swipeHrs > 0 && (
                                                     <div className="mt-1.5 flex flex-col items-center">
                                                         <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-tighter" title="Office Presence (Swipe Hours)">
-                                                            <Zap size={8} className={swipeHrs > 0 ? "text-amber-500" : "text-slate-300"} />
-                                                            {swipeHrs > 0 ? formatHours(swipeHrs) : '—'}
+                                                            <Zap size={8} className="text-amber-500" />
+                                                            {formatHours(swipeHrs)}
                                                         </div>
                                                     </div>
                                                 )}

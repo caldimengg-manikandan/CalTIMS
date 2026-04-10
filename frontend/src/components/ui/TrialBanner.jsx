@@ -8,14 +8,15 @@ const TrialBanner = () => {
   const navigate = useNavigate();
   const [isVisible, setIsVisible] = React.useState(true);
 
-  if (!isTrial || !subscription || subscription.status === 'EXPIRED' || !isVisible) {
+  // Correctly call the isTrial() getter function from authStore
+  if (!isTrial() || !subscription || subscription.status === 'EXPIRED' || !isVisible) {
     return null;
   }
 
-  const trialEndDate = new Date(subscription.trialEndDate);
+  const trialEndDate = subscription.trialEndDate ? new Date(subscription.trialEndDate) : new Date(Date.now() + 28 * 24 * 60 * 60 * 1000);
   const now = new Date();
   const diffTime = trialEndDate - now;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const diffDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
   if (diffDays < 0) return null;
 
@@ -28,12 +29,10 @@ const TrialBanner = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex w-8 h-8 bg-white/10 backdrop-blur-md rounded-lg items-center justify-center">
-              <Sparkles size={16} className="text-primary-200" />
-            </div>
+            
             <p className="text-sm font-medium tracking-wide">
-              Your free trial expires in <span className="font-black text-primary-100 italic">{diffDays} days</span>. 
-              <span className="hidden md:inline ml-1 text-white/80">Upgrade to a Pro plan to unlock all features including Payroll and AI.</span>
+              Your free trial expires in <span className="font-bold text-amber-200">{diffDays} days</span>. 
+              <span className="hidden md:inline ml-1 text-white/80">Enjoy all access to premium features including Payroll and AI.</span>
             </p>
           </div>
           

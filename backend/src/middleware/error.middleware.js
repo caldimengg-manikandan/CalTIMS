@@ -5,38 +5,27 @@ const logger = require('../shared/utils/logger');
 const { HTTP_STATUS } = require('../constants');
 
 /**
- * Handle specific Mongoose / JWT error types
+ * Handle specific Prisma / JWT error types
  */
-const handleCastErrorDB = (err) => new AppError(`Invalid ${err.path}: ${err.value}`, 400);
-const handleDuplicateFieldsDB = (err) => {
-  // Try to get the field from keyValue (Mongoose) or error message (Native Mongo)
-  let field = 'data';
-  let value = 'unknown';
-
-  if (err.keyValue) {
-    field = Object.keys(err.keyValue)[0];
-    value = err.keyValue[field];
-  } else if (err.errmsg) {
-    // Fallback for native driver error messages
-    const match = err.errmsg.match(/index: (.+)_1/);
-    if (match) field = match[1];
-  }
-
-  // Prettify common field names
+const handlePrismaDuplicateFields = (err) => {
+  const target = err.meta?.target || ['data'];
+  const field = Array.isArray(target) ? target[0] : target;
+  
   const fieldMapping = {
     name: 'Organization name',
     email: 'Work Email',
-    phoneNumber: 'Phone Number'
+    phoneNumber: 'Phone Number',
+    employeeCode: 'Employee Code',
+    payrollBatchId_employeeId: 'Payroll for this employee and month',
+    organizationId_employeeCode: 'Employee ID (this code is already taken in your organization)'
   };
 
   const friendlyField = fieldMapping[field] || (field.charAt(0).toUpperCase() + field.slice(1));
+  return new AppError(`Conflict detected: ${friendlyField} already exists.`, 409);
+};
 
-  return new AppError(`Conflict detected: ${friendlyField} '${value}' is already registered or taken.`, 409);
-};
-const handleValidationErrorDB = (err) => {
-  const errors = Object.values(err.errors).map((e) => e.message);
-  return new AppError(`Validation failed: ${errors.join('. ')}`, 400);
-};
+const handlePrismaNotFoundError = () => new AppError('The requested record was not found.', 404);
+
 const handleJWTError = () => new AppError('Invalid token. Please log in again.', 401);
 const handleJWTExpiredError = () => new AppError('Your token has expired. Please log in again.', 401);
 
@@ -54,10 +43,10 @@ const errorHandler = (err, req, res, next) => {
   let error = { ...err, message: err.message };
   error.statusCode = err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR;
 
-  // Mongoose errors
-  if (err.name === 'CastError') error = handleCastErrorDB(err);
-  if (err.code === 11000) error = handleDuplicateFieldsDB(err);
-  if (err.name === 'ValidationError') error = handleValidationErrorDB(err);
+  // Prisma errors
+  if (err.code === 'P2002') error = handlePrismaDuplicateFields(err);
+  if (err.code === 'P2025') error = handlePrismaNotFoundError();
+  
   // JWT errors
   if (err.name === 'JsonWebTokenError') error = handleJWTError();
   if (err.name === 'TokenExpiredError') error = handleJWTExpiredError();
@@ -67,13 +56,18 @@ const errorHandler = (err, req, res, next) => {
     return res.status(error.statusCode).json({
       success: false,
       message: error.message,
+      errors: error.errors,
       stack: err.stack,
     });
   }
 
   // Production: don't leak error details
   if (err.isOperational) {
-    return res.status(error.statusCode).json({ success: false, message: error.message });
+    return res.status(error.statusCode).json({ 
+      success: false, 
+      message: error.message,
+      errors: error.errors
+    });
   }
 
   logger.error('UNEXPECTED ERROR:', err);

@@ -13,16 +13,16 @@ router.use(checkSubscription);
 // Dashboard summary for timesheets
 router.get('/summary', timesheetController.getDashboardSummary);
 router.get('/history', timesheetController.getHistory);
-router.get('/admin-summary', checkPermission('viewReports'), timesheetController.getAdminSummary);
-router.get('/admin-list', checkPermission('viewReports'), timesheetController.getAdminTimesheets);
-router.get('/admin-filters', checkPermission('viewReports'), timesheetController.getAdminFilterOptions);
-router.get('/admin-kpi', checkPermission('viewReports'), timesheetController.getAdminKpiSummary);
+router.get('/admin-summary', checkPermission('Timesheets', 'Dashboard', 'view'), timesheetController.getDashboardSummary);
+router.get('/admin-list', checkPermission('Timesheets', 'Management', 'view'), timesheetController.getAdminTimesheets);
+router.get('/admin-filters', checkPermission('Timesheets', 'Management', 'view'), timesheetController.getAdminFilterOptions);
+router.get('/admin-kpi', checkPermission('Timesheets', 'Dashboard', 'view'), timesheetController.getAdminKpiSummary);
 
 // CRUD
-router.get('/compliance', checkPermission('viewReports'), requireFeature('audit_logs'), timesheetController.getCompliance);
+router.get('/compliance', checkPermission('Timesheets', 'Dashboard', 'view'), requireFeature('audit_logs'), timesheetController.getCompliance);
 router.post('/bulk', timesheetController.bulkUpsert);
 router.post('/bulk-submit', timesheetController.bulkSubmit);
-router.post('/admin-fill', checkPermission('manageEmployees'), requireFeature('timesheets'), timesheetController.adminFill);
+router.post('/admin-fill', checkPermission('Employees', 'Employee List', 'edit'), requireFeature('timesheets'), timesheetController.adminFill);
 router.post('/', timesheetController.create);
 router.get('/', timesheetController.getAll);
 router.get('/:id', timesheetController.getById);
@@ -31,7 +31,7 @@ router.delete('/:id', timesheetController.delete);
 
 // Workflow
 router.patch('/:id/submit', timesheetController.submit);
-router.patch('/:id/approve', checkPermission('approveTimesheets'), timesheetController.approve);
-router.patch('/:id/reject', checkPermission('approveTimesheets'), timesheetController.reject);
+router.patch('/:id/approve', checkPermission('Timesheets', 'Management', 'approve'), timesheetController.approve);
+router.patch('/:id/reject', checkPermission('Timesheets', 'Management', 'reject'), timesheetController.reject);
 
 module.exports = router;

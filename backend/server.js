@@ -3,163 +3,117 @@
 require('dotenv').config();
 const http = require('http');
 const app = require('./src/app');
-const { connectDB } = require('./src/config/database');
+const { connectDB, prisma } = require('./src/config/database');
 const logger = require('./src/shared/utils/logger');
-const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const PORT = process.env.PORT || 5000;
 
-// Drop legacy overly-restrictive unique index on timesheets (one-time migration)
-async function dropLegacyIndexes() {
-  try {
-    const timesheetCol = mongoose.connection.collection('timesheets');
-    await timesheetCol.dropIndex('userId_1_weekStartDate_1');
-    logger.info('Dropped core legacy unique index: userId_1_weekStartDate_1');
-  } catch (err) {
-    if (err.code !== 27 && !err.message?.includes('index not found')) {
-      logger.warn(`Timesheet index drop skipped: ${err.message}`);
-    }
-  }
-
-  try {
-    const structureCol = mongoose.connection.collection('rolesalarystructures');
-    // We try to drop any index that might be on roleName, most likely roleName_1
-    await structureCol.dropIndex('roleName_1');
-    logger.info('Dropped legacy unique index on payroll: roleName_1');
-  } catch (err) {
-    if (err.code !== 27 && !err.message?.includes('index not found')) {
-      logger.warn(`Structure index drop skipped: ${err.message}`);
-    }
-  }
-}
-
-// Auto-backfill: create timesheet entries for any approved leave that doesn't have one yet
-// Also repairs orphaned leave timesheets pointing to non-existent projects
-async function autoBackfillLeaveTimesheets() {
-  try {
-    const leaveService = require('./src/modules/leaves/leave.service');
-    const User = require('./src/modules/users/user.model');
-    const Timesheet = require('./src/modules/timesheets/timesheet.model');
-    const Project = require('./src/modules/projects/project.model');
-
-    const admin = await User.findOne({ role: { $in: ['admin', 'manager'] }, isActive: true }).select('_id');
-    if (!admin) return;
-
-    // 1. Repair orphaned leave timesheets (fixes the "() Sick" issue)
-    const leaveProject = await Project.findOne({ code: 'LEAVE-SYS' });
-    if (leaveProject) {
-      const orphans = await Timesheet.find({
-        $or: [{ isLeave: true }, { category: { $in: ['Annual', 'Sick', 'Casual', 'Unpaid', 'Maternity', 'Paternity'] } }],
-        projectId: { $ne: leaveProject._id }
-      });
-      if (orphans.length > 0) {
-        await Timesheet.updateMany(
-          { _id: { $in: orphans.map(o => o._id) } },
-          { $set: { projectId: leaveProject._id } }
-        );
-        logger.info(`[AutoBackfill] Repaired ${orphans.length} orphaned leave timesheets`);
-      }
-    }
-
-    // 2. Perform regular backfill
-    const result = await leaveService.backfillTimesheets(admin._id);
-    if (result.synced > 0) {
-      logger.info(`[AutoBackfill] Created timesheets for ${result.synced} approved leave(s)`);
-    }
-  } catch (err) {
-    logger.warn(`[AutoBackfill] Leave timesheet backfill failed: ${err.message}`);
-  }
-}
-
-// One-time migration to unlock all users previously restricted by the trial system
-async function unlockAllUsers() {
-  try {
-    const User = require('./src/modules/users/user.model');
-    const result = await User.updateMany(
-      { $or: [{ isLocked: true }, { isTrialUser: true }] },
-      { $set: { isLocked: false, isTrialUser: false, trialExpiresAt: null } }
-    );
-    if (result.modifiedCount > 0) {
-      logger.info(`[Migration] Unlocked ${result.modifiedCount} users and disabled trial flags`);
-    }
-  } catch (err) {
-    logger.warn(`[Migration] Failed to unlock users: ${err.message}`);
-  }
-}
-
-// Ensure Super Admin exists
+/**
+ * Seed Super Admin on first boot (Prisma version)
+ */
 async function ensureSuperAdmin() {
   try {
-    const User = require('./src/modules/users/user.model');
-    const Organization = require('./src/modules/organizations/organization.model');
-    const Subscription = require('./src/modules/subscriptions/subscription.model');
-    
     const adminEmail = 'superadmin@timesheetpro.com';
     const adminPassword = 'SuperAdmin@1234';
 
-    let superAdmin = await User.findOne({ email: adminEmail });
-    
-    if (!superAdmin) {
-      logger.info('[Seed] Super Admin not found. Creating...');
-      
-      // 1. Ensure a System Organization exists
-      let org = await Organization.findOne({ name: 'CALTIMS System' });
-      if (!org) {
-        org = await Organization.create({
-          name: 'CALTIMS System',
-          taxId: 'SYSTEM',
-          address: 'System Cloud'
-        });
-      }
+    // Upsert system organization
+    let org = await prisma.organization.findFirst({
+      where: { name: 'CALTIMS System' },
+    });
 
-      // 2. Create User
-      superAdmin = await User.create({
-        name: 'Super Admin',
-        email: adminEmail,
-        password: adminPassword,
-        role: 'super_admin',
-        organizationId: org._id,
-        isActive: true,
-        isLocked: false,
-        employeeId: 'SA-0001'
+    if (!org) {
+      org = await prisma.organization.create({
+        data: {
+          name: 'CALTIMS System',
+          slug: 'caltims-system',
+          taxId: 'SYSTEM',
+          address: 'System Cloud',
+        },
       });
-      
-      // 3. Ensure a Subscription exists for the system organization
-      let sub = await Subscription.findOne({ organizationId: org._id });
-      if (!sub) {
-        await Subscription.create({
-          organizationId: org._id,
+      logger.info('[Seed] System Organization created');
+    }
+
+    // Upsert subscription for system org
+    const existingSub = await prisma.subscription.findFirst({
+      where: { organizationId: org.id },
+    });
+
+    if (!existingSub) {
+      const trialEnd = new Date();
+      trialEnd.setFullYear(trialEnd.getFullYear() + 5);
+      await prisma.subscription.create({
+        data: {
+          organizationId: org.id,
           planType: 'PRO',
           status: 'ACTIVE',
           trialStartDate: new Date(),
-          trialEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year for system org
-        });
-        logger.info(`[Seed] System Subscription created for ${org.name}`);
-      }
-      
-      logger.info(`[Seed] Super Admin created successfully: ${adminEmail}`);
-    } else {
-      // Ensure role is correct even if user exists
-      if (superAdmin.role !== 'super_admin') {
-        superAdmin.role = 'super_admin';
-        await superAdmin.save();
-        logger.info('[Seed] Updated existing service user to super_admin role');
-      }
+          trialEndDate: trialEnd,
+        },
+      });
+      logger.info('[Seed] System Subscription created');
+    }
 
-      // Check if system org needs a subscription even if admin existed
-      if (superAdmin.organizationId) {
-        let sub = await Subscription.findOne({ organizationId: superAdmin.organizationId });
-        if (!sub) {
-          await Subscription.create({
-            organizationId: superAdmin.organizationId,
-            planType: 'PRO',
-            status: 'ACTIVE',
-            trialStartDate: new Date(),
-            trialEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-          });
-          logger.info('[Seed] System Subscription created for existing organization');
-        }
+    // Upsert admin role
+    let adminRole = await prisma.role.findFirst({
+      where: { name: 'Admin', organizationId: org.id },
+    });
+
+    if (!adminRole) {
+      adminRole = await prisma.role.create({
+        data: {
+          name: 'Admin',
+          organizationId: org.id,
+          permissions: { all: { all: ['all'] } },
+        },
+      });
+    }
+
+    // Upsert super admin user
+    let superAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
+
+    if (!superAdmin) {
+      const hashed = await bcrypt.hash(adminPassword, 12);
+      superAdmin = await prisma.user.create({
+        data: {
+          name: 'Super Admin',
+          email: adminEmail,
+          password: hashed,
+          role: 'super_admin',
+          roleId: adminRole.id,
+          organizationId: org.id,
+          isActive: true,
+          isOwner: true,
+          isOnboardingComplete: true,
+          provider: 'local',
+          providers: ['local'],
+        },
+      });
+      logger.info(`[Seed] Super Admin created: ${adminEmail}`);
+    } else {
+      if (superAdmin.role !== 'super_admin') {
+        await prisma.user.update({
+          where: { id: superAdmin.id },
+          data: { role: 'super_admin' },
+        });
+        logger.info('[Seed] Super Admin role updated');
       }
+    }
+
+    // Seed org settings if missing
+    const existingSettings = await prisma.orgSettings.findUnique({
+      where: { organizationId: org.id },
+    });
+    if (!existingSettings) {
+      await prisma.orgSettings.create({
+        data: {
+          organizationId: org.id,
+          data: {
+            organization: { companyName: 'CALTIMS System' },
+            branding: { organizationName: 'CALTIMS System' },
+          },
+        },
+      });
     }
   } catch (err) {
     logger.error(`[Seed] Error ensuring Super Admin: ${err.message}`);
@@ -168,36 +122,63 @@ async function ensureSuperAdmin() {
 
 const startServer = async () => {
   try {
+    // Connect to PostgreSQL via Prisma
     await connectDB();
+
+    // Bootstrap super admin
     await ensureSuperAdmin();
-    await unlockAllUsers();
-    await dropLegacyIndexes();
 
-    // Auto-sync any approved leaves that are missing timesheet entries
-    await autoBackfillLeaveTimesheets();
+    // Seed Payslip Templates (if service exists)
+    try {
+      const templateService = require('./src/modules/payroll/payslipTemplate.service');
+      if (typeof templateService.seedTemplates === 'function') {
+        await templateService.seedTemplates();
+      }
+    } catch (e) {
+      logger.warn(`[Boot] payslipTemplate.service skipped: ${e.message}`);
+    }
 
-    // Seed Payslip Templates
-    const templateService = require('./src/modules/payroll/payslipTemplate.service');
-    await templateService.seedTemplates();
+    // Start Background Payroll Worker (if exists)
+    try {
+      const payrollWorker = require('./src/modules/payroll/payroll.worker');
+      if (typeof payrollWorker.startWorker === 'function') {
+        payrollWorker.startWorker();
+      }
+    } catch (e) {
+      logger.warn(`[Boot] payroll.worker skipped: ${e.message}`);
+    }
 
-    // BANK-GRADE: Start the Background Payroll Worker
-    const payrollWorker = require('./src/modules/payroll/payroll.worker');
-    payrollWorker.startWorker();
+    // Start Background Calendar Sync
+    try {
+      const calendarCron = require('./src/modules/calendar/calendar.cron');
+      if (typeof calendarCron.initCalendarCron === 'function') {
+        calendarCron.initCalendarCron();
+        logger.info('[Boot] Calendar Sync Cron initialized');
+      }
+    } catch (e) {
+      logger.warn(`[Boot] calendar.cron skipped: ${e.message}`);
+    }
 
     const server = http.createServer(app);
-    const socketService = require('./src/shared/services/socket.service');
-    socketService.init(server);
+
+    // Socket.io
+    try {
+      const socketService = require('./src/shared/services/socket.service');
+      socketService.init(server);
+    } catch (e) {
+      logger.warn(`[Boot] socket.service skipped: ${e.message}`);
+    }
 
     server.listen(PORT, () => {
-
       logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
     });
 
     // Graceful shutdown
     const shutdown = (signal) => {
       logger.info(`${signal} received. Shutting down gracefully...`);
-      server.close(() => {
-        logger.info('HTTP server closed.');
+      server.close(async () => {
+        await prisma.$disconnect();
+        logger.info('HTTP server closed. Prisma disconnected.');
         process.exit(0);
       });
     };
@@ -209,7 +190,6 @@ const startServer = async () => {
       logger.error(`Unhandled Rejection: ${err.message}`);
       server.close(() => process.exit(1));
     });
-
   } catch (err) {
     logger.error(`Failed to start server: ${err.message}`);
     process.exit(1);

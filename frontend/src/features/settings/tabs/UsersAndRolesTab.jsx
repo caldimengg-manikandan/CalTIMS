@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { settingsAPI } from '@/services/endpoints'
 import Spinner from '@/components/ui/Spinner'
+import Modal from '@/components/ui/Modal'
 import toast from 'react-hot-toast'
 import { 
     Shield, Users, Save, Plus, Trash2, Search, 
@@ -199,7 +200,7 @@ const RoleTimeline = ({ roleName }) => {
     return (
         <div className="space-y-4">
             {logs.slice(0, 5).map((log, i) => (
-                <div key={log._id} className="relative pl-6 border-l border-slate-100 dark:border-white/5 pb-4 last:pb-0">
+                <div key={log.id || i} className="relative pl-6 border-l border-slate-100 dark:border-white/5 pb-4 last:pb-0">
                     <div className="absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-primary ring-4 ring-white dark:ring-slate-900 shadow-sm" />
                     <div>
                         <div className="flex items-center justify-between gap-2 mb-1">
@@ -209,11 +210,11 @@ const RoleTimeline = ({ roleName }) => {
                         <p className="text-[10px] font-medium text-slate-500 leading-snug">
                             {log.action === 'CREATE_ROLE' ? 'Created this role' : 
                              log.action === 'DELETE_ROLE' ? 'Deleted this role' :
-                             `Updated ${log.changes.length} permission(s)`}
+                             `Updated ${log.details?.changes?.length || 0} permission(s)`}
                         </p>
-                        {log.changes.length > 0 && log.action === 'UPDATE_PERMISSION' && (
+                        {log.details?.changes?.length > 0 && log.action === 'UPDATE_PERMISSION' && (
                             <div className="mt-2 space-y-1">
-                                {log.changes.slice(0, 2).map((c, j) => (
+                                {log.details.changes.slice(0, 2).map((c, j) => (
                                     <div key={j} className="flex items-center gap-1">
                                         <div className={`w-1 h-1 rounded-full ${c.current ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                                         <p className="text-[8px] font-bold text-slate-400 truncate">
@@ -221,7 +222,7 @@ const RoleTimeline = ({ roleName }) => {
                                         </p>
                                     </div>
                                 ))}
-                                {log.changes.length > 2 && <p className="text-[8px] font-black text-primary uppercase ml-2">+{log.changes.length - 2} more</p>}
+                                {log.details.changes.length > 2 && <p className="text-[8px] font-black text-primary uppercase ml-2">+{log.details.changes.length - 2} more</p>}
                             </div>
                         )}
                     </div>
@@ -291,9 +292,12 @@ const ROLE_TEMPLATES = {
         description: 'Employee lifecycle, leave, and payroll execution',
         permissions: {
             "Payroll": { "Dashboard": ["view"], "Payroll Engine": ["view", "run", "submit"], "Payslip Generation": ["view", "generate"], "Payroll Reports": ["view"] },
-            "Employees": { "Employee List": ["view", "create", "edit"], "Management": ["view", "edit"] },
-            "Leave Management": { "Leave Tracker": ["view"], "Leave Requests": ["view", "approve", "reject"] },
-            "Timesheets": { "Dashboard": ["view"], "Management": ["view", "approve", "reject"] }
+            "Employees": { "Employee List": ["view", "create", "edit", "delete"], "Management": ["view", "edit"] },
+            "Leave Management": { "Leave Tracker": ["view"], "Leave Requests": ["view", "create", "approve", "reject"], "Leave Policies": ["view", "edit"] },
+            "Timesheets": { "Dashboard": ["view"], "Entry": ["view", "create", "edit"], "History": ["view"], "Management": ["view", "approve", "reject", "lock"] },
+            "Announcements": { "Announcements": ["view", "create", "edit"] },
+            "Reports": { "Reports Dashboard": ["view"] },
+            "Support": { "Help & Support": ["view"] }
         }
     },
     'Finance': {
@@ -301,61 +305,93 @@ const ROLE_TEMPLATES = {
         description: 'Payroll approvals, bank exports, and financial reporting',
         permissions: {
             "Payroll": { "Dashboard": ["view"], "Payroll Engine": ["view", "approve", "disburse"], "Bank Export": ["view", "export"], "Payroll Reports": ["view", "export"] },
-            "Reports": { "Reports Dashboard": ["view", "export"] }
+            "Reports": { "Reports Dashboard": ["view", "export"] },
+            "My Payslip": { "Payslip View": ["view", "download"] }
+        }
+    },
+    'Manager': {
+        name: 'Project Manager',
+        description: 'Team leadership: timesheets, leaves, and dashboard insights',
+        permissions: {
+            "Timesheets": { "Dashboard": ["view"], "Entry": ["view", "create", "edit"], "History": ["view"], "Management": ["view", "approve", "reject"] },
+            "Leave Management": { "Leave Tracker": ["view"] },
+            "My Payslip": { "Payslip View": ["view", "download"] },
+            "Support": { "Help & Support": ["view"] },
         }
     },
     'Employee': {
         name: 'Standard Employee',
         description: 'Self-service: payslips, leave requests, and timesheets',
         permissions: {
+            "Timesheets": { "Dashboard": ["view"], "Entry": ["view", "create", "edit"], "History": ["view"] },
             "My Payslip": { "Payslip View": ["view", "download"] },
-            "Timesheets": { "Entry": ["view", "create", "edit"], "History": ["view"] },
-            "Leave Management": { "Leave Tracker": ["view"], "Leave Requests": ["view", "create"] }
+            "Leave Management": { "Leave Tracker": ["view"] },
+            "Support": { "Help & Support": ["view"] }
         }
-    },
-    'Custom': {
-        name: 'Custom Profile',
-        description: 'Start from scratch with empty permissions',
-        permissions: {}
     }
 }
 
 export default function UsersAndRolesTab() {
     const qc = useQueryClient()
-    const [roles, setRoles] = React.useState([])
+    const [roles, setRoles] = useState([])
     const [activeRoleIdx, setActiveRoleIdx] = useState(0)
     const [searchQuery, setSearchQuery] = useState('')
+    const [originalRoles, setOriginalRoles] = React.useState([])
+    const [isDirty, setIsDirty] = useState(false)
+    const [confirmDeleteIndex, setConfirmDeleteIndex] = useState(null)
 
     const { data, isLoading } = useQuery({
         queryKey: ['settings'],
         queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
+        // Disable re-fetch while editing to prevent wiping local state
+        refetchOnWindowFocus: !isDirty, 
     })
 
     React.useEffect(() => {
-        if (data?.roles?.length > 0) {
-            setRoles(data.roles)
+        if (data?.roles?.length > 0 && !isDirty) {
+            const filtered = data.roles.filter(r => 
+                r.name.toLowerCase() !== 'super_admin' && 
+                r.name.toLowerCase() !== 'super admin'
+            )
+            setRoles(filtered)
+            setOriginalRoles(JSON.parse(JSON.stringify(filtered)))
         }
-    }, [data])
+    }, [data, isDirty])
+
+    // Detect changes
+    useEffect(() => {
+        if (originalRoles.length === 0 && roles.length === 0) return
+        const rolesClean = JSON.stringify(originalRoles)
+        const rolesCurrent = JSON.stringify(roles)
+        setIsDirty(rolesClean !== rolesCurrent)
+    }, [roles, originalRoles])
 
     const saveMutation = useMutation({
         mutationFn: () => settingsAPI.updateSettings({ roles }),
         onSuccess: () => {
-            toast.success('Roles & Permissions synced successfully!')
             qc.invalidateQueries(['settings'])
+            qc.invalidateQueries(['roles-list']) 
+            qc.invalidateQueries(['all-employees-list'])
+            setIsDirty(false)
+            setOriginalRoles(JSON.parse(JSON.stringify(roles)))
+            toast.success('Access configuration synced successfully!')
         },
-        onError: e => toast.error(e.response?.data?.message || 'Save failed'),
+        onError: e => toast.error(e.response?.data?.message || 'Synchronization failed'),
     })
 
     const handleAddRole = () => {
+        const count = roles.filter(r => r.name.startsWith('New Custom Role')).length
+        const suffix = count > 0 ? ` ${count + 1}` : ''
+        
         const newRole = {
-            name: 'New Custom Role',
+            name: `New Custom Role${suffix}`,
             isSystem: false,
             templateType: 'Custom',
             permissions: {}
         }
         setRoles([...roles, newRole])
         setActiveRoleIdx(roles.length)
-        toast.success('New custom role added!')
+        toast.success('New role added! Don\'t forget to Sync Updates.')
     }
 
     const handleUpdateRoleName = (index, newName) => {
@@ -425,9 +461,15 @@ export default function UsersAndRolesTab() {
             toast.error('System roles cannot be deleted')
             return
         }
-        const newRoles = roles.filter((_, i) => i !== index)
+        setConfirmDeleteIndex(index)
+    }
+
+    const onConfirmDelete = () => {
+        const newRoles = roles.filter((_, i) => i !== confirmDeleteIndex)
         setRoles(newRoles)
-        setActiveRoleIdx(Math.max(0, index - 1))
+        setActiveRoleIdx(Math.max(0, confirmDeleteIndex - 1))
+        setConfirmDeleteIndex(null)
+        toast.success('Role removed from list. Click Sync to persist.')
     }
 
     if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
@@ -436,18 +478,28 @@ export default function UsersAndRolesTab() {
 
     return (
         <div className="space-y-8 pb-10">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Access Control</h2>
                     <p className="text-sm text-slate-500 font-medium">Enterprise RBAC with hierarchical module trees</p>
                 </div>
-                <button
-                    onClick={handleAddRole}
-                    className="group flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-200 transition-all active:scale-95"
-                >
-                    <Plus size={16} className="group-hover:rotate-90 transition-transform" />
-                    <span className="text-[11px] font-black uppercase tracking-widest">Create Custom Role</span>
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleAddRole}
+                        className="group flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white dark:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 shadow-sm transition-all active:scale-95"
+                    >
+                        <Plus size={16} />
+                        <span className="text-[11px] font-black uppercase tracking-widest">Add Role</span>
+                    </button>
+                    <button
+                        onClick={() => saveMutation.mutate()}
+                        disabled={saveMutation.isPending || !isDirty}
+                        className="flex items-center gap-3 px-8 py-2.5 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black uppercase tracking-widest shadow-lg hover:scale-105 active:scale-95 transition-all disabled:opacity-40"
+                    >
+                        {saveMutation.isPending ? <Spinner size="sm" /> : <Save size={18} />}
+                        Save Changes
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
@@ -460,7 +512,7 @@ export default function UsersAndRolesTab() {
                     <div className="space-y-1">
                         {roles.map((role, idx) => (
                             <button
-                                key={idx}
+                                key={role.id || role.name || idx}
                                 onClick={() => setActiveRoleIdx(idx)}
                                 className={`w-full text-left px-4 py-3 rounded-2xl transition-all ${
                                     activeRoleIdx === idx 
@@ -497,7 +549,18 @@ export default function UsersAndRolesTab() {
                                                 className="w-full text-xl font-black text-slate-800 dark:text-white bg-transparent border-none p-0 focus:ring-0 placeholder:text-slate-300"
                                             />
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-4">
+                                            <div className="relative group/search">
+                                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-indigo-500 transition-colors" />
+                                                <input 
+                                                    type="text"
+                                                    placeholder="Search permissions..."
+                                                    value={searchQuery}
+                                                    onChange={e => setSearchQuery(e.target.value)}
+                                                    className="pl-9 pr-4 py-2 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-xl text-[10px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all w-48"
+                                                />
+                                            </div>
+                                            <div className="h-8 w-px bg-slate-100 dark:bg-white/10" />
                                             {!currentRole.isSystem && (
                                                 <button 
                                                     onClick={() => handleDeleteRole(activeRoleIdx)}
@@ -507,16 +570,26 @@ export default function UsersAndRolesTab() {
                                                     <Trash2 size={20} />
                                                 </button>
                                             )}
-                                            <button 
-                                                onClick={() => saveMutation.mutate()}
-                                                disabled={saveMutation.isPending}
-                                                className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 transition-all disabled:opacity-50"
-                                            >
-                                                {saveMutation.isPending ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-white" /> : <Save size={16} />}
-                                                Sync Updates
-                                            </button>
+                                            {/* Status Badge */}
+                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                                                <div className={`w-2 h-2 rounded-full ${isDirty ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                                    {isDirty ? 'Unsaved Changes' : 'Synced'}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    {/* Unsaved Changes Banner */}
+                                    {isDirty && (
+                                        <div className="p-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-2xl flex items-center justify-between gap-3 animate-in slide-in-from-top-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                                                <p className="text-[10px] font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-widest">Unsaved Changes Detected</p>
+                                            </div>
+                                            <p className="text-[9px] text-indigo-600/70 dark:text-indigo-300 font-medium italic">Click Sync Updates to save this role configuration.</p>
+                                        </div>
+                                    )}
 
                                     {/* Critical Change Alert */}
                                     {Object.values(currentRole.permissions || {}).some(mod => 
@@ -666,6 +739,45 @@ export default function UsersAndRolesTab() {
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
                 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; }
             `}</style>
+
+            {/* Delete Confirmation Modal */}
+            <Modal
+                isOpen={confirmDeleteIndex !== null}
+                onClose={() => setConfirmDeleteIndex(null)}
+                title="Confirm Role Deletion"
+                maxWidth="max-w-md"
+            >
+                <div className="p-6 space-y-6">
+                    <div className="flex items-center gap-4 p-4 rounded-2xl bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/30">
+                        <div className="w-12 h-12 rounded-2xl bg-rose-500 flex items-center justify-center shadow-lg shadow-rose-200">
+                            <Trash2 className="text-white" size={24} />
+                        </div>
+                        <div>
+                            <p className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-tight">Delete "{roles[confirmDeleteIndex]?.name}"?</p>
+                            <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">This action cannot be undone after syncing.</p>
+                        </div>
+                    </div>
+                    
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                        Deleting this role will remove all associated permissions. Employees currently assigned to this role will lose access until you reassign them.
+                    </p>
+
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setConfirmDeleteIndex(null)}
+                            className="flex-1 px-6 py-4 rounded-2xl bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 dark:hover:bg-white/10 transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={onConfirmDelete}
+                            className="flex-1 px-6 py-4 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-rose-200 transition-all active:scale-95"
+                        >
+                            Confirm Delete
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     )
 }

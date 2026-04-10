@@ -29,7 +29,7 @@ const BLANK_FORM = {
 /* ── Inner: Schedule Form Modal ─────────────────────────────────────────── */
 function ScheduleFormModal({ open, onClose, initial, employees, allProjects }) {
     const qc = useQueryClient()
-    const isEdit = !!initial?._id
+    const isEdit = !!initial?.id
     const [form, setForm] = useState(BLANK_FORM)
     const [empSearch, setEmpSearch] = useState('')
     const [projSearch, setProjSearch] = useState('')
@@ -52,7 +52,7 @@ function ScheduleFormModal({ open, onClose, initial, employees, allProjects }) {
                     frequency: initial.frequency || 'weekly',
                     scheduledTime: initial.scheduledTime || '09:00',
                     reportType: initial.reportType || 'approved',
-                    recipientIds: (initial.recipientIds || []).map(r => r._id || r),
+                    recipientIds: (initial.recipientIds || []).map(r => r.id || r._id || r),
                     projectIds: initial.projectIds || [],
                     isActive: initial.isActive !== false,
                 }
@@ -67,7 +67,7 @@ function ScheduleFormModal({ open, onClose, initial, employees, allProjects }) {
 
     const saveMutation = useMutation({
         mutationFn: () => isEdit
-            ? reportSchedulesAPI.update(initial._id, form)
+            ? reportSchedulesAPI.update(initial.id, form)
             : reportSchedulesAPI.create(form),
         onSuccess: () => {
             toast.success(isEdit ? 'Schedule updated!' : 'Schedule created — auto-send enabled!')
@@ -178,9 +178,9 @@ function ScheduleFormModal({ open, onClose, initial, employees, allProjects }) {
                         </div>
                         <div className="space-y-1 max-h-36 overflow-y-auto border border-slate-100 dark:border-white/10 rounded-xl p-2">
                             {filtEmp.map(emp => {
-                                const sel = form.recipientIds.includes(emp._id)
+                                const sel = form.recipientIds.includes(emp.id)
                                 return (
-                                    <button key={emp._id} onClick={() => toggleItem('recipientIds', emp._id)}
+                                    <button key={emp.id} onClick={() => toggleItem('recipientIds', emp.id)}
                                         className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-sm transition-all ${sel ? 'bg-primary/10 text-primary' : 'hover:bg-slate-50 dark:hover:bg-white/5'}`}>
                                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${sel ? 'bg-primary text-white' : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300'}`}>
                                             {emp.name?.[0]?.toUpperCase()}
@@ -214,9 +214,9 @@ function ScheduleFormModal({ open, onClose, initial, employees, allProjects }) {
                         </div>
                         <div className="space-y-1 max-h-32 overflow-y-auto border border-slate-100 dark:border-white/10 rounded-xl p-2">
                             {filtProj.map(proj => {
-                                const sel = form.projectIds.includes(proj._id)
+                                const sel = form.projectIds.includes(proj.id)
                                 return (
-                                    <button key={proj._id} onClick={() => toggleItem('projectIds', proj._id)}
+                                    <button key={proj.id} onClick={() => toggleItem('projectIds', proj.id)}
                                         className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-sm transition-all ${sel ? 'bg-primary/10 text-primary' : 'hover:bg-slate-50 dark:hover:bg-white/5'}`}>
                                         <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${sel ? 'bg-primary text-white' : 'bg-slate-200 dark:bg-slate-600 text-slate-500'}`}>
                                             {proj.code?.[0] || proj.name?.[0]}
@@ -450,7 +450,7 @@ export default function ReportsAutomationTab() {
                                             onClick={() => updGlobal('defaultFormat', fmt.id)}
                                             className={`flex flex-col items-center justify-center gap-1 py-4 rounded-2xl border-2 text-center transition-all ${globalSettings.defaultFormat === fmt.id
                                                 ? 'border-primary bg-primary/60 dark:bg-primary0/10'
-                                                : 'border-slate-100 dark:border-white/5 bg-slate-50/30 hover:border-slate-200'
+                                                : 'border-slate-100 dark:border-white/5 bg-slate-50/30 hover:bg-slate-100 dark:hover:bg-white/5'
                                                 }`}
                                         >
                                             <span className="text-xl leading-none">{fmt.icon}</span>
@@ -469,7 +469,7 @@ export default function ReportsAutomationTab() {
                                         onClick={() => updGlobal('autoSchedule', !globalSettings.autoSchedule)}
                                         className={`w-full py-4 px-5 rounded-2xl border-2 flex items-center justify-between transition-all ${globalSettings.autoSchedule
                                             ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-500/10'
-                                            : 'border-slate-100 dark:border-white/5 bg-slate-50/30 hover:border-slate-200'
+                                            : 'border-slate-100 dark:border-white/5 bg-slate-50/30 hover:bg-slate-100 dark:hover:bg-white/5'
                                             }`}
                                     >
                                         <div className="text-left">
@@ -541,7 +541,7 @@ export default function ReportsAutomationTab() {
                         {schedules.map(s => {
                             const c = STATUS_COLORS[s.reportType] || STATUS_COLORS.all
                             return (
-                                <div key={s._id} className={`group relative rounded-[1.5rem] border transition-all ${s.isActive ? 'border-indigo-200/50 dark:border-primary0/20 bg-primary/30 dark:bg-primary0/5' : 'border-slate-100 dark:border-white/5 grayscale'}`}>
+                                <div key={s.id} className={`group relative rounded-[1.5rem] border transition-all ${s.isActive ? 'border-indigo-200/50 dark:border-primary0/20 bg-primary/30 dark:bg-primary0/5' : 'border-slate-100 dark:border-white/5 grayscale'}`}>
                                     <div className="p-5 flex flex-wrap items-center gap-5">
                                         {/* Status indicator */}
                                         <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${s.isActive ? c.dot : 'bg-slate-300'} ${s.isActive ? 'shadow-md' : ''}`} />
@@ -564,19 +564,19 @@ export default function ReportsAutomationTab() {
                                         {/* Actions */}
                                         <div className="flex items-center gap-2 flex-shrink-0">
                                             <button
-                                                onClick={() => sendNowMutation.mutate(s._id)}
+                                                onClick={() => sendNowMutation.mutate(s.id)}
                                                 disabled={sendNowMutation.isPending}
                                                 className="h-9 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2 disabled:opacity-60"
                                             >
                                                 {sendNowMutation.isPending ? <Spinner size="sm" color="white" /> : <Send size={13} />} Send Now
                                             </button>
                                             <div className="flex items-center gap-1 bg-slate-100/60 dark:bg-white/5 p-1 rounded-xl">
-                                                <button onClick={() => setHistoryTarget({ id: s._id, name: s.name })} className="p-2 rounded-lg text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-white/10 transition-all" title="View History"><Clock size={15} /></button>
-                                                <button onClick={() => openEdit(s)} className="p-2 rounded-lg text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-white/10 transition-all" title="Edit Schedule"><Settings2 size={15} /></button>
-                                                <button onClick={() => { if (confirm(`Purge "${s.name}"?`)) deleteMutation.mutate(s._id) }} className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-white/10 transition-all" title="Delete"><X size={15} /></button>
+                                                <button onClick={() => setHistoryTarget({ id: s.id, name: s.name })} className="p-2 rounded-lg text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-white/10 transition-all" title="View History"><Clock size={15} /></button>
+                                                <button onClick={() => openEdit(s)} className="p-2 rounded-lg text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-white/10 transition-all" title="Edit Schedule"><Settings2 size={15} /></button>
+                                                <button onClick={() => { if (confirm(`Purge "${s.name}"?`)) deleteMutation.mutate(s.id) }} className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-white/10 transition-all" title="Delete"><X size={15} /></button>
                                             </div>
                                             <button
-                                                onClick={() => toggleActiveMutation.mutate({ id: s._id, isActive: !s.isActive })}
+                                                onClick={() => toggleActiveMutation.mutate({ id: s.id, isActive: !s.isActive })}
                                                 className={`relative w-11 h-6 rounded-full transition-all flex-shrink-0 flex items-center px-1 ${s.isActive ? 'btn-primary' : 'bg-slate-200 dark:bg-slate-700'}`}
                                             >
                                                 <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${s.isActive ? 'translate-x-5' : 'translate-x-0'}`} />

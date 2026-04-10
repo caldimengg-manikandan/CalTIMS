@@ -304,7 +304,7 @@ export default function TimesheetHistoryPage() {
                                 </tr>
                             ) : (
                                 data.data.map((row) => (
-                                    <tr key={row._id} className="hover:bg-slate-50/50 dark:hover:bg-white dark:hover:text-black transition-colors group">
+                                    <tr key={row.id || row._id} className="hover:bg-slate-50/50 dark:hover:bg-white dark:hover:text-black transition-colors group">
                                         <td className="px-6 py-5">
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 bg-slate-100 dark:bg-black rounded-lg text-slate-400">
@@ -351,7 +351,7 @@ export default function TimesheetHistoryPage() {
                                         <td className="px-6 py-5 text-center">
                                             <div className="flex items-center justify-center gap-1">
                                                 <button
-                                                    onClick={() => handleViewDetails(row.weekStartDate, row.userId?._id || row.userId)}
+                                                    onClick={() => handleViewDetails(row.weekStartDate, row.userId?.id || row.userId?._id || row.userId)}
                                                     className="p-2 text-slate-400 hover:text-primary hover:bg-indigo-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
                                                     title="View Details"
                                                 >
@@ -360,7 +360,7 @@ export default function TimesheetHistoryPage() {
                                                 {resolveStatus(row.statuses) === 'draft' && (
                                                     <>
                                                         <button
-                                                            onClick={() => navigate(`/timesheets?id=${row._id}&date=${format(new Date(row.weekStartDate), 'yyyy-MM-dd')}`)}
+                                                            onClick={() => navigate(`/timesheets?id=${row.id || row._id}&date=${format(new Date(row.weekStartDate), 'yyyy-MM-dd')}`)}
                                                             className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
                                                             title="Edit Draft"
                                                         >
@@ -369,7 +369,7 @@ export default function TimesheetHistoryPage() {
                                                         <button
                                                             onClick={() => {
                                                                 if (window.confirm('Are you sure you want to delete this draft?')) {
-                                                                    deleteTimesheet(row._id)
+                                                                    deleteTimesheet(row.id || row._id)
                                                                 }
                                                             }}
                                                             className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all active:scale-95"
@@ -388,7 +388,7 @@ export default function TimesheetHistoryPage() {
                                                             });
                                                             return;
                                                         }
-                                                        setIncidentTimesheetId(row._id);
+                                                        setIncidentTimesheetId(row.id || row._id);
                                                         setIsIncidentModalOpen(true);
                                                     }}
                                                     className={clsx(

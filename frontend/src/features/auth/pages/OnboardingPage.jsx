@@ -21,7 +21,7 @@ export default function OnboardingPage() {
   const { user, setAuth } = useAuthStore()
   const [step, setStep] = React.useState(1)
 
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, handleSubmit, setError, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
   })
 
@@ -38,8 +38,24 @@ export default function OnboardingPage() {
       navigate('/dashboard', { replace: true })
     },
     onError: (err) => {
-      const message = err.response?.data?.message || 'Onboarding failed. Please try again.'
-      toast.error(message)
+      const { message, errors: serverErrors } = err.response?.data || {}
+      
+      if (serverErrors && typeof serverErrors === 'object') {
+        let firstErrorStep = null;
+        Object.entries(serverErrors).forEach(([field, msg]) => {
+          setError(field, { type: 'server', message: msg })
+          toast.error(msg, { id: msg })
+          
+          if (!firstErrorStep) {
+            if (field === 'organizationName') firstErrorStep = 1;
+            if (field === 'phoneNumber') firstErrorStep = 2;
+          }
+        })
+        if (firstErrorStep) setStep(firstErrorStep);
+      } else {
+        const fallbackMsg = message || 'Onboarding failed. Please try again.'
+        toast.error(fallbackMsg, { id: fallbackMsg })
+      }
     }
   })
 

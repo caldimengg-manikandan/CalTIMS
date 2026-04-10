@@ -28,30 +28,40 @@ exports.DEFAULT_TEMPLATES = [
     <meta charset="utf-8">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-        body { ${commonStyles} background-color: transparent; }
-        .container { max-width: 800px; margin: 40px auto; border: 1px solid #e2e8f0; border-radius: 24px; padding: 60px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }
-        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #f1f5f9; padding-bottom: 30px; margin-bottom: 30px; }
-        .company-name { font-size: 24px; font-weight: 900; color: #4f46e5; }
-        .title { font-size: 20px; font-weight: 700; text-align: right; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 30px; }
-        .section-title { font-size: 12px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; }
-        .row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
-        .label { color: #64748b; font-weight: 600; }
+        body { ${commonStyles} background-color: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .container { max-width: 800px; margin: 0 auto; border: 1px solid #f1f5f9; border-radius: 24px; padding: 40px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); min-height: 280mm; box-sizing: border-box; }
+        .header { display: flex; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px; margin-bottom: 35px; align-items: flex-start; }
+        .company-name { font-size: 26px; font-weight: 900; color: #4f46e5; text-transform: uppercase; letter-spacing: -0.5px; }
+        .company-address { font-size: 12px; color: #64748b; margin-top: 6px; line-height: 1.5; max-width: 320px; }
+        .title { font-size: 20px; font-weight: 800; text-align: right; color: #0f172a; }
+        .info-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; margin-bottom: 40px; }
+        .section-title { font-size: 11px; font-weight: 800; color: #6366f1; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 18px; border-bottom: 2px solid #f8fafc; padding-bottom: 6px; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; border-bottom: 1px solid #f8fafc; padding-bottom: 4px; }
+        .label { color: #94a3b8; font-weight: 500; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
         .value { color: #1e293b; font-weight: 700; }
         .table-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-        .summary-box { padding: 15px; border-radius: 12px; margin-top: 15px; display: flex; justify-content: space-between; font-weight: 800; border: 1px solid rgba(0,0,0,0.05); }
-        .earnings { background: rgba(0, 0, 0, 0.05); color: #166534; }
-        .deductions { background: rgba(0, 0, 0, 0.05); color: #991b1b; }
-        .net-pay { background: #1e293b; color: white; padding: 30px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; margin-top: 40px; }
-        .net-val { font-size: 36px; font-weight: 900; }
+        .summary-box { padding: 16px; border-radius: 12px; margin-top: 15px; display: flex; justify-content: space-between; font-weight: 800; font-size: 14px; }
+        .earnings { background: #f0fdf4; color: #166534; }
+        .deductions { background: #fef2f2; color: #991b1b; }
+        .net-pay { background: #0f172a; color: white; padding: 35px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; margin-top: 45px; position: relative; overflow: hidden; }
+        .net-pay::after { content: ''; position: absolute; right: -20px; top: -20px; width: 100px; height: 100px; background: rgba(255,255,255,0.03); border-radius: 50%; }
+        .net-val { font-size: 40px; font-weight: 900; letter-spacing: -1px; }
+        .disclaimer { font-size: 10px; color: #94a3b8; text-align: center; margin-top: 40px; font-style: italic; opacity: 0.8; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <div><div class="company-name">TIMS CORPORATION</div><div style="font-size: 12px; color: #64748b;">Secure Payroll Document</div></div>
-            <div class="title"><div>PAYSLIP {{monthName}} {{year}}</div><div style="font-size: 10px; color: #94a3b8;">REF: {{refNo}}</div></div>
+            <div>
+                <div class="company-name">{{companyName}}</div>
+                <div class="company-address">{{companyAddress}}</div>
+            </div>
+            <div class="title">
+                <div>PAYSLIP {{monthName}} {{year}}</div>
+                <div style="font-size: 10px; color: #94a3b8;">REF: {{refNo}}</div>
+            </div>
         </div>
+        
         <div class="info-grid">
             <div>
                 <div class="section-title">Employee Information</div>
@@ -68,6 +78,7 @@ exports.DEFAULT_TEMPLATES = [
                 <div class="row"><span class="label">LOP Days</span><span class="value">{{lopDays}}</span></div>
             </div>
         </div>
+
         <div class="table-grid">
             <div>
                 <div class="section-title" style="color: #059669;">Earnings</div>
@@ -80,14 +91,17 @@ exports.DEFAULT_TEMPLATES = [
                 <div class="summary-box deductions"><span>Total Deductions</span><span>{{totalDeductions}}</span></div>
             </div>
         </div>
+
         <div class="net-pay">
-            <div><div style="font-size: 12px; opacity: 0.6;">NET DISBURSEMENT</div><div class="net-val">{{netPay}}</div></div>
+            <div><div style="font-size: 11px; opacity: 0.6;">NET DISBURSEMENT</div><div class="net-val">{{netPay}}</div></div>
             <div style="text-align: right;"><div style="color: #10b981; font-weight: 800;">✓ VERIFIED</div><div style="font-size: 10px; opacity: 0.4;">Electronically Generated</div></div>
         </div>
+
+        <div class="disclaimer">This is a computer-generated document and does not require a signature.</div>
     </div>
 </body>
 </html>
-    `
+`
   },
   {
     name: 'MODERN',
@@ -97,9 +111,9 @@ exports.DEFAULT_TEMPLATES = [
 <html>
 <head>
     <style>
-        body { ${commonStyles} background: transparent; padding: 40px; }
-        .container { border-radius: 20px; padding: 40px; }
-        .header { margin-bottom: 60px; }
+        body { ${commonStyles} background: white; padding: 20px; }
+        .container { border-radius: 20px; padding: 20px; max-width: 750px; margin: 0 auto; box-sizing: border-box; min-height: 280mm; }
+        .header { margin-bottom: 40px; }
         .period { font-size: 48px; font-weight: 900; letter-spacing: -2px; }
         .emp-info { display: flex; gap: 40px; margin-bottom: 40px; font-size: 14px; }
         .label { color: #94a3b8; text-transform: uppercase; font-size: 10px; font-weight: 800; display: block; margin-bottom: 4px; }
@@ -155,9 +169,9 @@ exports.DEFAULT_TEMPLATES = [
 <html>
 <head>
     <style>
-        body { ${commonStyles} font-size: 12px; padding: 20px; background: transparent; }
-        .container { border-radius: 12px; padding: 20px; }
-        .box { border: 1px solid rgba(0,0,0,0.1); margin-bottom: 20px; border-radius: 8px; overflow: hidden; }
+        body { ${commonStyles} font-size: 12px; padding: 10px; background: white; }
+        .container { border-radius: 12px; padding: 15px; max-width: 750px; margin: 0 auto; min-height: 280mm; box-sizing: border-box; }
+        .box { border: 1px solid rgba(0,0,0,0.1); margin-bottom: 15px; border-radius: 8px; overflow: hidden; }
         .box-title { background: rgba(0, 0, 0, 0.05); padding: 10px 15px; font-weight: 800; border-bottom: 1px solid rgba(0,0,0,0.1); }
         .inner { padding: 15px; }
         .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
@@ -223,9 +237,9 @@ exports.DEFAULT_TEMPLATES = [
 <html>
 <head>
     <style>
-        body { ${commonStyles} background: transparent; padding: 50px; }
-        .card { border-radius: 30px; padding: 50px; box-shadow: 0 4px 60px rgba(0,0,0,0.05); }
-        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 50px; }
+        body { ${commonStyles} background: white; padding: 20px; }
+        .card { border-radius: 30px; padding: 30px; box-shadow: none; max-width: 750px; margin: 0 auto; min-height: 280mm; box-sizing: border-box; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .logo { width: 50px; height: 50px; background: #6366f1; border-radius: 12px; }
         .pill { background: #e0e7ff; color: #4338ca; padding: 6px 16px; border-radius: 99px; font-size: 12px; font-weight: 700; }
         .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 50px; }

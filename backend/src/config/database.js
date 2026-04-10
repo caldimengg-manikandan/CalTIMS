@@ -1,28 +1,37 @@
 'use strict';
 
-const mongoose = require('mongoose');
+const { PrismaClient } = require('@prisma/client');
 const logger = require('../shared/utils/logger');
 
+// Prisma Client singleton (prevents multiple instances in dev hot-reload)
+let prisma;
+
+if (!global.__prisma__) {
+  global.__prisma__ = new PrismaClient({
+    log: process.env.NODE_ENV === 'development'
+      ? ['error', 'warn']
+      : ['error'],
+  });
+}
+
+prisma = global.__prisma__;
+
+/**
+ * connectDB — verify Prisma can reach PostgreSQL
+ */
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-    });
-    logger.info(`DATABASE_TRACE: Host=${conn.connection.host}, Port=${conn.connection.port}, DB=${conn.connection.name}`);
+    await prisma.$connect();
+    logger.info('PostgreSQL connected via Prisma');
   } catch (err) {
-    logger.error(`MongoDB connection error: ${err.message}`);
+    logger.error(`PostgreSQL connection error: ${err.message}`);
     process.exit(1);
   }
 };
 
-mongoose.connection.on('disconnected', () => {
-  logger.warn('MongoDB disconnected');
+// Graceful disconnect on process exit
+process.on('beforeExit', async () => {
+  await prisma.$disconnect();
 });
 
-mongoose.connection.on('reconnected', () => {
-  logger.info('MongoDB reconnected');
-});
-
-module.exports = { connectDB };
+module.exports = { prisma, connectDB };

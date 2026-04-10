@@ -1,58 +1,56 @@
 'use strict';
 
 const cron = require('node-cron');
-const Settings = require('../settings/settings.model');
+const { prisma } = require('../../config/database');
 const payrollController = require('./payroll.controller');
 const logger = require('../../shared/utils/logger');
 
 /**
  * Auto Payroll Scheduler
- * Runs daily at midnight to check if it's the auto-processing day.
+ * Refactored to Prisma Client
  */
 const start = () => {
     // Run at 00:01 every day
     cron.schedule('1 0 * * *', async () => {
         try {
-            const settings = await Settings.findOne().lean();
-            const config = settings?.payroll;
+            logger.info('[PayrollScheduler] Checking for auto-processing tasks...');
+            const allSettings = await prisma.orgSettings.findMany();
             
-            if (!config || !config.autoProcessingDay) return;
-
             const now = new Date();
             const today = now.getDate();
+            const month = now.getMonth() + 1;
+            const year = now.getFullYear();
 
-            if (today === config.autoProcessingDay) {
-                logger.info('[PayrollScheduler] Auto-processing day reached. Initiating bulk payroll...');
-                
-                // We need to process for PREVIOUS month if today is e.g. 1st of next month
-                // Or current month if today is 28th.
-                // Usually auto-processing is for the month just ended or nearing end.
-                const month = now.getMonth() + 1; // Current month
-                const year = now.getFullYear();
+            for (const setting of allSettings) {
+                const config = setting.data?.payroll;
+                if (!config || !config.autoProcessingDay) continue;
 
-                // Mock request object for controller
-                const mockReq = { 
-                    body: { month, year },
-                    user: { id: 'SYSTEM' } // System user
-                };
-                
-                const mockRes = {
-                    status: () => ({ json: (data) => logger.info(`[PayrollScheduler] Result: ${JSON.stringify(data)}`) })
-                };
+                if (today === config.autoProcessingDay) {
+                    const organizationId = setting.organizationId;
+                    logger.info(`[PayrollScheduler] Day reached for Org: ${organizationId}. Initiating...`);
+                    
+                    const mockReq = { 
+                        body: { month, year },
+                        organizationId: organizationId,
+                        user: { id: 'SYSTEM', role: 'system' },
+                        ip: '127.0.0.1'
+                    };
+                    
+                    const mockRes = {
+                        status: () => ({ json: (data) => logger.info(`[PayrollScheduler] Result: ${JSON.stringify(data)}`) })
+                    };
 
-                // Trigger simulation then save
-                // In a real production system, this would be a more robust service call
-                // but utilizing existing controller logic for simplicity
-                await payrollController.simulatePayroll(mockReq, mockRes, (err) => {
-                    if (err) logger.error(`[PayrollScheduler] Simulation failed: ${err.message}`);
-                });
+                    await payrollController.runPayrollExecution(mockReq, mockRes, (err) => {
+                        if (err) logger.error(`[PayrollScheduler] [${organizationId}] Engine failed: ${err.message}`);
+                    });
+                }
             }
         } catch (err) {
-            logger.error(`[PayrollScheduler] Error: ${err.message}`);
+            logger.error(`[PayrollScheduler] Global Error: ${err.message}`);
         }
     });
     
-    logger.info('[PayrollScheduler] ✅ Auto payroll scheduler initialized.');
+    logger.info('[PayrollScheduler] ✅ Auto payroll scheduler initialized (Prisma Mode).');
 };
 
 module.exports = { start };

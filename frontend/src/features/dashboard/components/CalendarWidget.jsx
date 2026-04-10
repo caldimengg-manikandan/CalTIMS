@@ -118,7 +118,7 @@ export default function CalendarWidget() {
     const containerRef = useRef(null)
     const { user } = useAuthStore()
     const navigate = useNavigate()
-    const isAdmin = user?.role === 'admin'
+    const isAdmin = user?.role === 'admin' || user?.role === 'owner' || user?.isOwner
 
     const { data: events, isLoading } = useQuery({
         queryKey: ['calendar-events', format(currentMonth, 'yyyy-MM')],

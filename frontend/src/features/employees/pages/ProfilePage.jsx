@@ -328,7 +328,7 @@ export default function ProfilePage() {
                             flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all
                             ${activeTab === tab.id
                                 ? 'bg-white dark:bg-slate-800 text-primary shadow-sm ring-1 ring-slate-200 dark:ring-white/10'
-                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50 dark:hover:bg-white/5'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/40 dark:hover:bg-white/10'
                             }
                             ${isForced && tab.id !== 'security' ? 'opacity-50 cursor-not-allowed' : ''}
                         `}

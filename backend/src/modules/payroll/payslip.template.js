@@ -13,9 +13,15 @@ const formatCurrency = (val) => {
 };
 
 exports.getEnterprisePayslipHtml = (payroll, settings = {}) => {
-    const user = payroll.user || {};
+    const employeeInfo = payroll.employeeInfo || payroll.user || {};
+    const bankDetails = payroll.bankDetails || payroll.user || {};
     const breakdown = payroll.breakdown || {};
-    const currencySymbol = settings?.payroll?.currencySymbol || '₹';
+    const getCurrencySymbol = (code) => {
+        const symbols = { INR: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'د.إ' };
+        return symbols[code] || '₹';
+    };
+    const currencyCode = settings?.organization?.currency || 'INR';
+    const currencySymbol = getCurrencySymbol(currencyCode);
     const companyName = settings?.organization?.companyName || 'TIMS CORPORATION';
     const monthNames = [
         "January", "February", "March", "April", "May", "June",
@@ -26,8 +32,8 @@ exports.getEnterprisePayslipHtml = (payroll, settings = {}) => {
     const payslipId = (payroll._id || '').toString().slice(-8).toUpperCase();
 
     // Extract and Deduplicate Components by Name
-    const rawEarnings = breakdown.earnings?.components || [];
-    const rawDeductions = breakdown.deductions?.components || [];
+    const rawEarnings = Array.isArray(breakdown.earnings) ? breakdown.earnings : (breakdown.earnings?.components || []);
+    const rawDeductions = Array.isArray(breakdown.deductions) ? breakdown.deductions : (breakdown.deductions?.components || []);
     
     // Using Map to maintain last value for each unique component name
     const earningsMap = new Map();
@@ -58,15 +64,16 @@ exports.getEnterprisePayslipHtml = (payroll, settings = {}) => {
             background-color: #f8fafc;
         }
         .payslip-container {
-            max-width: 800px;
-            margin: 40px auto;
+            max-width: 750px;
+            margin: 0 auto;
             background: white;
             border: 1px solid #e2e8f0;
             border-radius: 24px;
-            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
-            padding: 60px;
+            padding: 30px;
             position: relative;
             overflow: hidden;
+            min-height: 280mm;
+            box-sizing: border-box;
         }
         .header {
             display: flex;
@@ -267,7 +274,7 @@ exports.getEnterprisePayslipHtml = (payroll, settings = {}) => {
         <div class="header">
             <div>
                 <h1 class="company-name">${companyName}</h1>
-                <div class="statement-label">Employee Payout Statement • Secure Document</div>
+                <div class="statement-label">Employee Payout Statement</div>
             </div>
             <div class="period-box">
                 <div class="period-title">${monthName} ${year}</div>
@@ -278,17 +285,19 @@ exports.getEnterprisePayslipHtml = (payroll, settings = {}) => {
         <div class="grid">
             <div>
                 <div class="section-title">Employee Details</div>
-                <div class="info-row"><span class="label">Employee ID</span><span class="value">${user.employeeId || 'N/A'}</span></div>
-                <div class="info-row"><span class="label">Full Name</span><span class="value">${user.name || 'N/A'}</span></div>
-                <div class="info-row"><span class="label">Department</span><span class="value">${user.department || 'N/A'}</span></div>
-                <div class="info-row"><span class="label">Designation</span><span class="value">${user.designation || 'N/A'}</span></div>
+                <div class="info-row"><span class="label">Employee ID</span><span class="value">${employeeInfo.employeeId || 'N/A'}</span></div>
+                <div class="info-row"><span class="label">Full Name</span><span class="value">${employeeInfo.name || 'N/A'}</span></div>
+                <div class="info-row"><span class="label">Department</span><span class="value">${employeeInfo.department || 'N/A'}</span></div>
+                <div class="info-row"><span class="label">Designation</span><span class="value">${employeeInfo.designation || 'N/A'}</span></div>
             </div>
             <div>
                 <div class="section-title">Financial Context</div>
-                <div class="info-row"><span class="label">Bank Name</span><span class="value">${user.bankName || 'N/A'}</span></div>
-                <div class="info-row"><span class="label">Account No</span><span class="value">****${(user.accountNumber || '').slice(-4)}</span></div>
-                <div class="info-row"><span class="label">PAN ID</span><span class="value">${user.pan || 'N/A'}</span></div>
-                <div class="info-row"><span class="label">LOP Days</span><span class="value">${payroll.attendance?.lopDays || 0} Days</span></div>
+                <div class="info-row"><span class="label">Bank Name</span><span class="value">${bankDetails.bankName || 'N/A'}</span></div>
+                <div class="info-row"><span class="label">Account No</span><span class="value">****${(bankDetails.accountNumber || '').slice(-4)}</span></div>
+                <div class="info-row"><span class="label">PAN ID</span><span class="value">${bankDetails.pan || 'N/A'}</span></div>
+                ${(payroll.attendance?.lopDays > 0) ? `
+                <div class="info-row"><span class="label">LOP Days / Adjustment</span><span class="value">${payroll.attendance.lopDays} Days / ${currencySymbol}${formatCurrency(lop)}</span></div>
+                ` : ''}
             </div>
         </div>
 
@@ -302,7 +311,7 @@ exports.getEnterprisePayslipHtml = (payroll, settings = {}) => {
                     </div>
                 `).join('')}
                 <div class="summary-box earning-summary">
-                    <span class="summary-label">Gross Earning</span>
+                    <span class="summary-label">Earned Gross</span>
                     <span class="summary-value">${currencySymbol}${formatCurrency(gross)}</span>
                 </div>
             </div>
@@ -314,17 +323,12 @@ exports.getEnterprisePayslipHtml = (payroll, settings = {}) => {
                         <span class="deduction-value">-${currencySymbol}${formatCurrency(d.value)}</span>
                     </div>
                 `).join('')}
-                ${lop > 0 ? `
-                    <div class="line-item">
-                        <span class="line-label">Attendance Adjustment</span>
-                        <span class="deduction-value">-${currencySymbol}${formatCurrency(lop)}</span>
-                    </div>
-                ` : ''}
                 <div class="summary-box deduction-summary">
                     <span class="summary-label">Total Liability</span>
                     <span class="summary-value">-${currencySymbol}${formatCurrency(totalDeds)}</span>
                 </div>
             </div>
+
         </div>
 
         <div class="net-pay-banner">

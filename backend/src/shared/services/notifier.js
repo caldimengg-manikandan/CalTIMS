@@ -2,35 +2,30 @@
 
 const notificationService = require('../../modules/notifications/notification.service');
 const emailService = require('./email.service');
-const mongoose = require('mongoose');
+const { prisma } = require('../../config/database');
 
-/**
- * Notifier service centralizes all system notifications (In-app + Email)
- * It respects the system settings for global/event-level toggles.
- */
 const notifier = {
   async getSettings(organizationId) {
-    const Settings = mongoose.model('Settings');
-    const settings = await Settings.findOne({ organizationId }).lean();
-    return settings || {};
+    if (!organizationId) return {};
+    const s = await prisma.orgSettings.findUnique({ where: { organizationId } });
+    return s?.data || {};
   },
 
   async send(userId, { type, title, message, refId, refModel, actionLink, actionLabel, userEmail, organizationId }) {
     if (!organizationId) {
-        console.warn(`[Notifier] Sending notification ${type} without organizationId to user ${userId}`);
+      console.warn(`[Notifier] Sending notification ${type} without organizationId to user ${userId}`);
     }
     const settings = await this.getSettings(organizationId);
     const notifSettings = settings.notifications || {};
     const companyName = settings.organization?.companyName || 'CALTIMS';
 
-    // 1. Check event trigger toggle
     const triggerMap = {
       'timesheet_submitted': 'notifyOnTimesheetSubmission',
       'timesheet_approved': 'notifyOnTimesheetApproval',
       'timesheet_rejected': 'notifyOnTimesheetRejection',
       'leave_applied': 'notifyOnLeaveRequest',
       'leave_approved': 'notifyOnLeaveApproval',
-      'leave_rejected': 'notifyOnLeaveRejection', // Added for completeness
+      'leave_rejected': 'notifyOnLeaveRejection',
       'support_ticket_created': 'notifyOnSupportTicket',
     };
 
@@ -41,38 +36,21 @@ const notifier = {
 
     const results = { inApp: false, email: false };
 
-    // 2. In-App Notification
     if (notifSettings.inAppEnabled !== false) {
-      await notificationService.create({
-        userId,
-        type,
-        title,
-        message,
-        refId,
-        refModel,
-        organizationId
-      });
+      await notificationService.create({ userId, type, title, message, refId, refModel, organizationId });
       results.inApp = true;
     }
 
-    // 3. Email Notification
     if (notifSettings.emailEnabled !== false && userEmail) {
       try {
-        await emailService.sendNotificationEmail(userEmail, {
-          title,
-          message,
-          actionLink,
-          actionLabel,
-          companyName
-        });
+        await emailService.sendNotificationEmail(userEmail, { title, message, actionLink, actionLabel, companyName });
         results.email = true;
       } catch (err) {
-        console.error(`Failed to send email notification to ${userEmail}:`, err.message);
         results.emailError = err.message;
       }
     }
 
-    // 4. Slack Notification
+    // Slack
     const slackSettings = settings.integrations?.slackNotifications || {};
     if (slackSettings.enabled && slackSettings.webhookUrl) {
       try {
@@ -86,13 +64,12 @@ const notifier = {
         });
         results.slack = true;
       } catch (err) {
-        console.error('Failed to send Slack notification:', err.message);
         results.slackError = err.message;
       }
     }
 
     return results;
-  }
+  },
 };
 
 module.exports = notifier;

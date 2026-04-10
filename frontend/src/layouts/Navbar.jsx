@@ -21,7 +21,10 @@ export default function Navbar() {
     const pathnames = location.pathname.split('/').filter(x => x)
 
     const getLabel = (part) => {
-        if (/^[0-9a-fA-F]{24}$/.test(part)) return 'Details'
+        // Match MongoDB ObjectID (24 hex) or UUID (36 chars with hyphens)
+        if (/^[0-9a-fA-F]{24}$/.test(part) || /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(part)) {
+            return 'Details'
+        }
         return ROUTE_LABELS[part] || part.charAt(0).toUpperCase() + part.slice(1).replace(/-/g, ' ')
     }
 

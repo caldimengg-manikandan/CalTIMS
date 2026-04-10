@@ -19,6 +19,7 @@ import PermissionAuditLogsTab from '../tabs/PermissionAuditLogsTab'
 import PayrollPolicyTab from '../tabs/PayrollPolicyTab'
 import PayslipTemplatesTab from '../tabs/PayslipTemplatesTab'
 import OnboardingTab from '../tabs/OnboardingTab'
+import ConfigurationCenterTab from '../tabs/ConfigurationCenterTab'
 import { PolicySettings } from '../../payroll/pages/PolicySettings'
 import SubscriptionPage from '../../subscriptions/pages/SubscriptionPage'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -47,8 +48,8 @@ const NAVIGATION_SECTIONS = [
     
             { id: 'timesheet_policy', label: 'Timesheet Policy', icon: Clock },
             { id: 'leave_policy', label: 'Leave Policy', icon: Briefcase },
-            { id: 'payroll_policy', label: 'Payroll Policy', icon: Banknote },
-            { id: 'payslip_templates', label: 'Payslip Templates', icon: FileText },
+            // { id: 'payroll_policy', label: 'Payroll Policy', icon: Banknote },
+            // { id: 'payslip_templates', label: 'Payslip Templates', icon: FileText },
             { id: 'compliance', label: 'Compliance & Locks', icon: FileLock },
         ]
     },
@@ -87,7 +88,8 @@ export default function SettingsLayout() {
             case 'timesheet_policy': return <TimesheetPolicyTab />
             case 'reports': return <ReportsAutomationTab />
             case 'branding': return <BrandingTab />
-            case 'roles': return <UsersAndRolesTab />
+            case 'roles':
+            case 'rbac': return <UsersAndRolesTab />
             case 'permission_audit': return <PermissionAuditLogsTab />
             case 'audit': return <AuditLogsTab />
             case 'leave_policy': return <LeavePolicyTab />

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
     Plus,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react'
 import { timesheetAPI, projectAPI, settingsAPI, taskAPI, leaveAPI, calendarAPI, attendanceAPI } from '@/services/endpoints'
 import { useSettingsStore } from '@/store/settingsStore'
+import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import Spinner from '@/components/ui/Spinner'
 import {
@@ -50,17 +52,60 @@ const isLeaveTaskType = (taskType, leaveTypes = DEFAULT_LEAVE_TYPES) =>
 // Detect if a row is a permission row
 const isPermissionRow = (taskType) => taskType === PERMISSION_ROW_MARKER
 
+// Helper to check if a leave type counts as unpaid/loss of pay
+const isLopType = (type) => {
+    if (!type) return false
+    const t = type.toLowerCase()
+    return t.includes('lop') || t.includes('loss of pay') || t.includes('unpaid')
+}
+
 
 import PageHeader from '@/components/ui/PageHeader'
 
 export default function TimesheetEntryPage() {
     const queryClient = useQueryClient()
     const navigate = useNavigate()
+    const { user } = useAuthStore()
     const [searchParams] = useSearchParams()
     const editId = searchParams.get('id')           // direct timesheet _id for edit
     const initialDateStr = searchParams.get('date') || searchParams.get('weekStart')
 
-    const { general } = useSettingsStore()
+    const { general, fetchGeneralSettings } = useSettingsStore()
+
+    const daysLookup = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+    // Ensure general settings are loaded (needed for weekStartDay and workWeek)
+    useEffect(() => {
+        if (!general) {
+            fetchGeneralSettings()
+        }
+    }, [general, fetchGeneralSettings])
+
+    // Helper to determine if a specific day is a working day based on settings
+    const isWorkingDay = useMemo(() => {
+        const workWeek = general?.workWeek;
+        const daysLookup = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+        // Default to Mon-Fri if no setting is found
+        let activeDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+        if (workWeek) {
+            if (Array.isArray(workWeek)) {
+                activeDays = workWeek;
+            } else if (typeof workWeek === 'string') {
+                if (workWeek === 'Mon-Fri') activeDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+                else if (workWeek === 'Sun-Thu') activeDays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
+                else if (workWeek === 'Mon-Sat') activeDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                else if (workWeek.includes(',')) activeDays = workWeek.split(',').map(d => d.trim().toLowerCase());
+            }
+        }
+
+        return (date) => {
+            const dayName = daysLookup[date.getDay()];
+            return activeDays.includes(dayName);
+        };
+    }, [general?.workWeek]);
+
     const workingHoursPerDay = general?.workingHoursPerDay || 8
     const weekStartDay = general?.weekStartDay || 'monday' // 'monday' or 'sunday'
     const weekStartsOn = weekStartDay === 'sunday' ? 0 : 1
@@ -134,10 +179,14 @@ export default function TimesheetEntryPage() {
         staleTime: 5 * 60 * 1000,
     })
 
-    // Fetch active tasks
+    // Fetch active tasks - admins/owners see everything, employees see assigned only
     const { data: allTasks } = useQuery({
-        queryKey: ['tasks', 'active-list'],
-        queryFn: () => taskAPI.getAll({ isActive: true }).then(r => r.data.data),
+        queryKey: ['tasks', 'active-list', 'assigned', user?.role],
+        queryFn: () => taskAPI.getAll({
+            isActive: true,
+            assignedOnly: !['admin', 'super_admin', 'owner'].includes(user?.role?.toLowerCase())
+        }).then(r => r.data.data),
+        enabled: !!user
     })
 
     // Fetch full settings for integration status
@@ -214,20 +263,25 @@ export default function TimesheetEntryPage() {
     const { data: existingTimesheets, isLoading } = useQuery({
         queryKey: ['timesheets', 'week', format(weekStart, 'yyyy-MM-dd'), editId],
         queryFn: async () => {
-            if (editId) {
-                // Fetch the specific draft document directly
-                const res = await timesheetAPI.getById(editId)
-                const doc = res.data?.data
-                return doc ? [doc] : []
+            try {
+                if (editId) {
+                    // Fetch the specific draft document directly
+                    const res = await timesheetAPI.getById(editId)
+                    const doc = res.data?.data
+                    if (doc) return [doc]
+                }
+            } catch (err) {
+                console.error('Failed to fetch timesheet by ID, falling back to date search:', err)
             }
 
-            // Fetch ONLY this exact week's timesheet using the precise weekStart date
-            // Using a 13-day range was causing next-week timesheets (with leave rows)
-            // to bleed into previous weeks visually.
+            // Fetch by week range as primary or fallback
             const from = format(weekStart, 'yyyy-MM-dd')
             const to = format(addDays(weekStart, 6), 'yyyy-MM-dd')
 
-            const r = await timesheetAPI.getAll({ from, to })
+            // Ensure we always filter by the relevant user. 
+            // If we are editing a specific ID, the backend handle it, but for date lookup, 
+            // we must be explicit, especially for admins who would otherwise see multiple users.
+            const r = await timesheetAPI.getAll({ from, to, userId: user?.id })
             return r.data?.data || r.data?.timesheets || (Array.isArray(r.data) ? r.data : [])
         },
         staleTime: 0,
@@ -282,11 +336,10 @@ export default function TimesheetEntryPage() {
                 if (!ts.rows) return
 
                 ts.rows.forEach(r => {
-                    const pid = r.projectId?._id || r.projectId
-                    const projectIdStr = pid ? pid.toString() : 'unknown'
+                    const pid = r.projectId?.id || r.projectId?._id || r.projectId
+                    const projectIdStr = pid?.toString() || 'unknown'
                     const category = (r.category || 'Select Task').trim()
-
-                    const projectCode = r.projectId?.code || projects?.find(p => p._id === projectIdStr)?.code || ''
+                    const projectCode = r.projectId?.code || projects?.find(p => (p.id || p._id) === projectIdStr)?.code || ''
                     const isSystemLeave = projectCode === 'LEAVE-SYS' || (typeof pid === 'string' && pid === 'LEAVE-SYS') || (pid && projectIdStr.includes('LEAVE-SYS'))
 
                     if (isSystemLeave) {
@@ -298,10 +351,10 @@ export default function TimesheetEntryPage() {
                             })
 
                             if (entry) {
-                                const hours = entry.hoursWorked || 0
-                                const h = Math.floor(hours)
-                                const m = Math.round((hours - h) * 60)
-                                const isFullDay = (hours >= workingHoursPerDay) || category.toLowerCase().includes('lop') || entry.leaveType?.toLowerCase() === 'lop';
+                                const hoursVal = entry.hoursWorked || 0
+                                const h = isLopType(category) || isLopType(entry.leaveType) ? 0 : Math.floor(hoursVal)
+                                const m = isLopType(category) || isLopType(entry.leaveType) ? 0 : Math.round((hoursVal - h) * 60)
+                                const isFullDay = (hoursVal >= workingHoursPerDay) || isLopType(category) || isLopType(entry.leaveType);
 
                                 leaveMetaArray[i] = { type: category, isApproved: true, isFullDay }
                                 leaveHoursArray[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
@@ -312,8 +365,8 @@ export default function TimesheetEntryPage() {
 
                         if (!rowMap.has(key)) {
                             rowMap.set(key, {
-                                id: (r._id || `temp-${Math.random()}`),
-                                _id: r._id,
+                                id: (r.id || r._id || `temp-${Math.random()}`),
+                                _id: r.id || r._id,
                                 projectId: pid,
                                 projectCode: projectCode,
                                 taskType: category,
@@ -344,10 +397,11 @@ export default function TimesheetEntryPage() {
             })
         }
 
-        // Process weekLeaves to inject PENDING leaves
+        // Process weekLeaves to inject PENDING & APPROVED leaves
         if (weekLeaves && weekLeaves.length > 0) {
             weekLeaves.forEach(leave => {
-                if (leave.status !== 'pending') return
+                const status = leave.status?.toLowerCase()
+                if (status !== 'pending' && status !== 'approved') return
 
                 const getWorkingDaysBetween = (start, end) => {
                     const days = [];
@@ -356,16 +410,15 @@ export default function TimesheetEntryPage() {
                     cur.setHours(0, 0, 0, 0);
                     e.setHours(23, 59, 59, 999);
                     while (cur <= e) {
-                        const day = cur.getDay();
-                        if (day !== 0 && day !== 6) days.push(new Date(cur));
+                        if (isWorkingDay(cur)) days.push(new Date(cur));
                         cur.setDate(cur.getDate() + 1);
                     }
                     return days;
                 }
 
                 const leaveDays = getWorkingDaysBetween(leave.startDate, leave.endDate)
-                const leaveHours = leave.leaveType.toLowerCase() === 'lop' ? 0 : (leave.isHalfDay ? workingHoursPerDay / 2 : workingHoursPerDay)
-                const category = leave.leaveType.charAt(0).toUpperCase() + leave.leaveType.slice(1)
+                const leaveHours = isLopType(leave.leaveType) ? 0 : (leave.isHalfDay ? workingHoursPerDay / 2 : workingHoursPerDay)
+                const category = leave.leaveType?.charAt(0).toUpperCase() + leave.leaveType?.slice(1)
 
                 weekDays.forEach((day, i) => {
                     const dayStr = format(day, 'yyyy-MM-dd')
@@ -373,18 +426,46 @@ export default function TimesheetEntryPage() {
 
                     if (isLeaveDay) {
                         const isFullDay = !leave.isHalfDay;
-                        const hours = leaveHours
-                        const h = Math.floor(hours)
-                        const m = Math.round((hours - h) * 60)
+                        const isPending = status === 'pending'
+                        const isApproved = status === 'approved'
 
-                        leaveMetaArray[i] = { type: `${category} (Pending)`, isPending: true, isFullDay }
-                        leaveHoursArray[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                        leaveMetaArray[i] = {
+                            type: `${category} (${isPending ? 'Pending' : 'Approved'})`,
+                            isPending,
+                            isApproved,
+                            isFullDay
+                        }
+                        leaveHoursArray[i] = `${String(Math.floor(leaveHours)).padStart(2, '0')}:${String(Math.round((leaveHours % 1) * 60)).padStart(2, '0')}`
                     }
                 })
             })
         }
 
+
         let finalRows = Array.from(rowMap.values())
+
+        // Handle projectId from URL
+        const urlProjectId = searchParams.get('projectId')
+        if (urlProjectId && !rowMap.has(`${urlProjectId}-select task`) && !rowMap.has(`${urlProjectId}-meeting`)) {
+            // Check if this project is already in finalRows but maybe with a different task
+            const hasProject = finalRows.some(r => {
+                const pid = r.projectId?._id || r.projectId
+                return pid === urlProjectId
+            })
+
+            if (!hasProject) {
+                finalRows.push({
+                    id: Date.now(),
+                    projectId: urlProjectId,
+                    taskType: 'Select Task',
+                    dayHours: Array(7).fill('00:00'),
+                    dayMeta: Array(7).fill(null),
+                    status: 'draft',
+                    isLeaveRow: false
+                })
+            }
+        }
+
         if (finalRows.length === 0) {
             finalRows = [{ id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00'), dayMeta: Array(7).fill(null) }]
         }
@@ -395,7 +476,7 @@ export default function TimesheetEntryPage() {
 
             if (rowIndex === 0) {
                 leaveHoursArray.forEach((h, i) => {
-                    if (h !== '00:00') {
+                    if (leaveMetaArray[i]) {
                         row.dayHours[i] = h;
                     }
                 })
@@ -410,7 +491,7 @@ export default function TimesheetEntryPage() {
 
         setRows(finalRows)
         setIsDirty(false)
-    }, [existingTimesheets, weekLeaves, weekStart, weekDays, editId, projects, allTasks, tsSettings])
+    }, [existingTimesheets, weekLeaves, weekStart, weekDays, editId, projects, allTasks, tsSettings, general, searchParams])
 
     const handleWeekChange = (offset) => {
         let newDate;
@@ -419,7 +500,7 @@ export default function TimesheetEntryPage() {
         } else {
             newDate = addDays(currentDate, offset * 7);
         }
-        
+
         const target = `/timesheets?date=${format(newDate, 'yyyy-MM-dd')}`;
         if (isDirty) {
             setNavIntent(target);
@@ -469,23 +550,21 @@ export default function TimesheetEntryPage() {
             if (payloads.length === 0) return null
             return timesheetAPI.bulkUpsert(payloads)
         },
-        onSuccess: (res) => {
-            if (res) {
-                toast.success('Timesheets saved successfully')
-                queryClient.invalidateQueries({ queryKey: ['timesheets'] })
-                setIsDirty(false)
-                setUnsavedChanges(false)
+        onSuccess: () => {
+            toast.success('Timesheets saved successfully')
+            queryClient.invalidateQueries({ queryKey: ['timesheets'] })
+            setIsDirty(false)
+            setUnsavedChanges(false)
 
-                // If there was a pending navigation intended, execute it now
-                if (navIntent) {
-                    const target = navIntent
-                    setNavIntent(null)
-                    navigate(target)
-                }
+            if (navIntent) {
+                const target = navIntent
+                setNavIntent(null)
+                navigate(target)
             }
         },
         onError: (err) => {
-            toast.error(err.response?.data?.message || 'Failed to save timesheets')
+            const msg = err.response?.data?.message || err.message || 'Failed to save timesheets'
+            toast.error(msg)
         }
     })
 
@@ -505,14 +584,14 @@ export default function TimesheetEntryPage() {
             // Validate that no task/project row has zero total hours
             const hasZeroHourProject = rows.some(r => {
                 if (r.isLeaveRow || isPermissionRow(r.taskType) || r.projectId === 'LEAVE-SYS') return false;
-                if (!r.projectId || r.taskType === 'Select Task') return false; 
-                
+                if (!r.projectId || r.taskType === 'Select Task') return false;
+
                 const total = r.dayHours.reduce((acc, time) => {
                     if (!time || time === '-8' || time === '00:00') return acc;
                     const [h, m] = time.split(':').map(Number);
                     return acc + h + (m / 60);
                 }, 0);
-                
+
                 return total === 0;
             });
 
@@ -535,11 +614,10 @@ export default function TimesheetEntryPage() {
             }
 
             // Policy-Driven Daily Hours Guardrails (min/max from Timesheet Policy settings)
-            if (tsSettings?.enforceMinHoursOnSubmit && (tsSettings?.minHoursPerDay > 0 || tsSettings?.maxHoursPerDay > 0)) {
+            if (isSubjectToEnforcement && (tsSettings?.minHoursPerDay > 0 || tsSettings?.maxHoursPerDay > 0)) {
                 for (let i = 0; i < 7; i++) {
                     const day = weekDays[i];
-                    const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
-                    if (!general?.isWeekendWorkable && isWeekendDay) continue;
+                    if (!isWorkingDay(day)) continue;
 
                     // Skip fully locked leave days
                     if (lockedDays[i]) continue;
@@ -594,9 +672,12 @@ export default function TimesheetEntryPage() {
         onSuccess: () => {
             toast.success('Week submitted for approval')
             queryClient.invalidateQueries({ queryKey: ['timesheets'] })
+            setIsDirty(false)
+            setUnsavedChanges(false)
         },
         onError: (err) => {
-            toast.error(err.message || 'Failed to submit week')
+            const msg = err.response?.data?.message || err.message || 'Failed to submit week'
+            toast.error(msg)
         }
     })
 
@@ -663,7 +744,7 @@ export default function TimesheetEntryPage() {
 
             // If project changes, reset task type if it's not a global type or doesn't belong to the new project
             if (field === 'projectId') {
-                const projectTasks = allTasks?.filter(t => (t.projectId?._id || t.projectId) === value) || []
+                const projectTasks = allTasks?.filter(t => (t.projectId?.id || t.projectId?._id || t.projectId) === value) || []
                 const taskExistsInNewProject = projectTasks.some(t => t.name === r.taskType)
                 const isGlobalType = ['Select Task', ...(LEAVE_TASK_TYPES || [])].includes(r.taskType)
 
@@ -781,7 +862,7 @@ export default function TimesheetEntryPage() {
 
     const getRowStatus = (row) => {
         const weekStr = format(weekStart, 'yyyy-MM-dd')
-        const currentWeekTs = existingTimesheets?.find(t => format(new Date(t.weekStartDate), 'yyyy-MM-dd') === weekStr)
+        const currentWeekTs = existingTimesheets?.find(t => (typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd')) === weekStr)
         if (!currentWeekTs) return 'draft'
         const rowData = currentWeekTs.rows?.find(r => (r.projectId?._id || r.projectId) === row.projectId)
         return currentWeekTs.status || 'draft'
@@ -790,8 +871,9 @@ export default function TimesheetEntryPage() {
     // Derived: is the week already submitted/approved?
     const isWeekSubmitted = useMemo(() => {
         const weekStr = format(weekStart, 'yyyy-MM-dd')
-        const currentWeekTs = existingTimesheets?.find(t => format(new Date(t.weekStartDate), 'yyyy-MM-dd') === weekStr)
-        return currentWeekTs ? ['submitted', 'approved', 'frozen', 'admin_filled'].includes(currentWeekTs.status) : false
+        const currentWeekTs = existingTimesheets?.find(t => (typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd')) === weekStr)
+        return currentWeekTs ? ['submitted', 'approved', 'frozen', 'admin_filled'].includes(currentWeekTs.status?.toLowerCase()) : false
+
     }, [existingTimesheets, weekStart])
 
     const isCurrentWeek = useMemo(() => {
@@ -825,7 +907,7 @@ export default function TimesheetEntryPage() {
 
     const isWeekFrozen = useMemo(() => {
         const weekStr = format(weekStart, 'yyyy-MM-dd')
-        const currentWeekTs = existingTimesheets?.find(t => format(new Date(t.weekStartDate), 'yyyy-MM-dd') === weekStr)
+        const currentWeekTs = existingTimesheets?.find(t => (typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd')) === weekStr)
         return currentWeekTs ? currentWeekTs.status === 'frozen' : false
     }, [existingTimesheets, weekStart])
 
@@ -845,13 +927,50 @@ export default function TimesheetEntryPage() {
         return locked
     }, [rows])
 
+    const isSubjectToEnforcement = useMemo(() => {
+        const enforcementDate = tsSettings?.enforceMinHoursEnabledAt ? new Date(tsSettings.enforceMinHoursEnabledAt) : null;
+        const weekEndDate = weekDays[6];
+        return tsSettings?.enforceMinHoursOnSubmit && (!enforcementDate || weekEndDate >= enforcementDate);
+    }, [tsSettings, weekDays]);
+
+    const isAllWorkingDaysFilled = useMemo(() => {
+        const minHrs = tsSettings?.minHoursPerDay || 0;
+        const maxHrs = tsSettings?.maxHoursPerDay || 24;
+
+        return weekDays.every((day, i) => {
+            if (!isWorkingDay(day)) return true;
+            if (lockedDays[i]) return true;
+            const dateStr = format(day, 'yyyy-MM-dd');
+            if (holidays.has(dateStr)) return true;
+
+            const dayTotal = rows.reduce((acc, row) => {
+                const time = row.dayHours[i];
+                if (!time || time === '00:00' || time === '-8') return acc;
+                const [h, m] = time.split(':').map(Number);
+                return acc + h + (m / 60);
+            }, 0);
+
+            // Basic check: must have at least some time
+            if (dayTotal === 0) return false;
+
+            // Enforcement check: must meet threshold
+            if (isSubjectToEnforcement) {
+                if (minHrs > 0 && dayTotal < minHrs) return false;
+                if (maxHrs > 0 && dayTotal > maxHrs) return false;
+            }
+
+            return true;
+        });
+    }, [weekDays, isWorkingDay, rows, lockedDays, holidays, isSubjectToEnforcement, tsSettings]);
+
     const isRowLocked = (row) => {
         if (row.isLeaveRow) return true;
         // Permission rows are NOT locked — hours are editable
         const weekStr = format(weekStart, 'yyyy-MM-dd')
-        const currentWeekTs = existingTimesheets?.find(t => format(new Date(t.weekStartDate), 'yyyy-MM-dd') === weekStr)
+        const currentWeekTs = existingTimesheets?.find(t => (typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd')) === weekStr)
         if (!currentWeekTs) return false;
-        return ['submitted', 'approved', 'frozen', 'admin_filled'].includes(currentWeekTs.status);
+        return ['submitted', 'approved', 'frozen', 'admin_filled'].includes(currentWeekTs.status?.toLowerCase());
+
     }
 
     if (isLoading || isLoadingLeaves) return <div className="flex justify-center pt-20"><Spinner size="lg" /></div>
@@ -972,8 +1091,7 @@ export default function TimesheetEntryPage() {
 
                                 {weekDays.map((day, i) => {
                                     const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
-                                    const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                                    if (!general?.isWeekendWorkable && isWeekend) return null;
+                                    if (!isWorkingDay(day)) return null;
 
                                     const hEvent = isHoliday ? globalHolidays?.find(e => {
                                         const d = format(day, 'yyyy-MM-dd')
@@ -1017,8 +1135,8 @@ export default function TimesheetEntryPage() {
                                     )
                                 })}
 
-                                <th className="px-4 py-4 text-center font-bold border-r border-slate-200 dark:border-white w-24">Work Hours</th>
-                                <th className="px-4 py-4 text-center font-bold w-20">Action</th>
+                                <th className="px-4 py-4 text-center font-bold border-l border-slate-200 dark:border-white w-24">Work Hours</th>
+                                <th className="px-4 py-4 text-center font-bold min-w-[100px] bg-slate-50 dark:bg-black/80">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-white">
@@ -1026,7 +1144,7 @@ export default function TimesheetEntryPage() {
                                 const isPermission = isPermissionRow(row.taskType)
                                 const isLeave = isLeaveTaskType(row.taskType, LEAVE_TASK_TYPES)
                                 return (
-                                    <tr key={row.id} className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white dark:hover:text-black">
+                                    <tr key={row.id} className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/5">
                                         <td className="px-4 py-4 text-center border-r border-slate-100 dark:border-white text-sm font-medium text-slate-600 dark:text-white">
                                             {index + 1}
                                         </td>
@@ -1047,7 +1165,7 @@ export default function TimesheetEntryPage() {
                                                     disabled={isRowLocked(row)}
                                                 >
                                                     <option value="">Select Project</option>
-                                                    {projects?.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                                                    {projects?.map(p => <option key={p.id || p._id} value={p.id || p._id}>{p.name}</option>)}
                                                 </select>
                                             )}
                                         </td>
@@ -1068,18 +1186,24 @@ export default function TimesheetEntryPage() {
                                                     disabled={isRowLocked(row)}
                                                 >
                                                     <option value="Select Task">Select Task</option>
-                                                    {/* Project specific tasks */}
-                                                    {row.projectId && allTasks?.filter(t => (t.projectId?._id || t.projectId) === row.projectId).map(t => (
-                                                        <option key={t._id} value={t.name}>{t.name}</option>
+                                                    {/* Project specific tasks - already filtered by assignment in the query */}
+                                                    {row.projectId && allTasks?.filter(t => (t.projectId?.id || t.projectId?._id || t.projectId) === row.projectId).map(t => (
+                                                        <option key={t.id || t._id} value={t.name}>{t.name}</option>
                                                     ))}
 
-                                                    {/* Show global categories ONLY if project doesn't isolate tasks or no project is selected */}
+                                                    {/* Show global categories as fallback for admins or when project allows */}
                                                     {(() => {
-                                                        const projectObj = projects?.find(p => p._id === row.projectId);
-                                                        const showGlobal = !projectObj || !projectObj.onlyProjectTasks;
+                                                        const projectObj = projects?.find(p => (p.id || p._id) === row.projectId);
+                                                        const projectTasks = allTasks?.filter(t => (t.projectId?.id || t.projectId?._id || t.projectId) === row.projectId) || [];
+                                                        const hasProjectTasks = projectTasks.length > 0;
+
+                                                        const isAdmin = ['admin', 'super_admin', 'owner'].includes(user?.role?.toLowerCase());
+                                                        // Show global if: not isolated OR (isolated but no tasks found) OR (is admin/owner)
+                                                        const showGlobal = !projectObj || !projectObj.onlyProjectTasks || !hasProjectTasks || isAdmin;
 
                                                         if (showGlobal) {
                                                             return (tsSettings?.taskCategories || DEFAULT_TASK_TYPES.filter(t => !['Select Task', 'Leave', 'Holiday'].includes(t)))
+                                                                .filter(t => !projectTasks.some(pt => pt.name === t)) // Don't duplicate
                                                                 .map(t => (
                                                                     <option key={t} value={t}>{t}</option>
                                                                 ));
@@ -1093,30 +1217,40 @@ export default function TimesheetEntryPage() {
 
                                         {row.dayHours.map((time, i) => {
                                             const day = weekDays[i];
-                                            const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
-                                            if (!general?.isWeekendWorkable && isWeekendDay) return null;
+                                            if (!isWorkingDay(day)) return null;
 
                                             const isPendingCell = row.dayMeta?.[i]?.isPending;
                                             const isApprovedCell = row.dayMeta?.[i]?.isApproved;
                                             const cellLeaveType = row.dayMeta?.[i]?.type;
                                             const isLeaveCell = isPendingCell || isApprovedCell;
-                                            const isLop = cellLeaveType?.toLowerCase().includes('lop');
+                                            const isLop = isLopType(cellLeaveType);
 
                                             const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
                                             const isFutureDate = day.getTime() > new Date().setHours(23, 59, 59, 999);
                                             const isProjectOrTaskNotSelected = !row.isLeaveRow && !isPermissionRow(row.taskType) && (!row.projectId || row.taskType === 'Select Task');
-                                            const isDisabledInput = isRowLocked(row) || isWeekSubmitted || lockedDays[i] || isHoliday || isFutureDate || isProjectOrTaskNotSelected;
+
+                                            // Disable if the day is before the project's start date
+                                            const projectObj = !row.isLeaveRow && row.projectId
+                                                ? projects?.find(p => (p.id || p._id) === row.projectId)
+                                                : null;
+                                            const projectStartDate = projectObj?.startDate ? new Date(projectObj.startDate) : null;
+                                            if (projectStartDate) projectStartDate.setHours(0, 0, 0, 0);
+                                            const dayStart = new Date(day); dayStart.setHours(0, 0, 0, 0);
+                                            const isBeforeProjectStart = !!(projectStartDate && dayStart < projectStartDate);
+
+                                            const isDisabledInput = isRowLocked(row) || isWeekSubmitted || lockedDays[i] || isHoliday || isFutureDate || isProjectOrTaskNotSelected || isBeforeProjectStart;
 
                                             return (
-                                                <td key={i} className={`px-2 py-3 border-r border-slate-100 dark:border-white transition-colors ${isHoliday ? 'bg-blue-50/80 dark:bg-blue-900/20' : ''}`}>
-                                                    <div className={`flex flex-col items-center justify-center p-1.5 transition-all ${!isDisabledInput ? 'focus-within:ring-1 focus-within:ring-indigo-500' : ''} ${isLop && isPendingCell ? 'bg-rose-100/50 border-rose-200 dark:border-rose-900 border rounded-lg' :
-                                                        isLop && isApprovedCell ? 'bg-rose-100/30 border-rose-300 dark:border-rose-800 border rounded-lg' :
-                                                            isPendingCell ? 'bg-amber-100/30 border-amber-200 dark:border-amber-800 border rounded-lg' :
-                                                                isApprovedCell ? 'bg-emerald-100/30 border-emerald-200 dark:border-emerald-800 border rounded-lg' :
-                                                                    isHoliday ? 'bg-blue-100/60 dark:bg-blue-800/40 border-blue-300 dark:border-blue-600 border rounded-lg' :
-                                                                        'bg-slate-50 dark:bg-black border-slate-200 dark:border-white border rounded-lg'
+                                                <td key={i} className={`px-2 py-3 border-r border-slate-100 dark:border-white transition-colors ${isHoliday ? 'bg-blue-50/80 dark:bg-blue-900/20' : ''} ${isBeforeProjectStart ? 'bg-slate-100/60 dark:bg-slate-800/60' : ''}`}>
+                                                    <div className={`flex flex-col items-center justify-center p-1.5 transition-all ${!isDisabledInput ? 'focus-within:ring-1 focus-within:ring-indigo-500' : ''} ${isBeforeProjectStart ? 'opacity-30 cursor-not-allowed bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 border rounded-lg' :
+                                                        isLop && isPendingCell ? 'bg-rose-100/50 border-rose-200 dark:border-rose-900 border rounded-lg' :
+                                                            isLop && isApprovedCell ? 'bg-rose-100/30 border-rose-300 dark:border-rose-800 border rounded-lg' :
+                                                                isPendingCell ? 'bg-amber-100/30 border-amber-200 dark:border-amber-800 border rounded-lg' :
+                                                                    isApprovedCell ? 'bg-emerald-100/30 border-emerald-200 dark:border-emerald-800 border rounded-lg' :
+                                                                        isHoliday ? 'bg-blue-100/60 dark:bg-blue-800/40 border-blue-300 dark:border-blue-600 border rounded-lg' :
+                                                                            'bg-slate-50 dark:bg-black border-slate-200 dark:border-white border rounded-lg'
                                                         } ${isDisabledInput && !row.isLeaveRow ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800' : ''}`}
-                                                        title={isProjectOrTaskNotSelected ? "Please select a project and task first" : isFutureDate ? "Cannot enter time for future dates" : ""}
+                                                        title={isBeforeProjectStart ? `Project starts on ${projectObj?.startDate ? format(new Date(projectObj.startDate), 'MMM d, yyyy') : ''}` : isProjectOrTaskNotSelected ? "Please select a project and task first" : isFutureDate ? "Cannot enter time for future dates" : ""}
                                                     >
                                                         <div className="flex items-center justify-center w-full">
                                                             {isLop && isLeaveCell ? (
@@ -1140,7 +1274,7 @@ export default function TimesheetEntryPage() {
                                                                             const h = e.target.value.replace(/\D/g, '')
                                                                             const m = time.split(':')[1] || '00'
                                                                             handleUpdateHour(row.id, i, `${h}:${m}`)
-                                                                            
+
                                                                             // Auto-focus minutes if 2 digits entered
                                                                             if (h.length === 2 && e.target.nextSibling?.nextSibling) {
                                                                                 e.target.nextSibling.nextSibling.focus()
@@ -1216,7 +1350,7 @@ export default function TimesheetEntryPage() {
                                             }`}>
                                             {formatHours(calculateRowTotal(row))}
                                         </td>
-                                        <td className="px-4 py-4 text-center">
+                                        <td className="px-4 py-4 text-center min-w-[100px]">
                                             {row.isLeaveRow ? (
                                                 <div className="p-1.5 text-slate-300 flex justify-center">
                                                     <span className="w-2 h-2 rounded-full opacity-50 bg-slate-300"></span>
@@ -1225,9 +1359,10 @@ export default function TimesheetEntryPage() {
                                                 <button
                                                     onClick={() => handleRemoveRow(row.id)}
                                                     disabled={isWeekSubmitted}
-                                                    className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    title={isWeekSubmitted ? "Submitted timesheets cannot be edited" : "Delete row"}
+                                                    className="p-2 text-rose-500/80 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
                                                 >
-                                                    <Trash2 size={18} />
+                                                    <Trash2 size={20} />
                                                 </button>
                                             )}
                                         </td>
@@ -1249,9 +1384,8 @@ export default function TimesheetEntryPage() {
                                     </div>
                                 </td>
                                 {weekDays.map((day, i) => {
-                                    const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
-                                    if (!general?.isWeekendWorkable && isWeekendDay) return null;
-                                    
+                                    if (!isWorkingDay(day)) return null;
+
                                     const dayStr = format(day, 'yyyy-MM-dd');
                                     const dayLogs = attendanceLogs?.filter(log => format(new Date(log.timestamp), 'yyyy-MM-dd') === dayStr) || [];
                                     let swipeHours = 0;
@@ -1260,7 +1394,7 @@ export default function TimesheetEntryPage() {
                                         const timestamps = dayLogs.map(log => new Date(log.timestamp).getTime());
                                         const startTime = Math.min(...timestamps);
                                         const endTime = Math.max(...timestamps);
-                                        
+
                                         // Duration in decimal hours (e.g., 8.5)
                                         swipeHours = (endTime - startTime) / (1000 * 60 * 60);
                                     }
@@ -1287,7 +1421,7 @@ export default function TimesheetEntryPage() {
                         Office Swipe Integration
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                        {isAttendanceEnabled 
+                        {isAttendanceEnabled
                             ? "Biometric attendance integration is active. Your swipe hours are automatically synced from the office gateway."
                             : "Attendance device integration is not configured for this organization. Contact your administrator to enable real-time swipe tracking."
                         }
@@ -1295,7 +1429,7 @@ export default function TimesheetEntryPage() {
                 </div>
                 <div className={clsx(
                     "px-4 py-2 border text-[10px] font-bold rounded-lg uppercase tracking-widest",
-                    isAttendanceEnabled 
+                    isAttendanceEnabled
                         ? "bg-emerald-50 border-emerald-200 text-emerald-700"
                         : "bg-amber-50 border-amber-200 text-amber-700"
                 )}>
@@ -1325,8 +1459,13 @@ export default function TimesheetEntryPage() {
 
                 <button
                     onClick={() => submitWeekMutation.mutate()}
-                    disabled={submitWeekMutation.isPending || !submissionRestriction.allowed || (totalWeekHours === 0 && holidays.size === 0 && !rows.some(r => r.isLeaveRow)) || isWeekSubmitted}
-                    title={isWeekSubmitted ? 'This week has already been submitted' : !submissionRestriction.allowed ? `Submission allowed starting ${submissionRestriction.dayName}` : ''}
+                    disabled={submitWeekMutation.isPending || !submissionRestriction.allowed || !isAllWorkingDaysFilled || (totalWeekHours === 0 && holidays.size === 0 && !rows.some(r => r.isLeaveRow)) || isWeekSubmitted}
+                    title={
+                        isWeekSubmitted ? 'This week has already been submitted'
+                            : !submissionRestriction.allowed ? `Submission allowed starting ${submissionRestriction.dayName}`
+                                : !isAllWorkingDaysFilled ? (isSubjectToEnforcement ? `All working days must have between ${tsSettings?.minHoursPerDay || 0}h and ${tsSettings?.maxHoursPerDay || 24}h` : 'Please fill time entries for all working days before submitting')
+                                    : ''
+                    }
                     className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 btn-primary hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:pointer-events-none"
                 >
                     {submitWeekMutation.isPending ? (
@@ -1339,8 +1478,8 @@ export default function TimesheetEntryPage() {
             </div>
 
             {/* Unsaved Changes Modal */}
-            {navIntent && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            {navIntent && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="p-8 pb-4 text-center">
                             <div className="w-20 h-20 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-6 ring-8 ring-amber-50/50 dark:ring-amber-900/10">
@@ -1351,18 +1490,19 @@ export default function TimesheetEntryPage() {
                                 You have pending changes in your timesheet. Leaving now will result in data loss.
                             </p>
                         </div>
-                        
+
                         <div className="p-6 pt-2 flex flex-col gap-2.5">
                             <button
                                 onClick={() => {
                                     // Save and proceed
                                     bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))
                                 }}
-                                className="w-full h-12 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary-500/20 transition-all active:scale-[0.98]"
+                                disabled={isWeekSubmitted || bulkSaveMutation.isPending}
+                                className="w-full h-12 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary-500/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                <Save size={18} /> SAVE DRAFT
+                                <Save size={18} /> {isWeekSubmitted ? 'LOCKED' : 'SAVE DRAFT'}
                             </button>
-                            
+
                             <button
                                 onClick={() => {
                                     const target = navIntent;
@@ -1375,7 +1515,7 @@ export default function TimesheetEntryPage() {
                             >
                                 <Trash2 size={18} className="text-rose-500" /> DON'T SAVE
                             </button>
-                            
+
                             <button
                                 onClick={() => {
                                     setNavIntent(null);
@@ -1386,7 +1526,8 @@ export default function TimesheetEntryPage() {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     )

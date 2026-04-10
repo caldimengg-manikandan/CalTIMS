@@ -29,13 +29,13 @@ const hikcentralRoutes = require('./hikcentral.routes');
 
 router.use('/hikcentral', hikcentralRoutes);
 
-router.post('/hikvision/test', checkPermission('manageSettings'), hikvisionController.testConnection);
-router.post('/hikvision/sync', checkPermission('manageSettings'), hikvisionController.manualSync);
+router.post('/hikvision/test', checkPermission('Settings', 'General', 'edit'), hikvisionController.testConnection);
+router.post('/hikvision/sync', checkPermission('Settings', 'General', 'edit'), hikvisionController.manualSync);
 
-router.get('/devices', checkPermission('manageSettings'), hikvisionController.getDevices);
-router.post('/devices', checkPermission('manageSettings'), hikvisionController.createDevice);
-router.put('/devices/:id', checkPermission('manageSettings'), hikvisionController.updateDevice);
-router.delete('/devices/:id', checkPermission('manageSettings'), hikvisionController.deleteDevice);
+router.get('/devices', checkPermission('Settings', 'General', 'view'), hikvisionController.getDevices);
+router.post('/devices', checkPermission('Settings', 'General', 'edit'), hikvisionController.createDevice);
+router.put('/devices/:id', checkPermission('Settings', 'General', 'edit'), hikvisionController.updateDevice);
+router.delete('/devices/:id', checkPermission('Settings', 'General', 'edit'), hikvisionController.deleteDevice);
 
 // GET /api/v1/attendance - Get my attendance
 router.get('/', asyncHandler(async (req, res) => {
@@ -46,7 +46,7 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/v1/attendance/user/:userId - Admin/Manager view user attendance
-router.get('/user/:userId', checkPermission('viewReports'), asyncHandler(async (req, res) => {
+router.get('/user/:userId', checkPermission('Reports', 'Reports Dashboard', 'view'), asyncHandler(async (req, res) => {
   const { from, to } = req.query;
   const { userId } = req.params;
   const logs = await attendanceService.getAttendance(userId, from || new Date(Date.now() - 7*24*60*60*1000), to || new Date(), req.organizationId);

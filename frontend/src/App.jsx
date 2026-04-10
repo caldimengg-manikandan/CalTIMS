@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect } from 'react'
+import { Toaster } from 'react-hot-toast'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
@@ -54,21 +55,23 @@ const HourManagement = lazy(() => import('@/features/payroll').then(m => ({ defa
 const PolicySettings = lazy(() => import('@/features/payroll').then(m => ({ default: m.PolicySettings })))
 const RunPayroll = lazy(() => import('@/features/payroll').then(m => ({ default: m.RunPayroll })))
 const PayrollHistory = lazy(() => import('@/features/payroll').then(m => ({ default: m.PayrollHistory })))
+const PayrollExecution = lazy(() => import('@/features/payroll').then(m => ({ default: m.PayrollExecution })))
 const MyPayslips = lazy(() => import('@/features/payroll').then(m => ({ default: m.MyPayslips })))
+const PayrollSetupWizard = lazy(() => import('@/features/payroll').then(m => ({ default: m.PayrollSetupWizard })))
 
 import { useFeatureAccess } from '@/hooks/useFeatureAccess'
 import { FEATURE_KEYS } from '@/constants/plans'
 import { useThemeStore } from '@/store/themeStore'
 import ToastLimit from '@/components/ui/ToastLimit'
+import { hasPermission } from '@/utils/rbac'
 
 // ─── Protected Route Guard ───────────────────────────────────────────────────
-const ProtectedRoute = ({ children, roles, featureKey }) => {
+const ProtectedRoute = ({ children, roles, permission, featureKey }) => {
     const { isAuthenticated, isHydrating, user, subscription } = useAuthStore()
     const location = useLocation()
     const { hasAccess } = useFeatureAccess()
 
     // Wait for checkAuth to finish before making any redirect decisions.
-    // Without this guard, the app redirects before the token is validated on refresh.
     if (isHydrating) {
         return (
             <div className="flex items-center justify-center h-screen">
@@ -80,8 +83,7 @@ const ProtectedRoute = ({ children, roles, featureKey }) => {
     if (!isAuthenticated) return <Navigate to="/login" replace />
     if (!user && !isHydrating) return <Navigate to="/login" replace />
 
-    // Onboarding Guard: if user exists but onboarding is not complete, redirect to /onboarding
-    // Skip for super_admin
+    // Onboarding Guard
     const isOnboardingPath = location.pathname === '/onboarding'
     const needsOnboarding = user && !user.isOnboardingComplete && user.role !== 'super_admin'
 
@@ -89,24 +91,40 @@ const ProtectedRoute = ({ children, roles, featureKey }) => {
         return <Navigate to="/onboarding" replace />
     }
 
-    // Reverse Guard: if onboarding is complete, don't allow /onboarding
     if (user?.isOnboardingComplete && isOnboardingPath) {
         return <Navigate to="/dashboard" replace />
     }
 
-    // Trial Expiration Check (Skip for Super Admin)
+    // Trial Expiration Check
     if (user?.role !== 'super_admin' && subscription?.status === 'EXPIRED') {
         return <Paywall />
     }
 
     if (user?.role === 'super_admin') return children
     
-    // Subscription Feature Guard
+    // 1. Subscription Feature Guard (Plan-level)
     if (featureKey && !hasAccess(featureKey)) {
         return <Navigate to="/dashboard" replace />
     }
 
-    if (roles && !roles.includes(user?.role)) return <Navigate to="/dashboard" replace />
+    // 2. Dynamic Permission Guard (DB-level)
+    if (permission) {
+        const { module, submodule, action } = permission
+        if (!hasPermission(user, module, submodule, action)) {
+            return <Navigate to="/dashboard" replace />
+        }
+        return children
+    }
+
+    // 3. Legacy Role Guard (Fallback)
+    if (roles) {
+        const userRoleLower = user?.role?.toLowerCase()
+        const isAdminOrOwner = ['admin', 'owner'].includes(userRoleLower)
+        if (!roles.includes(user?.role) && !isAdminOrOwner) {
+            return <Navigate to="/dashboard" replace />
+        }
+    }
+
     return children
 }
 
@@ -169,6 +187,18 @@ export default function App() {
         init()
     }, [checkAuth, fetchGeneralSettings, syncFromBranding])
 
+    useEffect(() => {
+        setTimeout(() => {
+            const el =
+                document.querySelector(".react-hot-toast-container") ||
+                document.querySelector("[role='status']");
+
+            console.log(
+                el ? "✅ TOASTER MOUNTED" : "❌ TOASTER NOT FOUND"
+            );
+        }, 2000);
+    }, []);
+
 
     // Block ALL route rendering until auth check AND settings fetch have settled.
     // This prevents components from mounting with null settings (and thus wrong defaults).
@@ -184,7 +214,7 @@ export default function App() {
 
     return (
         <PageSuspense>
-            <ToastLimit limit={3} />
+            <ToastLimit limit={1} />
             <Routes>
                 {/* Public Landing Page / Redirect for Authed */}
                 <Route path="/" element={
@@ -229,7 +259,7 @@ export default function App() {
                     } />
                     <Route path="/calendar" element={<PageSuspense><CalendarPage /></PageSuspense>} />
                     <Route path="/announcements" element={
-                        <ProtectedRoute roles={['admin']}>
+                        <ProtectedRoute permission={{ module: 'Announcements', submodule: 'Announcements', action: 'view' }}>
                             <PageSuspense><AnnouncementsPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
@@ -251,64 +281,64 @@ export default function App() {
 
                     {/* Manager + Admin */}
                     <Route path="/timesheets/manage" element={
-                        <ProtectedRoute roles={['admin', 'manager']}>
+                        <ProtectedRoute permission={{ module: 'Timesheets', submodule: 'Management', action: 'view' }}>
                             <PageSuspense><AdminTimesheets isAdminView={true} /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/timesheets/compliance" element={
-                        <ProtectedRoute roles={['admin', 'manager']} featureKey={FEATURE_KEYS.AUDIT_LOGS}>
+                        <ProtectedRoute permission={{ module: 'Settings', submodule: 'Audit Logs', action: 'view' }} featureKey={FEATURE_KEYS.AUDIT_LOGS}>
                             <PageSuspense><AdminTimesheetsCompliance /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/leaves/manage" element={
-                        <ProtectedRoute roles={['admin', 'manager']} featureKey={FEATURE_KEYS.LEAVE_MANAGEMENT}>
+                        <ProtectedRoute permission={{ module: 'Leave Management', submodule: 'Leave Requests', action: 'view' }} featureKey={FEATURE_KEYS.LEAVE_MANAGEMENT}>
                             <PageSuspense><LeavePage isAdminView={true} /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/projects" element={
-                        <ProtectedRoute roles={['admin', 'manager']}>
+                        <ProtectedRoute permission={{ module: 'Projects', submodule: 'Project List', action: 'view' }}>
                             <PageSuspense><ProjectsPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
 
                     {/* Admin only */}
                     <Route path="/calendar/manage" element={
-                        <ProtectedRoute roles={['admin']}>
+                        <ProtectedRoute permission={{ module: 'Settings', submodule: 'General', action: 'edit' }}>
                             <PageSuspense><AdminCalendarPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/employees" element={
-                        <ProtectedRoute roles={['admin']}>
+                        <ProtectedRoute permission={{ module: 'Employees', submodule: 'Employee List', action: 'view' }}>
                             <PageSuspense><EmployeesPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/tasks" element={
-                        <ProtectedRoute roles={['admin']}>
+                        <ProtectedRoute permission={{ module: 'Tasks', submodule: 'Task Management', action: 'view' }}>
                             <PageSuspense><TasksPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/employees/new" element={
-                        <ProtectedRoute roles={['admin']}>
+                        <ProtectedRoute permission={{ module: 'Employees', submodule: 'Management', action: 'edit' }}>
                             <PageSuspense><EmployeeForm /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/employees/:id" element={
-                        <ProtectedRoute roles={['admin', 'manager']}>
+                        <ProtectedRoute permission={{ module: 'Employees', submodule: 'Employee List', action: 'view' }}>
                             <PageSuspense><EmployeeDetail /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/reports" element={
-                        <ProtectedRoute roles={['admin', 'manager']} featureKey={FEATURE_KEYS.REPORTS}>
+                        <ProtectedRoute permission={{ module: 'Reports', submodule: 'Reports Dashboard', action: 'view' }} featureKey={FEATURE_KEYS.REPORTS}>
                             <PageSuspense><ReportsPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/settings" element={
-                        <ProtectedRoute roles={['admin']}>
+                        <ProtectedRoute permission={{ module: 'Settings', submodule: 'Users & Roles', action: 'view' }}>
                             <PageSuspense><SettingsLayout /></PageSuspense>
                         </ProtectedRoute>
                     } />
                     <Route path="/audit-logs" element={
-                        <ProtectedRoute roles={['admin', 'manager']} featureKey={FEATURE_KEYS.AUDIT_LOGS}>
+                        <ProtectedRoute permission={{ module: 'Settings', submodule: 'Audit Logs', action: 'view' }} featureKey={FEATURE_KEYS.AUDIT_LOGS}>
                             <PageSuspense><AuditLogPage /></PageSuspense>
                         </ProtectedRoute>
                     } />
@@ -316,20 +346,24 @@ export default function App() {
 
                     {/* Payroll Module */}
                     <Route path="/payroll/*" element={
-                        <ProtectedRoute roles={['admin', 'manager', 'finance', 'hr', 'employee']} featureKey={FEATURE_KEYS.PAYROLL}>
+                        <ProtectedRoute permission={{ module: 'Payroll' }} featureKey={FEATURE_KEYS.PAYROLL}>
                             <Routes>
-                                <Route path="dashboard" element={<PageSuspense><PayrollDashboard /></PageSuspense>} />
-                                <Route path="profiles" element={<PageSuspense><EmployeePayrollProfiles /></PageSuspense>} />
-                                <Route path="salary-structures" element={<PageSuspense><SalaryStructures /></PageSuspense>} />
-                                <Route path="processing" element={<PageSuspense><PayrollProcessing /></PageSuspense>} />
-                                <Route path="payslip" element={<PageSuspense><PayslipGeneration /></PageSuspense>} />
-                                <Route path="taxes" element={<PageSuspense><TaxesDeductions /></PageSuspense>} />
-                                <Route path="reports" element={<PageSuspense><PayrollReports /></PageSuspense>} />
-                                <Route path="export" element={<PageSuspense><BankTransferExport /></PageSuspense>} />
-                                <Route path="hour-management" element={<PageSuspense><HourManagement /></PageSuspense>} />
-                                <Route path="policy" element={<PageSuspense><PolicySettings /></PageSuspense>} />
-                                <Route path="run" element={<PageSuspense><RunPayroll /></PageSuspense>} />
-                                <Route path="history" element={<PageSuspense><PayrollHistory /></PageSuspense>} />
+                                <Route path="dashboard" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Dashboard', action: 'view' }}><PageSuspense><PayrollDashboard /></PageSuspense></ProtectedRoute>} />
+                                <Route path="profiles" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payroll Engine', action: 'view' }}><PageSuspense><EmployeePayrollProfiles /></PageSuspense></ProtectedRoute>} />
+                                <Route path="salary-structures" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payroll Engine', action: 'view' }}><PageSuspense><SalaryStructures /></PageSuspense></ProtectedRoute>} />
+                                <Route path="processing" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payroll Engine', action: 'run' }}><PageSuspense><PayrollProcessing /></PageSuspense></ProtectedRoute>} />
+                                <Route path="payslip" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payslip Generation', action: 'view' }}><PageSuspense><PayslipGeneration /></PageSuspense></ProtectedRoute>} />
+                                <Route path="taxes" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payroll Engine', action: 'view' }}><PageSuspense><TaxesDeductions /></PageSuspense></ProtectedRoute>} />
+                                <Route path="reports" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payroll Reports', action: 'view' }}><PageSuspense><PayrollReports /></PageSuspense></ProtectedRoute>} />
+                                <Route path="export" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Bank Export', action: 'view' }}><PageSuspense><BankTransferExport /></PageSuspense></ProtectedRoute>} />
+                                <Route path="hour-management" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Hour Management', action: 'view' }}><PageSuspense><HourManagement /></PageSuspense></ProtectedRoute>} />
+                                <Route path="policy" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payroll Engine', action: 'edit' }}><PageSuspense><PolicySettings /></PageSuspense></ProtectedRoute>} />
+                                <Route path="run" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payroll Engine', action: 'run' }}><PageSuspense><RunPayroll /></PageSuspense></ProtectedRoute>} />
+                                <Route path="setup" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payroll Engine', action: 'run' }}><PageSuspense><PayrollSetupWizard /></PageSuspense></ProtectedRoute>} />
+                                <Route path="profile" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payroll Engine', action: 'run' }}><PageSuspense><PayrollSetupWizard /></PageSuspense></ProtectedRoute>} />
+                                <Route path="profile/:userId" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Payroll Engine', action: 'run' }}><PageSuspense><PayrollSetupWizard /></PageSuspense></ProtectedRoute>} />
+                                <Route path="execution/:year/:month" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Execution Ledger', action: 'view' }}><PageSuspense><PayrollExecution /></PageSuspense></ProtectedRoute>} />
+                                <Route path="history" element={<ProtectedRoute permission={{ module: 'Payroll', submodule: 'Execution Ledger', action: 'view' }}><PageSuspense><PayrollHistory /></PageSuspense></ProtectedRoute>} />
                             </Routes>
                         </ProtectedRoute>
                     } />
@@ -344,6 +378,35 @@ export default function App() {
 
                 <Route path="*" element={<PageSuspense><NotFoundPage /></PageSuspense>} />
             </Routes>
+
+            <Toaster
+                position="top-right"
+                containerStyle={{ top: 20, right: 20 }}
+                gutter={8}
+                toastOptions={{
+                    duration: 4000,
+                    className: "z-[9999]",
+                    style: {
+                        background: "#1e293b",
+                        color: "#f1f5f9",
+                        borderRadius: "12px",
+                        fontSize: "14px",
+                        fontFamily: "Inter, sans-serif",
+                    },
+                    success: {
+                        iconTheme: {
+                            primary: "#22c55e",
+                            secondary: "#fff",
+                        },
+                    },
+                    error: {
+                        iconTheme: {
+                            primary: "#ef4444",
+                            secondary: "#fff",
+                        },
+                    },
+                }}
+            />
         </PageSuspense>
     )
 }

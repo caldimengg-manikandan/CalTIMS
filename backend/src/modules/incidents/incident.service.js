@@ -1,297 +1,341 @@
-'use strict';
-
-const Incident = require('./incident.model');
+const { prisma } = require('../../config/database');
 const AppError = require('../../shared/utils/AppError');
 const notificationService = require('../notifications/notification.service');
-const User = require('../users/user.model');
+const { enforceOrg } = require('../../shared/utils/prismaHelper');
+const { hasPermission } = require('../../shared/utils/rbac');
+const { ROLES } = require('../../constants');
 
 /**
- * Service to handle Incident operations
+ * Service to handle Incident operations via Prisma
  */
 class IncidentService {
     /**
      * Creates a new incident ticket and notifies admins.
      */
-    async createIncident(employeeId, data, organizationId) {
-        const incidentData = {
-            ...data,
-            employee: employeeId,
-            organizationId,
-            status: 'Open',
-        };
+    async createIncident(context, data) {
+        const { organizationId, userId } = context;
+        
+        // Find employee record for this user (hard-scoped)
+        const employee = await prisma.employee.findUnique({
+            where: { userId_organizationId: { userId, organizationId } }
+        });
+        if (!employee) throw new AppError('Employee profile not found', 404);
 
-        const incident = new Incident(incidentData);
-        await incident.save();
+        const count = await prisma.incident.count({ where: { organizationId } });
+        const incidentIdStr = `INC-${(count + 1).toString().padStart(4, '0')}`;
 
+        const incident = await prisma.incident.create({
+            data: {
+                incidentId: incidentIdStr,
+                organizationId,
+                employeeId: employee.id,
+                title: data.title,
+                description: data.description,
+                category: data.category,
+                priority: data.priority || 'Medium',
+                status: 'Open',
+                attachments: data.attachments || [],
+            },
+            include: { employee: { include: { user: { select: { name: true } } } } }
+        });
+ 
         // Notify admins about the new incident
-        await this._notifyAdminsAboutNewIncident(incident, employeeId, organizationId);
-
+        await this._notifyAdminsAboutNewIncident(incident, context);
+ 
         return incident;
     }
-
+ 
     /**
      * Helper function to notify all active admins/managers about a new INC.
      */
-    async _notifyAdminsAboutNewIncident(incident, reporterId, organizationId) {
-        const reporter = await User.findOne({ _id: reporterId, organizationId }).select('name');
+    async _notifyAdminsAboutNewIncident(incident, context) {
+        const { organizationId, userId: reporterUserId } = context;
+        
+        const reporter = await prisma.user.findUnique({ 
+            where: { id_organizationId: { id: reporterUserId, organizationId } },
+            select: { name: true }
+        });
         const reporterName = reporter ? reporter.name : 'An employee';
-
+ 
         const message = `${reporterName} has raised a new ${incident.priority} priority incident (${incident.incidentId}) regarding '${incident.category}'.`;
+ 
+        // Notify users with Support > Help & Support > edit permission
+        const allUsers = await prisma.user.findMany({ 
+            where: { 
+                isActive: true, 
+                organizationId,
+                isDeleted: false
+            },
+            include: { roleRef: true }
+        });
 
-        const admins = await User.find({ role: { $in: ['admin'] }, isActive: true, organizationId }).select('_id');
-        const adminIds = admins.map((a) => a._id);
+        const adminsToNotify = allUsers.filter(u => {
+            if (u.role === 'super_admin' || u.isOwner) return true;
+            return hasPermission(u.roleRef?.permissions, 'Support', 'Help & Support', 'edit');
+        });
 
+        const adminIds = adminsToNotify.map(a => a.id);
+ 
         if (adminIds.length > 0) {
-            const notifications = adminIds.map((adminId) => ({
-                userId: adminId,
-                title: 'New Incident Ticket Raised',
-                message: message,
-                type: 'incident_created',
-                refId: incident._id,
-                refModel: 'Incident',
-            }));
-            await Promise.all(notifications.map(n => notificationService.create(n)));
+            await Promise.all(adminIds.map(adminId => 
+                notificationService.create({
+                    userId: adminId,
+                    organizationId,
+                    title: 'New Incident Ticket Raised',
+                    message,
+                    type: 'incident_created',
+                    refId: incident.id,
+                    refModel: 'Incident'
+                })
+            ));
         }
     }
-
+ 
     /**
      * Returns a paginated/filtered list of incidents.
-     * If `userRole` is employee, forces the query to only match their `employeeId`.
      */
-    async getIncidents(userId, userRole, queryParams = {}, organizationId) {
+    async getIncidents(context, queryParams = {}) {
+        const { organizationId, userId, permissions, role: userRole } = context;
         const { status, priority, category, search, page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc' } = queryParams;
+ 
+        // Base scoping using helper
+        const baseQuery = enforceOrg({}, organizationId);
+        const where = baseQuery.where;
+ 
+        const canViewAll = hasPermission(permissions, 'Support', 'Help & Support', 'view');
 
-        const filter = { organizationId };
-
-        // RBAC: Employees can only see their own
-        if (userRole === 'employee') {
-            filter.employee = userId;
+        // RBAC: If cannot view all, only see their own
+        if (!canViewAll && !context.isSuperAdmin && !context.isOwner) {
+            const employee = await prisma.employee.findUnique({ 
+                where: { userId_organizationId: { userId, organizationId } } 
+            });
+            if (employee) where.employeeId = employee.id;
+            else return { incidents: [], pagination: { total: 0, page, limit, totalPages: 0 } };
         }
-
+ 
         // Apply optional filters
-        if (status) filter.status = status;
-        if (priority) filter.priority = priority;
-        if (category) filter.category = category;
-
-        // Apply search (case-insensitive on incidentId or title)
+        if (status) where.status = status;
+        if (priority) where.priority = priority;
+        if (category) where.category = category;
+ 
+        // Apply search
         if (search) {
-            filter.$or = [
-                { incidentId: { $regex: search, $options: 'i' } },
-                { title: { $regex: search, $options: 'i' } }
+            where.OR = [
+                { incidentId: { contains: search, mode: 'insensitive' } },
+                { title: { contains: search, mode: 'insensitive' } }
             ];
         }
-
-        const skip = (page - 1) * limit;
-        const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
-
-        const total = await Incident.countDocuments(filter);
-        const incidents = await Incident.find(filter)
-            .populate('employee', 'name email employeeId')
-            .populate('assignedTo', 'name')
-            .sort(sort)
-            .skip(skip)
-            .limit(Number(limit));
-
+ 
+        const skip = (Number(page) - 1) * Number(limit);
+ 
+        const [total, incidents] = await Promise.all([
+            prisma.incident.count({ where }),
+            prisma.incident.findMany({
+                where,
+                include: {
+                    employee: { include: { user: { select: { id: true, name: true, email: true } } } },
+                    assignedTo: { include: { user: { select: { id: true, name: true } } } }
+                },
+                orderBy: { [sortBy]: sortOrder },
+                skip,
+                take: Number(limit)
+            })
+        ]);
+ 
         return {
             incidents,
             pagination: {
                 total,
                 page: Number(page),
                 limit: Number(limit),
-                totalPages: Math.ceil(total / limit),
+                totalPages: Math.ceil(total / Number(limit)),
             },
         };
     }
-
+ 
     /**
      * Retrieves a single incident by ID. Checks RBAC.
      */
-    async getIncidentById(incidentId, userId, userRole, organizationId) {
-        const incident = await Incident.findOne({ _id: incidentId, organizationId })
-            .populate('employee', 'name email employeeId department')
-            .populate('assignedTo', 'name email')
-            .populate('relatedTimesheet', 'weekStartDate status')
-            .populate('responses.user', 'name role');
-
-        if (!incident) {
+    async getIncidentById(incidentId, context) {
+        const { organizationId, userId, role: userRole } = context;
+        
+        const incident = await prisma.incident.findUnique({
+            where: { id_organizationId: { id: incidentId, organizationId } },
+            include: {
+                employee: { include: { user: { select: { id: true, name: true, email: true } } } },
+                assignedTo: { include: { user: { select: { name: true, email: true } } } }
+            }
+        });
+ 
+        if (!incident || incident.isDeleted) {
             throw new AppError('Incident not found', 404);
         }
-
+ 
         // RBAC check
-        if (userRole === 'employee' && incident.employee._id.toString() !== userId.toString()) {
-            throw new AppError('Incident not found', 404); // Hide unauthorized access
+        const canViewAll = hasPermission(context.permissions, 'Support', 'Help & Support', 'view');
+        if (!canViewAll && !context.isSuperAdmin && !context.isOwner && incident.employee.user.id !== userId) {
+            throw new AppError('Incident not found', 404);
         }
-
+ 
         return incident;
     }
-
+ 
     /**
      * Add a response to an existing incident ticket.
      */
-    async addResponse(incidentId, userId, userRole, message, organizationId) {
-        const incident = await Incident.findOne({ _id: incidentId, organizationId });
-
-        if (!incident) throw new AppError('Incident not found', 404);
-
-        if (userRole === 'employee' && incident.employee.toString() !== userId.toString()) {
-            throw new AppError('Incident not found', 404);
+    async addResponse(incidentId, context, message) {
+        const { organizationId, userId, role: userRole } = context;
+        
+        const incident = await prisma.incident.findUnique({ 
+            where: { id_organizationId: { id: incidentId, organizationId } },
+            include: { employee: true }
+        });
+ 
+        if (!incident || incident.isDeleted) throw new AppError('Incident not found', 404);
+ 
+        const canEditAll = hasPermission(context.permissions, 'Support', 'Help & Support', 'edit');
+        if (!canEditAll && !context.isSuperAdmin && !context.isOwner) {
+            const emp = await prisma.employee.findUnique({ 
+                where: { userId_organizationId: { userId, organizationId } } 
+            });
+            if (!emp || incident.employeeId !== emp.id) {
+                throw new AppError('Incident not found', 404);
+            }
         }
-
+ 
         if (incident.status === 'Closed') {
             throw new AppError('Cannot reply to a closed incident.', 400);
         }
+ 
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, name: true, role: true }
+        });
 
-        const response = {
+        const responses = Array.isArray(incident.responses) ? incident.responses : [];
+        const newResponse = {
             message,
-            user: userId,
+            user,
             createdAt: new Date(),
         };
-
-        incident.responses.push(response);
-
+        responses.push(newResponse);
+ 
+        const updateData = { responses };
+ 
         // Auto status update:
-        // If Admin replies to Open ticket -> In Progress
-        if (userRole === 'admin' && incident.status === 'Open') {
-            incident.status = 'In Progress';
+        // If Support Agent/Admin replies to Open ticket -> In Progress
+        if (canEditAll && incident.status === 'Open') {
+            updateData.status = 'In Progress';
         }
-
-        await incident.save();
-
+ 
+        const updatedIncident = await prisma.incident.update({
+            where: { id_organizationId: { id: incident.id, organizationId } },
+            data: updateData
+        });
+ 
         // Notify the other party
-        if (userRole === 'admin') {
-            await notificationService.create({
-                userId: incident.employee,
-                title: 'Update on your Incident',
-                message: `An admin replied to your ticket ${incident.incidentId}.`,
-                type: 'incident_response',
-                refId: incident._id,
-                refModel: 'Incident'
-            });
-        } else {
-            if (incident.assignedTo) {
+        if (canEditAll) {
+             const reporterEmployee = await prisma.employee.findUnique({
+                where: { id: incident.employeeId },
+                include: { user: true }
+             });
+             if (reporterEmployee?.userId) {
                 await notificationService.create({
-                    userId: incident.assignedTo,
-                    title: 'New Reply on Assigned Incident',
-                    message: `An employee replied to ticket ${incident.incidentId}.`,
+                    userId: reporterEmployee.userId,
+                    organizationId,
+                    title: 'Update on your Incident',
+                    message: `An admin replied to your ticket ${incident.incidentId}.`,
                     type: 'incident_response',
-                    refId: incident._id,
+                    refId: incident.id,
                     refModel: 'Incident'
                 });
+             }
+        } else {
+            if (incident.assignedToId) {
+                const assignedEmployee = await prisma.employee.findUnique({
+                    where: { id: incident.assignedToId },
+                    select: { userId: true }
+                });
+                if (assignedEmployee) {
+                    await notificationService.create({
+                        userId: assignedEmployee.userId,
+                        organizationId,
+                        title: 'New Reply on Assigned Incident',
+                        message: `An employee replied to ticket ${incident.incidentId}.`,
+                        type: 'incident_response',
+                        refId: incident.id,
+                        refModel: 'Incident'
+                    });
+                }
             }
         }
-
-        // Return the updated populated version to easily send back the new reply with user names
-        return this.getIncidentById(incidentId, userId, userRole, organizationId);
+ 
+        return this.getIncidentById(incidentId, context);
     }
-
+ 
     /**
      * Updates status, priority, or assignee.
-     * Employees can only update status to 'Withdrawn' (if Open/In Progress) or 'Open' (if Resolved/Closed - Reopening).
      */
-    async updateIncident(incidentId, userId, userRole, updates, organizationId) {
-        const incident = await Incident.findOne({ _id: incidentId, organizationId });
+    async updateIncident(incidentId, context, updates) {
+        const { organizationId, userId, role: userRole } = context;
+        
+        const incident = await prisma.incident.findUnique({ 
+            where: { id_organizationId: { id: incidentId, organizationId } },
+            include: { employee: true }
+        });
+ 
+        if (!incident || incident.isDeleted) throw new AppError('Incident not found', 404);
+ 
+        const canEditAll = hasPermission(context.permissions, 'Support', 'Help & Support', 'edit');
 
-        if (!incident) throw new AppError('Incident not found', 404);
-
-        // RBAC: If employee, they must own the ticket
-        if (userRole === 'employee') {
-            if (incident.employee.toString() !== userId.toString()) {
+        // RBAC: If not authorized agent, they must own the ticket
+        if (!canEditAll && !context.isSuperAdmin && !context.isOwner) {
+            const emp = await prisma.employee.findUnique({ 
+                where: { userId_organizationId: { userId, organizationId } } 
+            });
+            if (!emp || incident.employeeId !== emp.id) {
                 throw new AppError('You do not have permission to update this incident', 403);
             }
-
-            // Employee allowed status changes:
-            // 1. Withdraw (any status except Withdrawn/Closed)
-            // 2. Reopen (if Resolved/Closed/Withdrawn)
+ 
             const allowedForEmployee = ['Withdrawn', 'Open'];
             if (updates.status && !allowedForEmployee.includes(updates.status)) {
                 throw new AppError(`Employees cannot set status to ${updates.status}`, 403);
             }
-
-            // Reopening logic: if status is changed to Open from Resolved/Closed/Withdrawn
-            if (updates.status === 'Open' && ['Resolved', 'Closed', 'Withdrawn'].includes(incident.status)) {
-                // Keep it Open
-            } else if (updates.status === 'Withdrawn') {
-                // Withdraw it
-            } else if (updates.status && updates.status !== incident.status) {
-                throw new AppError('Invalid status transition for employee', 400);
-            }
-
-            // Employees cannot change priority or assignee
+ 
             delete updates.priority;
-            delete updates.assignedTo;
+            delete updates.assignedToId;
         }
-
-        // Apply allowed updates
-        if (updates.status !== undefined) {
-            const oldStatus = incident.status;
-            incident.status = updates.status;
-
-            // Notify if status changed to Resolved
-            if (updates.status === 'Resolved' && oldStatus !== 'Resolved') {
+ 
+        const updated = await prisma.incident.update({
+            where: { id_organizationId: { id: incident.id, organizationId } },
+            data: {
+                status: updates.status || undefined,
+                priority: updates.priority || undefined,
+                assignedToId: updates.assignedToId || undefined
+            }
+        });
+ 
+        // Notifications
+        if (updated.status === 'Resolved' && incident.status !== 'Resolved') {
+            const reporterEmployee = await prisma.employee.findUnique({
+                where: { id: incident.employeeId },
+                include: { user: true }
+            });
+            if (reporterEmployee?.userId) {
                 await notificationService.create({
-                    userId: incident.employee,
+                    userId: reporterEmployee.userId,
+                    organizationId,
                     title: 'Incident Resolved',
                     message: `Your ticket ${incident.incidentId} has been marked as Resolved.`,
                     type: 'incident_resolved',
-                    refId: incident._id,
+                    refId: incident.id,
                     refModel: 'Incident'
                 });
             }
-
-            // Notify if employee reopens
-            if (userRole === 'employee' && updates.status === 'Open' && oldStatus !== 'Open') {
-                // Notify admin if assigned or all admins if not
-                await this._notifyAdminsAboutUpdate(incident, `Ticket ${incident.incidentId} has been REOPENED by the employee.`);
-            }
-
-            // Notify if employee withdraws
-            if (userRole === 'employee' && updates.status === 'Withdrawn' && oldStatus !== 'Withdrawn') {
-                await this._notifyAdminsAboutUpdate(incident, `Ticket ${incident.incidentId} has been WITHDRAWN by the employee.`);
-            }
         }
-
-        if (updates.priority !== undefined && userRole === 'admin') {
-            incident.priority = updates.priority;
-        }
-
-        if (updates.assignedTo !== undefined && userRole === 'admin') {
-            incident.assignedTo = updates.assignedTo;
-        }
-
-        await incident.save();
-
-        return incident;
-    }
-
-    /**
-     * Notify assigned admin or all admins about an update.
-     */
-    async _notifyAdminsAboutUpdate(incident, message, organizationId) {
-        if (incident.assignedTo) {
-            await notificationService.create({
-                userId: incident.assignedTo,
-                title: 'Incident Updated',
-                message: message,
-                type: 'incident_updated',
-                refId: incident._id,
-                refModel: 'Incident',
-            });
-        } else {
-            const admins = await User.find({ role: 'admin', isActive: true, organizationId }).select('_id');
-            const adminIds = admins.map(a => a._id);
-            if (adminIds.length > 0) {
-                const notifications = adminIds.map(adminId => ({
-                    userId: adminId,
-                    title: 'Incident Updated',
-                    message: message,
-                    type: 'incident_updated',
-                    refId: incident._id,
-                    refModel: 'Incident',
-                }));
-                await Promise.all(notifications.map(n => notificationService.create(n)));
-            }
-        }
+ 
+        return updated;
     }
 }
-
+ 
 module.exports = new IncidentService();

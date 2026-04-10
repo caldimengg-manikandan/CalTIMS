@@ -44,7 +44,7 @@ function AnnouncementModal({ existing, onClose, onSuccess }) {
 
     const mutation = useMutation({
         mutationFn: (data) => isEdit
-            ? announcementAPI.update(existing._id, data)
+            ? announcementAPI.update(existing.id, data)
             : announcementAPI.create(data),
         onSuccess: () => {
             toast.success(isEdit ? 'Announcement updated!' : '📢 Announcement published & notifications sent!')
@@ -213,7 +213,7 @@ function AnnouncementModal({ existing, onClose, onSuccess }) {
 function DeleteConfirm({ ann, onClose }) {
     const queryClient = useQueryClient()
     const mutation = useMutation({
-        mutationFn: () => announcementAPI.delete(ann._id),
+        mutationFn: () => announcementAPI.delete(ann.id),
         onSuccess: () => {
             toast.success('Announcement deleted')
             queryClient.invalidateQueries({ queryKey: ['announcements-admin'] })
@@ -284,12 +284,14 @@ export default function AnnouncementsPage() {
 
             {/* Header */}
             <PageHeader title="Announcements" subtitle="Create announcements — employees are notified automatically">
-                <button
-                    onClick={() => { setEditTarget(null); setShowModal(true) }}
-                    className="btn-primary"
-                >
-                    <Plus size={16} /> New Announcement
-                </button>
+                {(user.role === 'admin' || user.role === 'super_admin' || user.isOwner) && (
+                    <button
+                        onClick={() => { setEditTarget(null); setShowModal(true) }}
+                        className="btn-primary"
+                    >
+                        <Plus size={16} /> New Announcement
+                    </button>
+                )}
             </PageHeader>
 
 
@@ -314,7 +316,7 @@ export default function AnnouncementsPage() {
                             const isExpired = ann.expiresAt && new Date(ann.expiresAt) < new Date()
                             return (
                                 <div
-                                    key={ann._id}
+                                    key={ann.id}
                                     className={`card border-l-4 ${cfg.border} ${!ann.isActive || isExpired ? 'opacity-60' : ''} transition-all hover:shadow-md`}
                                 >
                                     <div className="flex items-start gap-4">
@@ -345,7 +347,16 @@ export default function AnnouncementsPage() {
                                             </div>
                                             <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">{ann.content}</p>
                                             <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-400">
-                                                <span>By <span className="font-medium text-slate-600 dark:text-slate-300">{ann.publishedBy?.name}</span></span>
+                                                <div className="flex items-center gap-1.5">
+                                                    {ann.author?.avatar ? (
+                                                        <img src={ann.author.avatar} alt={ann.author.name} className="w-4 h-4 rounded-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-4 h-4 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-black text-[8px]">
+                                                            {ann.author?.name?.[0] || 'A'}
+                                                        </div>
+                                                    )}
+                                                    <span>By <span className="font-medium text-slate-600 dark:text-slate-300">{ann.author?.name}</span></span>
+                                                </div>
                                                 <span>·</span>
                                                 <span>{format(new Date(ann.createdAt), 'MMM d, yyyy')}</span>
                                                 {ann.expiresAt && (
@@ -373,23 +384,25 @@ export default function AnnouncementsPage() {
                                             </div>
                                         </div>
 
-                                        {/* Actions */}
-                                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                                            <button
-                                                onClick={() => setEditTarget(ann)}
-                                                className="p-2 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950 transition-colors"
-                                                title="Edit"
-                                            >
-                                                <Pencil size={15} />
-                                            </button>
-                                            <button
-                                                onClick={() => setDeleteTarget(ann)}
-                                                className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
-                                                title="Delete"
-                                            >
-                                                <Trash2 size={15} />
-                                            </button>
-                                        </div>
+                                        {/* Actions only for admins */}
+                                        {(user.role === 'admin' || user.role === 'super_admin' || user.isOwner) && (
+                                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                <button
+                                                    onClick={() => setEditTarget(ann)}
+                                                    className="p-2 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950 transition-colors"
+                                                    title="Edit"
+                                                >
+                                                    <Pencil size={15} />
+                                                </button>
+                                                <button
+                                                    onClick={() => setDeleteTarget(ann)}
+                                                    className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={15} />
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )

@@ -1,14 +1,11 @@
 'use strict';
 
-const PayslipTemplate = require('./payslipTemplate.model');
-const PayslipDesign = require('./payslipDesign.model');
+const { prisma } = require('../../config/database');
 const { DEFAULT_TEMPLATES } = require('./defaultTemplates');
 const logger = require('../../shared/utils/logger');
 
 /**
  * Seed default templates if they don't exist
- * Note: These are system-wide defaults. In a multi-tenant setup,
- * you might want to clone these for each new organization.
  */
 exports.seedTemplates = async (organizationId) => {
   try {
@@ -17,11 +14,11 @@ exports.seedTemplates = async (organizationId) => {
       return;
     }
     for (const template of DEFAULT_TEMPLATES) {
-      await PayslipTemplate.findOneAndUpdate(
-        { name: template.name, organizationId },
-        { ...template, type: 'DEFAULT', organizationId },
-        { upsert: true, new: true }
-      );
+      await prisma.payslipTemplate.upsert({
+        where: { id: `default-${template.name.toLowerCase()}` }, // Stable ID for defaults
+        update: { ...template, organizationId },
+        create: { id: `default-${template.name.toLowerCase()}`, ...template, organizationId }
+      });
     }
     logger.info(`Default payslip templates seeded for org: ${organizationId}`);
   } catch (err) {
@@ -33,34 +30,39 @@ exports.seedTemplates = async (organizationId) => {
  * Get the active default template for an organization
  */
 exports.getDefaultTemplate = async (organizationId = null) => {
-  // 1. Try to find the active design for the organization
+  // 1. Try to find the active design in OrgSettings
   if (organizationId) {
-    const activeDesign = await PayslipDesign.findOne({ organizationId, isActive: true }).sort({ createdAt: -1 });
-    if (activeDesign) {
-      // Return a mock template object with the design properties
-      return {
-        layoutType: activeDesign.templateId,
-        backgroundImageUrl: activeDesign.backgroundImageUrl,
-        htmlContent: exports.getHtmlForLayout(activeDesign.templateId),
-        name: `Active Design (${activeDesign.templateId})`
-      };
+    const orgSettings = await prisma.orgSettings.findUnique({ where: { organizationId } });
+    const payrollConfig = orgSettings?.data?.payroll || {};
+    
+    if (payrollConfig.activeTemplateId) {
+      const template = await prisma.payslipTemplate.findUnique({
+        where: { id: payrollConfig.activeTemplateId }
+      });
+      if (template) return template;
     }
   }
 
   // 2. Fallback to templates marked as default for this organization
-  let template = await PayslipTemplate.findOne({ organizationId, isActive: true, isSystemDefault: true });
+  let template = await prisma.payslipTemplate.findFirst({
+    where: { organizationId, isDefault: true }
+  });
   
   if (!template && organizationId) {
-    // 3. Last fallback: any active template for this organization
-    template = await PayslipTemplate.findOne({ organizationId, isActive: true });
+    // 3. Last fallback: any template for this organization
+    template = await prisma.payslipTemplate.findFirst({
+      where: { organizationId }
+    });
   }
 
-  // 4. Global system fallback (if still null)
+  // 4. Global system fallback
   if (!template) {
-    template = await PayslipTemplate.findOne({ type: 'DEFAULT', isSystemDefault: true });
+    template = await prisma.payslipTemplate.findFirst({
+      where: { organizationId: null, isDefault: true }
+    });
   }
   
-  return template;
+  return template || DEFAULT_TEMPLATES[0]; // Hard fallback
 };
 
 /**
@@ -75,7 +77,7 @@ exports.getHtmlForLayout = (layoutType) => {
  * Template Engine: Replace placeholders with real data
  */
 exports.renderTemplate = (templateHtml, data, backgroundImageUrl = null) => {
-  let rendered = templateHtml;
+  let rendered = templateHtml || '';
 
   // 1. Inject background image if provided
   if (backgroundImageUrl) {
@@ -89,10 +91,8 @@ exports.renderTemplate = (templateHtml, data, backgroundImageUrl = null) => {
           background-repeat: no-repeat !important;
         }
         .container, .card, .payslip-container {
-          background-color: transparent !important;
-          backdrop-filter: none !important;
-          border: none !important;
-          box-shadow: none !important;
+          background-color: rgba(255, 255, 255, 0.8) !important;
+          backdrop-filter: blur(5px) !important;
         }
       </style>
     `;
@@ -120,6 +120,8 @@ exports.renderTemplate = (templateHtml, data, backgroundImageUrl = null) => {
     refNo: data.refNo || 'N/A',
     monthName: data.monthName || '',
     year: data.year || '',
+    companyName: data.companyName || 'CALTIMS',
+    companyAddress: data.companyAddress || '',
     date: new Date().toLocaleDateString()
   };
 
@@ -127,8 +129,7 @@ exports.renderTemplate = (templateHtml, data, backgroundImageUrl = null) => {
     rendered = rendered.split(`{{${key}}}`).join(value);
   });
 
-  // 3. Handle list placeholders (Table/Row versions)
-  // For earningsTable
+  // 3. Handle list placeholders
   if (rendered.includes('{{earningsTable}}')) {
     const tableHtml = Object.entries(data.earnings || {})
       .map(([name, val]) => `<tr><td>${name}</td><td align="right">${val}</td></tr>`)
@@ -143,7 +144,6 @@ exports.renderTemplate = (templateHtml, data, backgroundImageUrl = null) => {
     rendered = rendered.split('{{earningsRows}}').join(rowsHtml);
   }
 
-  // For deductionsTable
   if (rendered.includes('{{deductionsTable}}')) {
     const tableHtml = Object.entries(data.deductions || {})
       .map(([name, val]) => `<tr><td>${name}</td><td align="right">${val}</td></tr>`)
@@ -165,37 +165,58 @@ exports.renderTemplate = (templateHtml, data, backgroundImageUrl = null) => {
  * Format payroll data for the engine
  */
 exports.prepareDataForTemplate = (payroll, settings = {}) => {
-  const user = payroll.user || {};
   const breakdown = payroll.breakdown || {};
+  const employeeInfo = payroll.employeeInfo || {};
+  const bankDetails = payroll.bankDetails || {};
   const currencySymbol = settings?.payroll?.currencySymbol || '₹';
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   
   const format = (val) => `${currencySymbol}${Number(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
+  // 1. Process Earnings
   const earnings = {};
-  (breakdown.earnings?.components || []).forEach(e => earnings[e.name] = format(e.value));
+  const earningsList = (Array.isArray(breakdown.earnings) ? breakdown.earnings : breakdown.earnings?.components) || [];
+  if (Array.isArray(earningsList)) {
+      earningsList.forEach(e => {
+          if (e.name && e.value != null) earnings[e.name] = format(e.value);
+      });
+  }
 
+  // 2. Process Deductions
   const deductions = {};
-  (breakdown.deductions?.components || []).forEach(d => deductions[d.name] = format(d.value));
-  if (breakdown.lopDeduction > 0) deductions['LOP Deduction'] = format(breakdown.lopDeduction);
+  const deductionsList = (Array.isArray(breakdown.deductions) ? breakdown.deductions : breakdown.deductions?.components) || [];
+  if (Array.isArray(deductionsList)) {
+      deductionsList.forEach(d => {
+          if (d.name && d.value != null) deductions[d.name] = format(d.value);
+      });
+  }
+  
+  // Legacy LOP fallback if not already in list
+  const lopDaysVal = (payroll.attendance?.lopDays || breakdown.lopDays) || 0;
+  if (lopDaysVal > 0 && breakdown.lopDeduction > 0 && !deductions['LOP Deduction']) {
+      deductions['LOP Deduction'] = format(breakdown.lopDeduction);
+  }
 
   return {
-    employeeName: payroll.employeeInfo?.name || user.name,
-    employeeId: payroll.employeeInfo?.employeeId || user.employeeId,
-    department: payroll.employeeInfo?.department || user.department,
-    designation: payroll.employeeInfo?.designation || user.designation,
-    bankName: payroll.bankDetails?.bankName || user.bankName,
-    accountNo: payroll.bankDetails?.accountNumber || user.accountNumber,
-    panId: payroll.bankDetails?.pan || user.pan,
-    grossEarnings: format(breakdown.earnings?.grossEarnings),
-    totalDeductions: format(breakdown.deductions?.totalDeductions),
-    netPay: format(breakdown.netPay),
-    lopDays: payroll.attendance?.lopDays || 0,
-    overtimeHours: payroll.overtimeHours || 0,
-    refNo: (payroll._id || '').toString().slice(-8).toUpperCase(),
+    employeeName: employeeInfo.name || 'N/A',
+    employeeId: employeeInfo.employeeId || 'N/A',
+    department: employeeInfo.department || 'N/A',
+    designation: employeeInfo.designation || 'N/A',
+    bankName: bankDetails.bankName || 'N/A',
+    accountNo: bankDetails.accountNumber ? `************${bankDetails.accountNumber.toString().slice(-4)}` : 'N/A',
+    panId: bankDetails.pan ? `******${bankDetails.pan.toString().slice(-4)}` : 'N/A',
+    grossEarnings: format(payroll.gross || payroll.grossYield || breakdown.grossPay || 0),
+    totalDeductions: format(payroll.totalDeductions || payroll.liability || breakdown.totalDeductions || 0),
+    netPay: format(payroll.netPay || payroll.netSalary || 0),
+    lopDays: (payroll.attendance?.lopDays || breakdown.lopDays) || 0,
+    overtimeHours: (payroll.overtimeHours || breakdown.overtimeHours) || 0,
+    refNo: (payroll.id || '').toString().slice(-8).toUpperCase(),
     monthName: monthNames[(payroll.month || 1) - 1],
     year: payroll.year,
+    companyName: settings?.organization?.companyName || 'CALTIMS',
+    companyAddress: settings?.organization?.address || '',
     earnings,
     deductions
   };
 };
+

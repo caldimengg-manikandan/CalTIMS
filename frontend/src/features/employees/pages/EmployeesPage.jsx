@@ -5,7 +5,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import Spinner from '@/components/ui/Spinner'
 import PageHeader from '@/components/ui/PageHeader'
 import {
-    Search, UserPlus, SlidersHorizontal, Download, Eye, UserX, UserCheck,
+    Search, UserPlus, SlidersHorizontal, Download, Eye, EyeOff, UserX, UserCheck,
     X, Save, ChevronDown, Pencil, Trash2, Mail, Phone, Building2,
     Briefcase, CalendarDays, ShieldCheck, History
 } from 'lucide-react'
@@ -14,7 +14,7 @@ import toast from 'react-hot-toast'
 import Pagination from '@/components/ui/Pagination'
 
 const INITIAL_FORM = {
-    name: '', email: '', password: '', role: 'employee',
+    name: '', email: '', password: '', role: '',
     department: '', designation: '', phone: '', employeeId: '',
     joinDate: new Date().toISOString().split('T')[0],
     bankName: '', accountNumber: '', branchName: '', ifscCode: '',
@@ -93,7 +93,8 @@ function EmployeeHistory({ entityId }) {
 }
 
 /* ─── Employee Form (shared by Add & Edit) ───────────────────── */
-function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, errors = {} }) {
+function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, errors = {}, roles = [] }) {
+    const [showPassword, setShowPassword] = useState(false)
     const getInputClass = (name) => {
         return `input ${errors[name] ? 'bg-red-50 border-red-300 ring-red-200' : ''}`
     }
@@ -107,37 +108,79 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5 col-span-2">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Employee ID (Optional)</label>
-                        <input name="employeeId" className={getInputClass('employeeId')} placeholder="e.g. EMP001" value={formData.employeeId || ''} onChange={onChange} />
+                        <input name="employeeId" maxLength={20} className={getInputClass('employeeId')} placeholder="e.g. EMP001" value={formData.employeeId || ''} onChange={onChange} />
+                        {errors.employeeId && <p className="text-[10px] text-red-500 font-medium">{typeof errors.employeeId === 'string' ? errors.employeeId : 'This Employee ID is already taken'}</p>}
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name *</label>
-                        <input name="name" className={getInputClass('name')} placeholder="John Doe" value={formData.name} onChange={onChange} />
+                        <input name="name" maxLength={50} className={getInputClass('name')} placeholder="John Doe" value={formData.name} onChange={onChange} />
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address *</label>
-                        <input name="email" type="email" className={getInputClass('email')} placeholder="john@example.com" value={formData.email} onChange={onChange} />
+                        <input name="email" type="email" maxLength={100} className={getInputClass('email')} placeholder="john@example.com" value={formData.email} onChange={onChange} />
+                        {errors.email && <p className="text-[10px] text-red-500 font-medium">{typeof errors.email === 'string' ? errors.email : 'This email is already in use'}</p>}
                     </div>
-                    {!isEdit ? (
-                        <div className="space-y-1.5">
-                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Password *</label>
-                            <input name="password" type="password" className={getInputClass('password')} placeholder="Min 8 characters" value={formData.password} onChange={onChange} />
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                            {!isEdit ? 'Password *' : 'Reset Password (Optional)'}
+                        </label>
+                        <div className="relative">
+                            <input 
+                                name={!isEdit ? 'password' : 'newPassword'} 
+                                type={showPassword ? 'text' : 'password'} 
+                                className={getInputClass(!isEdit ? 'password' : 'newPassword')} 
+                                placeholder="Min 8 characters" 
+                                value={!isEdit ? formData.password : (formData.newPassword || '')} 
+                                onChange={onChange} 
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 transition-colors"
+                                tabIndex="-1"
+                            >
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
                         </div>
-                    ) : (
-                        <div className="space-y-1.5">
-                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Reset Password (Optional)</label>
-                            <input name="newPassword" type="password" className={getInputClass('newPassword')} placeholder="Min 8 characters" value={formData.newPassword || ''} onChange={onChange} />
-                        </div>
-                    )}
+                    </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Role *</label>
-                        <select name="role" className={getInputClass('role')} value={formData.role} onChange={onChange}>
-                            <option value="employee">Employee</option>
-                            <option value="intern">Intern</option>
-                            <option value="manager">Manager</option>
-                            <option value="hr">HR</option>
-                            <option value="finance">Finance</option>
-                            <option value="admin">Admin</option>
+                        <select 
+                            name="role" 
+                            className={getInputClass('role')} 
+                            value={formData.roleId || formData.role?.toLowerCase() || ''} 
+                            onChange={(e) => {
+                                const selectedId = e.target.value;
+                                const selectedRole = roles.find(r => r.id === selectedId || r.name.toLowerCase() === selectedId);
+                                onChange({
+                                    target: {
+                                        name: 'role',
+                                        value: selectedRole ? selectedRole.name.toLowerCase() : selectedId,
+                                    },
+                                    roleId: selectedRole?.id || null
+                                });
+                            }}
+                        >
+                            <option value="">Select Role</option>
+                            {roles?.length > 0 ? (
+                                roles
+                                    .filter(r => r.name.toLowerCase() !== 'super_admin' && r.name.toLowerCase() !== 'super admin')
+                                    .map(r => (
+                                        <option key={r.id || r.name} value={r.id || r.name.toLowerCase()}>
+                                            {r.name}
+                                        </option>
+                                    ))
+                            ) : (
+                                <>
+                                    <option value="employee">Employee</option>
+                                    <option value="hr">HR</option>
+                                    <option value="admin">Admin</option>
+                                    <option value="finance">Finance</option>
+                                    <option value="manager">Manager</option>
+                                </>
+                            )}
                         </select>
+                        {errors.role && <p className="text-[10px] text-red-500 font-medium">Please select a role</p>}
                     </div>
                 </div>
             </div>
@@ -162,6 +205,7 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                                 e.target.value = e.target.value.replace(/[^0-9]/g, '');
                             }}
                         />
+                        {errors.phone && <p className="text-[10px] text-red-500 font-medium">{typeof errors.phone === 'string' ? errors.phone : 'Invalid phone number'}</p>}
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Joining Date *</label>
@@ -177,7 +221,7 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Bank Name *</label>
-                        <input name="bankName" className={getInputClass('bankName')} placeholder="e.g. HDFC Bank" value={formData.bankName || ''} onChange={onChange} />
+                        <input name="bankName" maxLength={100} className={getInputClass('bankName')} placeholder="e.g. HDFC Bank" value={formData.bankName || ''} onChange={onChange} />
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Account Number *</label>
@@ -189,11 +233,12 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Branch Name *</label>
-                        <input name="branchName" className={getInputClass('branchName')} placeholder="e.g. Mumbai" value={formData.branchName || ''} onChange={onChange} />
+                        <input name="branchName" maxLength={100} className={getInputClass('branchName')} placeholder="e.g. Mumbai" value={formData.branchName || ''} onChange={onChange} />
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">IFSC Code *</label>
                         <input name="ifscCode" className={getInputClass('ifscCode')} placeholder="e.g. HDFC0001234" value={formData.ifscCode || ''} onChange={onChange} maxLength={11} />
+                        {errors.ifscCode && <p className="text-[10px] text-red-500 font-medium">{typeof errors.ifscCode === 'string' ? errors.ifscCode : 'Invalid IFSC Code'}</p>}
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">UAN Number *</label>
@@ -202,6 +247,7 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                                 e.target.value = e.target.value.replace(/[^0-9]/g, '');
                             }}
                         />
+                        {errors.uan && <p className="text-[10px] text-red-500 font-medium">{typeof errors.uan === 'string' ? errors.uan : 'Invalid UAN Number'}</p>}
                     </div>
                 </div>
             </div>
@@ -214,6 +260,7 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">PAN Number *</label>
                         <input name="pan" className={getInputClass('pan')} placeholder="e.g. ABCDE1234F" value={formData.pan || ''} onChange={onChange} maxLength={10} />
+                        {errors.pan && <p className="text-[10px] text-red-500 font-medium">{typeof errors.pan === 'string' ? errors.pan : 'Invalid PAN Number'}</p>}
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Aadhaar Number *</label>
@@ -222,6 +269,7 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                                 e.target.value = e.target.value.replace(/[^0-9]/g, '');
                             }}
                         />
+                        {errors.aadhaar && <p className="text-[10px] text-red-500 font-medium">{typeof errors.aadhaar === 'string' ? errors.aadhaar : 'Invalid Aadhaar Number'}</p>}
                     </div>
                 </div>
             </div>
@@ -263,6 +311,11 @@ export default function EmployeesPage() {
         queryKey: ['departments'],
         queryFn: () => userAPI.getDepartments().then(r => r.data.data),
     })
+    
+    const { data: rolesData } = useQuery({
+        queryKey: ['roles-list'],
+        queryFn: () => userAPI.getRoles().then(r => r.data.data),
+    })
 
     const { data: allEmployees } = useQuery({
         queryKey: ['all-employees-list'],
@@ -286,14 +339,28 @@ export default function EmployeesPage() {
     /* ── Mutations ── */
     const createMut = useMutation({
         mutationFn: (d) => userAPI.create(d),
-        onSuccess: () => { toast.success('Employee created'); invalidate(); setAddOpen(false); setAddForm(INITIAL_FORM) },
-        onError: (e) => toast.error(e.response?.data?.message || 'Failed to create')
+        onSuccess: () => { toast.success('Employee created'); invalidate(); setAddOpen(false); setAddForm(INITIAL_FORM); setAddErrors({}) },
+        onError: (e) => {
+            const serverErrors = e.response?.data?.errors
+            if (serverErrors) {
+                setAddErrors(serverErrors)
+            }
+            const msg = e.response?.data?.message || 'Failed to create'
+            toast.error(msg)
+        }
     })
 
     const editMut = useMutation({
         mutationFn: ({ id, data }) => userAPI.update(id, data),
-        onSuccess: () => { toast.success('Employee updated'); invalidate(); setEditEmp(null) },
-        onError: (e) => toast.error(e.response?.data?.message || 'Failed to update')
+        onSuccess: () => { toast.success('Employee updated'); invalidate(); setEditEmp(null); setEditErrors({}) },
+        onError: (e) => {
+            const serverErrors = e.response?.data?.errors
+            if (serverErrors) {
+                setEditErrors(serverErrors)
+            }
+            const msg = e.response?.data?.message || 'Failed to update'
+            toast.error(msg)
+        }
     })
 
     const deleteMut = useMutation({
@@ -321,6 +388,7 @@ export default function EmployeesPage() {
         if (!data.designation?.trim() || data.designation.length > 50) errors.designation = true
         if (!data.phone?.trim() || data.phone.replace(/\D/g, '').length !== 10) errors.phone = true
         if (!data.joinDate) errors.joinDate = true
+        if (!data.role && !data.roleId) errors.role = true
 
         // Bank Details Validation
         if (!data.bankName?.trim()) errors.bankName = true
@@ -337,6 +405,16 @@ export default function EmployeesPage() {
     }
 
     const handleAddChange = (e) => {
+        // Support for custom roleId from select
+        if (e.roleId !== undefined) {
+             const { name, value } = e.target
+             setAddForm(p => ({ ...p, [name]: value, roleId: e.roleId }))
+             if (addErrors[name]) setAddErrors(prev => {
+                const up = { ...prev }; delete up[name]; return up
+             })
+             return
+        }
+
         let { name, value } = e.target
         if (['phone', 'accountNumber', 'uan', 'aadhaar'].includes(name)) value = value.replace(/\D/g, '')
         
@@ -357,6 +435,16 @@ export default function EmployeesPage() {
     }
 
     const handleEditChange = (e) => {
+        // Support for custom roleId from select
+        if (e.roleId !== undefined) {
+            const { name, value } = e.target
+            setEditForm(p => ({ ...p, [name]: value, roleId: e.roleId }))
+            if (editErrors[name]) setEditErrors(prev => {
+               const up = { ...prev }; delete up[name]; return up
+            })
+            return
+       }
+
         let { name, value } = e.target
         if (['phone', 'accountNumber', 'uan', 'aadhaar'].includes(name)) value = value.replace(/\D/g, '')
 
@@ -389,12 +477,18 @@ export default function EmployeesPage() {
     const openEdit = (emp) => {
         setEditEmp(emp)
         setEditErrors({})
+        
+        // Find matching role in the loaded roles to ensure we use the ID if available
+        const roleStr = (emp.role || 'employee').toLowerCase()
+        const matchedRole = rolesData?.find(r => r.id === emp.roleId || r.name.toLowerCase() === roleStr)
+
         setEditForm({
             name: emp.name || '',
             email: emp.email || '',
             password: '',
             newPassword: '',
-            role: emp.role || 'employee',
+            role: matchedRole ? matchedRole.name.toLowerCase() : roleStr,
+            roleId: matchedRole?.id || emp.roleId || null,
             department: emp.department || '',
             designation: emp.designation || '',
             phone: emp.phone || '',
@@ -412,22 +506,82 @@ export default function EmployeesPage() {
 
     /* ── CSV Export ── */
     const handleExportCSV = () => {
-        const employees = [...(data?.data || [])].reverse()
-        if (!employees.length) { toast.error('No data to export'); return }
-        const headers = ['Name', 'Email', 'Employee ID', 'Department', 'Designation', 'Role', 'Phone', 'Joining Date', 'Status']
-        const rows = employees.map(e => [
-            e.name, e.email, e.employeeId, e.department || '', e.designation || '',
-            e.role, e.phone || '',
-            e.joinDate ? format(new Date(e.joinDate), 'yyyy-MM-dd') : '',
-            e.isActive ? 'Active' : 'Inactive'
-        ])
-        const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
-        const blob = new Blob([csv], { type: 'text/csv' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a'); a.href = url; a.download = 'employees.csv'; a.click()
-        URL.revokeObjectURL(url)
-        toast.success('Exported successfully')
-    }
+        const dataToExport = allEmployees || data?.data;
+        if (!dataToExport || dataToExport.length === 0) { 
+            toast.error('No data to export'); 
+            return; 
+        }
+
+        const headers = [
+            'Full Name', 
+            'Email', 
+            'Employee ID', 
+            'Department', 
+            'Designation', 
+            'Role', 
+            'Phone Number', 
+            'Joining Date', 
+            'Status',
+            'Bank Name',
+            'Account Number',
+            'Branch Name',
+            'IFSC Code',
+            'UAN Number',
+            'PAN Number',
+            'Aadhaar Number',
+            'Leave Balances'
+        ];
+
+        const rows = dataToExport.map(e => {
+            const leaveDetails = Object.entries(e.leaveBalance || {})
+                .map(([type, bal]) => `${type}: ${bal}`)
+                .join(' | ');
+
+            return [
+                e.name || '',
+                e.email || '',
+                e.employeeId || '',
+                e.department || '',
+                e.designation || '',
+                e.roleName || e.role || '',
+                e.phone || '',
+                e.joinDate ? format(new Date(e.joinDate), 'yyyy-MM-dd') : '',
+                e.isActive ? 'Active' : 'Inactive',
+                e.bankName || '',
+                e.accountNumber || '',
+                e.branchName || '',
+                e.ifscCode || '',
+                e.uan || '',
+                e.pan || '',
+                e.aadhaar || '',
+                leaveDetails || 'No leave records'
+            ];
+        });
+
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.map(cell => {
+                const cellStr = String(cell === null || cell === undefined ? '' : cell);
+                if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+                    return `"${cellStr.replace(/"/g, '""')}"`;
+                }
+                return cellStr;
+            }).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const timestamp = format(new Date(), 'yyyy-MM-dd_HHmm');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `employees_export_${timestamp}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success(`Exported ${dataToExport.length} employees successfully`);
+    };
 
     return (
         <div className="h-[calc(100vh-160px)] flex flex-col gap-4 animate-fade-in overflow-hidden">
@@ -546,12 +700,21 @@ export default function EmployeesPage() {
                                                         onChange={(e) => setTempFilters(p => ({ ...p, role: e.target.value }))}
                                                     >
                                                         <option value="">All Roles</option>
-                                                        <option value="admin">Admin</option>
-                                                        <option value="manager">Manager</option>
-                                                        <option value="hr">HR</option>
-                                                        <option value="finance">Finance</option>
-                                                        <option value="employee">Employee</option>
-                                                        <option value="intern">Intern</option>
+                                                        {rolesData?.length > 0 ? (
+                                                            rolesData
+                                                                .filter(r => r.name.toLowerCase() !== 'super_admin' && r.name.toLowerCase() !== 'super admin')
+                                                                .map(r => (
+                                                                    <option key={r.id || r.name} value={r.name.toLowerCase()}>{r.name}</option>
+                                                                ))
+                                                        ) : (
+                                                            <>
+                                                                <option value="employee">Employee</option>
+                                                                <option value="hr">HR</option>
+                                                                <option value="admin">Admin</option>
+                                                                <option value="finance">Finance</option>
+                                                                <option value="manager">Manager</option>
+                                                            </>
+                                                        )}
                                                     </select>
                                                 </div>
 
@@ -667,24 +830,28 @@ export default function EmployeesPage() {
                                                 >
                                                     <Pencil size={16} />
                                                 </button>
-                                                <button
-                                                    onClick={() => toggleStatusMut.mutate({ id: emp._id, isActive: emp.isActive })}
-                                                    title={emp.isActive ? 'Deactivate' : 'Activate'}
-                                                    disabled={toggleStatusMut.isPending}
-                                                    className={`p-1.5 rounded-lg transition-colors ${emp.isActive
-                                                        ? 'text-slate-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20'
-                                                        : 'text-slate-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20'
-                                                        }`}
-                                                >
-                                                    {emp.isActive ? <UserX size={16} /> : <UserCheck size={16} />}
-                                                </button>
-                                                <button
-                                                    onClick={() => setDeleteEmp(emp)}
-                                                    title="Delete Employee"
-                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                                                {!emp.isOwner && (
+                                                    <button
+                                                        onClick={() => toggleStatusMut.mutate({ id: emp._id, isActive: emp.isActive })}
+                                                        title={emp.isActive ? 'Deactivate' : 'Activate'}
+                                                        disabled={toggleStatusMut.isPending}
+                                                        className={`p-1.5 rounded-lg transition-colors ${emp.isActive
+                                                            ? 'text-slate-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20'
+                                                            : 'text-slate-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20'
+                                                            }`}
+                                                    >
+                                                        {emp.isActive ? <UserX size={16} /> : <UserCheck size={16} />}
+                                                    </button>
+                                                )}
+                                                {!emp.isOwner && (
+                                                    <button
+                                                        onClick={() => setDeleteEmp(emp)}
+                                                        title="Delete Employee"
+                                                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -714,7 +881,7 @@ export default function EmployeesPage() {
             {/* Modals */}
             <Modal open={addOpen} onClose={() => !createMut.isPending && setAddOpen(false)}>
                 <ModalHeader icon={<UserPlus size={20} />} title="Add New Employee" subtitle="Create a new user account" onClose={() => setAddOpen(false)} />
-                <EmployeeForm formId="add-form" formData={addForm} onChange={handleAddChange} onSubmit={handleAddSubmit} errors={addErrors} />
+                <EmployeeForm formId="add-form" formData={addForm} onChange={handleAddChange} onSubmit={handleAddSubmit} errors={addErrors} roles={rolesData} />
                 <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                     <button onClick={() => setAddOpen(false)} className="btn-secondary">Cancel</button>
                     <button type="submit" form="add-form" disabled={createMut.isPending} className="btn-primary min-w-[140px]">
@@ -725,7 +892,7 @@ export default function EmployeesPage() {
 
             <Modal open={!!editEmp} onClose={() => !editMut.isPending && setEditEmp(null)}>
                 <ModalHeader icon={<Pencil size={20} />} title="Edit Employee" subtitle={editEmp?.name} onClose={() => setEditEmp(null)} />
-                <EmployeeForm formId="edit-form" formData={editForm} onChange={handleEditChange} onSubmit={handleEditSubmit} errors={editErrors} isEdit />
+                <EmployeeForm formId="edit-form" formData={editForm} onChange={handleEditChange} onSubmit={handleEditSubmit} errors={editErrors} isEdit roles={rolesData} />
                 <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0">
                     <button onClick={() => setEditEmp(null)} className="btn-secondary">Cancel</button>
                     <button type="submit" form="edit-form" disabled={editMut.isPending} className="btn-primary min-w-[140px]">

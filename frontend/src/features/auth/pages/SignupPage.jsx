@@ -20,22 +20,22 @@ const schema = z.object({
 })
 
 const GoogleIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1 .67-2.28 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-    </svg>
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1 .67-2.28 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+  </svg>
 )
 
 const MicrosoftIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg">
-        <path fill="#f3f3f3" d="M0 0h23v23H0z" />
-        <path fill="#f35325" d="M1 1h10v10H1z" />
-        <path fill="#81bc06" d="M12 1h10v10H12z" />
-        <path fill="#05a6f0" d="M1 12h10v10H1z" />
-        <path fill="#ffba08" d="M12 12h10v10H12z" />
-    </svg>
+  <svg width="20" height="20" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg">
+    <path fill="#f3f3f3" d="M0 0h23v23H0z" />
+    <path fill="#f35325" d="M1 1h10v10H1z" />
+    <path fill="#81bc06" d="M12 1h10v10H12z" />
+    <path fill="#05a6f0" d="M1 12h10v10H1z" />
+    <path fill="#ffba08" d="M12 12h10v10H12z" />
+  </svg>
 )
 
 export default function SignupPage() {
@@ -43,7 +43,7 @@ export default function SignupPage() {
   const { setAuth } = useAuthStore()
   const [showPassword, setShowPassword] = React.useState(false)
 
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, handleSubmit, setError, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
   })
 
@@ -54,30 +54,39 @@ export default function SignupPage() {
       navigate('/login', { replace: true })
     },
     onError: (err) => {
-      const message = err.response?.data?.message || 'Registration failed. Please try again.'
-      toast.error(message, { id: message })
+      const { message, errors: serverErrors } = err.response?.data || {}
+
+      if (serverErrors && typeof serverErrors === 'object') {
+        Object.entries(serverErrors).forEach(([field, msg]) => {
+          setError(field, { type: 'server', message: msg })
+          toast.error(msg, { id: msg })
+        })
+      } else {
+        const fallbackMsg = message || 'Registration failed. Please try again.'
+        toast.error(fallbackMsg, { id: fallbackMsg })
+      }
     }
   })
 
   const { mutate: socialLogin, isPending: isSocialPending } = useMutation({
     mutationFn: (data) => authAPI.socialLogin(data),
     onSuccess: (res) => {
-        const { accessToken, refreshToken, user } = res.data.data
-        setAuth(user, accessToken, refreshToken)
-        toast.success(`Authenticated with ${user.provider}!`)
-        navigate('/onboarding', { replace: true })
+      const { accessToken, refreshToken, user } = res.data.data
+      setAuth(user, accessToken, refreshToken)
+      toast.success(`Authenticated with ${user.provider}!`)
+      navigate('/onboarding', { replace: true })
     },
     onError: (err) => {
-        const message = err.response?.data?.message || 'Social login failed'
-        toast.error(message)
+      const message = err.response?.data?.message || 'Social login failed'
+      toast.error(message)
     }
   })
 
   const handleSocialLogin = (provider) => {
-    socialLogin({ 
-        email: `demo_${provider}_new@example.com`, 
-        name: `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
-        provider 
+    socialLogin({
+      email: `demo_${provider}_new@example.com`,
+      name: `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
+      provider
     })
   }
 
@@ -95,13 +104,13 @@ export default function SignupPage() {
             <div className="h-2 w-16 bg-primary-600 rounded-full mx-auto lg:ml-1" />
           </div>
           <div className="flex gap-5 justify-center lg:justify-start mt-6">
-            <button 
-                type="button"
-                onClick={() => handleSocialLogin('google')}
-                disabled={isSocialPending}
-                className="w-14 h-14 rounded-full border-2 border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-white/5 transition-all active:scale-95 shadow-md disabled:opacity-50"
+            <button
+              type="button"
+              onClick={() => handleSocialLogin('google')}
+              disabled={isSocialPending}
+              className="w-14 h-14 rounded-full border-2 border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-white/5 transition-all active:scale-95 shadow-md disabled:opacity-50"
             >
-                <GoogleIcon />
+              <GoogleIcon />
             </button>
             {/* <button 
                 type="button"

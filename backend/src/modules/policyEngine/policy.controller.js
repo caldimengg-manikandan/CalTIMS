@@ -2,11 +2,9 @@
 
 const policyService = require('./policy.service');
 const logger = require('../../shared/utils/logger');
-const mongoose = require('mongoose');
+const { prisma } = require('../../config/database');
 
 const payrollService = require('../payroll/payroll.service');
-const User = require('../users/user.model');
-const PayrollProfile = require('../payroll/payrollProfile.model');
 const { startOfMonth, getDaysInMonth } = require('date-fns');
 
 const getPayrollPolicy = async (req, res) => {
@@ -47,18 +45,12 @@ const previewPolicyCalculation = async (req, res) => {
     const policy = req.body;
     const organizationId = req.organizationId;
 
-    // SCRICT SCOPING: Only fetch a user from the same organization for preview
-    const mockUser = await User.findOne({ organizationId, isActive: true }).lean() || { 
-      name: 'Sample Employee', 
-      role: 'Employee', 
-      _id: new mongoose.Types.ObjectId() 
-    };
+    const mockUserRecord = organizationId ? await prisma.user.findFirst({ where: { organizationId, isActive: true } }) : null;
+    const mockUser = mockUserRecord || { name: 'Sample Employee', role: 'Employee', id: 'preview-user' };
     
-    // SCRICT SCOPING: Only fetch a profile from the same organization
-    const mockProfile = await PayrollProfile.findOne({ 
-      user: mockUser._id,
-      organizationId: organizationId 
-    }).lean() || { monthlyCTC: 50000 };
+    const mockProfileRecord = mockUserRecord ? await prisma.payrollProfile.findFirst({ where: { user: mockUserRecord.id, organizationId } }) : null;
+    const mockProfile = mockProfileRecord || { monthlyCTC: 50000, earnings: [], deductions: [] };
+    if (!policy.salaryComponents) policy.salaryComponents = [];
     
     const now = new Date();
     const month = now.getMonth() + 1;
@@ -83,7 +75,7 @@ const previewPolicyCalculation = async (req, res) => {
       user: mockUser
     };
 
-    const breakdown = payrollService.calculateSalary(policy, mockProfile, attendance, contextData);
+    const breakdown = payrollService.calculateSalaryBreakdown(policy, mockProfile, attendance, contextData);
     res.status(200).json({ breakdown, sampleEmployee: mockUser.name, ctc: mockProfile.monthlyCTC });
   } catch (error) {
     logger.error('Error previewing calculation: ' + error.message);

@@ -91,7 +91,7 @@ function TaskForm({ formId, formData, onChange, onSubmit, projects = [] }) {
                     >
                         <option value="">Select Project</option>
                         {projects.map(p => (
-                            <option key={p._id} value={p._id}>{p.name} ({p.code})</option>
+                            <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
                         ))}
                     </select>
                 </div>
@@ -292,7 +292,7 @@ export default function TasksPage() {
     const handleEditChange = (e) => setEditForm(p => ({ ...p, [e.target.name]: e.target.value }))
     const handleEditSubmit = (e) => {
         e.preventDefault()
-        editMut.mutate({ id: editTask._id, data: editForm })
+        editMut.mutate({ id: editTask.id, data: editForm })
     }
 
     const openEdit = (task) => {
@@ -300,7 +300,7 @@ export default function TasksPage() {
         setEditForm({
             name: task.name || '',
             description: task.description || '',
-            projectId: task.projectId?._id || task.projectId || '',
+            projectId: task.projectId?.id || task.projectId || '',
             status: task.status || 'pending',
             priority: task.priority || 'medium',
             isActive: task.isActive !== undefined ? task.isActive : true,
@@ -308,22 +308,66 @@ export default function TasksPage() {
         })
     }
 
+    const { data: allTasksList } = useQuery({
+        queryKey: ['all-tasks-list'],
+        queryFn: () => taskAPI.getAll({ limit: 5000 }).then(r => r.data.data),
+    })
+
     const handleExportCSV = () => {
-        const tasks = data?.data || []
-        if (!tasks.length) { toast.error('No data to export'); return }
-        const headers = ['Task Name', 'Project', 'Project Code', 'Status', 'Priority', 'Description', 'Created At']
-        const rows = tasks.map(t => [
-            t.name, t.projectId?.name || '—', t.projectId?.code || '—',
-            t.status, t.priority, t.description || '—',
-            format(new Date(t.createdAt), 'yyyy-MM-dd HH:mm')
-        ])
-        const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
-        const blob = new Blob([csv], { type: 'text/csv' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a'); a.href = url; a.download = 'tasks.csv'; a.click()
-        URL.revokeObjectURL(url)
-        toast.success('Exported successfully')
-    }
+        const dataToExport = allTasksList || data?.data;
+        if (!dataToExport || dataToExport.length === 0) { 
+            toast.error('No data to export'); 
+            return; 
+        }
+
+        const headers = [
+            'Task Name', 
+            'Project Name', 
+            'Project Code', 
+            'Status', 
+            'Priority', 
+            'Due Date', 
+            'Description', 
+            'Created At',
+            'Last Updated'
+        ];
+
+        const rows = dataToExport.map(t => [
+            t.name || '',
+            t.project?.name || '—',
+            t.project?.code || '—',
+            t.status || '',
+            t.priority || '',
+            t.dueDate ? format(new Date(t.dueDate), 'yyyy-MM-dd') : 'No due date',
+            (t.description || '').replace(/\n/g, ' '),
+            t.createdAt ? format(new Date(t.createdAt), 'yyyy-MM-dd HH:mm') : '',
+            t.updatedAt ? format(new Date(t.updatedAt), 'yyyy-MM-dd HH:mm') : ''
+        ]);
+
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.map(cell => {
+                const cellStr = String(cell === null || cell === undefined ? '' : cell);
+                if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+                    return `"${cellStr.replace(/"/g, '""')}"`;
+                }
+                return cellStr;
+            }).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const timestamp = format(new Date(), 'yyyy-MM-dd_HHmm');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `tasks_export_${timestamp}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success(`Exported ${dataToExport.length} tasks successfully`);
+    };
 
     return (
         <div className="h-[calc(100vh-160px)] flex flex-col gap-4 animate-fade-in overflow-hidden">
@@ -411,7 +455,7 @@ export default function TasksPage() {
                                                 >
                                                     <option value="">All Projects</option>
                                                     {projectsData?.map(p => (
-                                                        <option key={p._id} value={p._id}>{p.name}</option>
+                                                        <option key={p.id} value={p.id}>{p.name}</option>
                                                     ))}
                                                 </select>
                                             </div>
@@ -465,7 +509,7 @@ export default function TasksPage() {
                             onClick={() => { setBulkNames(''); setBulkProjectId(''); setBulkAddOpen(true) }}
                             className="flex items-center gap-2 px-3 h-9 rounded-lg border border-indigo-200 bg-indigo-50 text-primary hover:bg-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800 dark:text-indigo-400 text-sm font-medium transition-colors"
                         >
-                            <Plus size={15} /> Bulk Add
+                            <Plus size={15} /> Add Task
                         </button>
 
 
@@ -492,7 +536,7 @@ export default function TasksPage() {
                             </thead>
                             <tbody>
                                 {data?.data?.map((task) => (
-                                    <tr key={task._id}>
+                                    <tr key={task.id}>
                                         <td>
                                             <div className="flex items-center gap-3">
                                                 <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center text-white shrink-0">
@@ -505,8 +549,7 @@ export default function TasksPage() {
                                             </div>
                                         </td>
                                         <td>
-                                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{task.projectId?.name || '—'}</p>
-                                            {/* <p className="text-[10px] text-slate-400 font-mono tracking-wider">{task.projectId?.code || '—'}</p> */}
+                                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{task.project?.name || '—'}</p>
                                         </td>
                                         <td><StatusBadge status={task.priority} /></td>
                                         <td><StatusBadge status={task.status} /></td>
@@ -588,7 +631,7 @@ export default function TasksPage() {
 
             {/* ══════════════ VIEW MODAL ══════════════ */}
             <Modal open={!!viewTask} onClose={() => setViewTask(null)} maxWidth="max-w-lg">
-                <ModalHeader icon={<Eye size={20} />} title="Task Details" subtitle={viewTask?.projectId?.name} onClose={() => setViewTask(null)} />
+                <ModalHeader icon={<Eye size={20} />} title="Task Details" subtitle={viewTask?.project?.name} onClose={() => setViewTask(null)} />
                 {viewTask && (
                     <div className="px-6 py-5 overflow-y-auto flex-1 space-y-5">
                         <div className="flex items-center gap-4">
@@ -607,7 +650,7 @@ export default function TasksPage() {
                         <div className="space-y-4">
                             <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
                                 <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Project</p>
-                                <p className="text-sm font-medium text-slate-700 dark:text-white">{viewTask.projectId?.name} ({viewTask.projectId?.code})</p>
+                                <p className="text-sm font-medium text-slate-700 dark:text-white">{viewTask.project?.name} ({viewTask.project?.code})</p>
                             </div>
 
                             <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
@@ -618,11 +661,15 @@ export default function TasksPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
                                     <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Created At</p>
-                                    <p className="text-sm font-medium text-slate-700 dark:text-white">{format(new Date(viewTask.createdAt), 'MMM d, yyyy HH:mm')}</p>
+                                    <p className="text-sm font-medium text-slate-700 dark:text-white">
+                                        {viewTask.createdAt ? format(new Date(viewTask.createdAt), 'MMM d, yyyy HH:mm') : '—'}
+                                    </p>
                                 </div>
                                 <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
                                     <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Last Updated</p>
-                                    <p className="text-sm font-medium text-slate-700 dark:text-white">{format(new Date(viewTask.updatedAt), 'MMM d, yyyy HH:mm')}</p>
+                                    <p className="text-sm font-medium text-slate-700 dark:text-white">
+                                        {viewTask.updatedAt ? format(new Date(viewTask.updatedAt), 'MMM d, yyyy HH:mm') : '—'}
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -650,7 +697,7 @@ export default function TasksPage() {
                 <div className="flex items-center justify-center gap-3 px-6 py-5">
                     <button onClick={() => setDeleteTask(null)} disabled={deleteMut.isLoading} className="btn-secondary min-w-[120px]">Cancel</button>
                     <button
-                        onClick={() => deleteMut.mutate(deleteTask._id)}
+                        onClick={() => deleteMut.mutate(deleteTask.id)}
                         disabled={deleteMut.isLoading}
                         className="min-w-[120px] flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
                     >
@@ -672,7 +719,7 @@ export default function TasksPage() {
                             onChange={(e) => setBulkProjectId(e.target.value)}
                         >
                             <option value="">Select Project</option>
-                            {projectsData?.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                            {projectsData?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                     </div>
                     <div className="space-y-1.5">

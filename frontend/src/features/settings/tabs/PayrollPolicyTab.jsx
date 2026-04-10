@@ -13,7 +13,7 @@ const PayrollPolicyTab = () => {
   const [policy, setPolicy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('components');
+  const [activeTab, setActiveTab] = useState('statutory');
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -63,26 +63,6 @@ const PayrollPolicyTab = () => {
     }
   };
 
-  const addComponent = () => {
-    if (!policy) return;
-    const newComp = { name: 'New Component', type: 'EARNING', calculationType: 'percentage', value: 0, formula: '' };
-    setPolicy({ ...policy, salaryComponents: [...(policy.salaryComponents || []), newComp] });
-  };
-
-  const removeComponent = (index) => {
-    if (!policy) return;
-    const updated = [...(policy.salaryComponents || [])];
-    updated.splice(index, 1);
-    setPolicy({ ...policy, salaryComponents: updated });
-  };
-
-  const updateComponent = (index, field, value) => {
-    if (!policy) return;
-    const updated = [...(policy.salaryComponents || [])];
-    updated[index] = { ...updated[index], [field]: value };
-    setPolicy({ ...policy, salaryComponents: updated });
-  };
-
   if (loading) return (
     <div className="flex items-center justify-center min-h-[400px]">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -110,21 +90,21 @@ const PayrollPolicyTab = () => {
           
         </div>
         <div className="flex items-center gap-3">
-          <button 
+          {/* <button 
             onClick={() => handleSave(true)}
             disabled={saving}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all font-medium border border-indigo-100"
           >
             <History size={18} />
             New Version
-          </button>
+          </button> */}
           <button 
             onClick={() => handleSave(false)}
             disabled={saving}
             className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition-all font-medium shadow-lg shadow-indigo-100"
           >
             {saving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18} />}
-            Synchronize Changes
+            Save Changes
           </button>
         </div>
       </header>
@@ -132,9 +112,8 @@ const PayrollPolicyTab = () => {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
         {/* Navigation & Forms */}
         <div className="xl:col-span-8 space-y-6">
-          <nav className="flex items-center gap-1 p-1 bg-slate-100/80 rounded-2xl w-fit border border-slate-200 backdrop-blur-sm">
+          <nav className="flex items-center gap-1 p-1 bg-slate-100/80 dark:bg-white/5 rounded-2xl w-fit border border-slate-200 dark:border-[#333333] backdrop-blur-sm">
             {[
-              { id: 'components', label: 'Salary Components', icon: Wallet },
               { id: 'statutory', label: 'Statutory Rules', icon: ShieldCheck },
               { id: 'attendance', label: 'Attendance & OT', icon: Clock },
               { id: 'rounding', label: 'Engine Config', icon: Settings2 },
@@ -145,8 +124,8 @@ const PayrollPolicyTab = () => {
                 className={clsx(
                   "flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-300",
                   activeTab === tab.id 
-                    ? "bg-white text-indigo-700 shadow-sm border border-slate-200" 
-                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                    ? "bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-400 shadow-sm border border-slate-200 dark:border-[#444]" 
+                    : "text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200 hover:bg-slate-200/50"
                 )}
               >
                 <tab.icon size={16} />
@@ -163,113 +142,19 @@ const PayrollPolicyTab = () => {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {activeTab === 'components' && (
-                <div className="space-y-4">
-                  <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden backdrop-blur-xl">
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-                          <Scaling size={20} />
-                        </div>
-                        <h3 className="font-bold text-slate-800 text-lg">Earning & Deduction Hub</h3>
-                      </div>
-                      <button 
-                        onClick={addComponent}
-                        className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl transition-colors border border-emerald-100"
-                      >
-                        <Plus size={20} />
-                      </button>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                      {(policy.salaryComponents || []).map((comp, idx) => (
-                        <div key={idx} className="p-6 hover:bg-slate-50/80 transition-all group relative">
-                          <button 
-                            onClick={() => removeComponent(idx)}
-                            className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                            <div className="md:col-span-1 space-y-2 text-sm">
-                              <label className="text-slate-400 font-medium">Component Name</label>
-                              <input 
-                                value={comp.name}
-                                onChange={(e) => updateComponent(idx, 'name', e.target.value)}
-                                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-semibold text-slate-700"
-                              />
-                            </div>
-                            <div className="md:col-span-1 space-y-2 text-sm">
-                              <label className="text-slate-400 font-medium">Type & Basis</label>
-                              <div className="flex gap-2">
-                                <select 
-                                  value={comp.type}
-                                  onChange={(e) => updateComponent(idx, 'type', e.target.value)}
-                                  className="w-1/2 px-3 py-2.5 rounded-xl border border-slate-200 bg-white"
-                                >
-                                  <option value="EARNING">Earning</option>
-                                  <option value="DEDUCTION">Deduction</option>
-                                </select>
-                                <select 
-                                  value={comp.calculationType}
-                                  onChange={(e) => updateComponent(idx, 'calculationType', e.target.value)}
-                                  className="w-1/2 px-3 py-2.5 rounded-xl border border-slate-200 bg-white"
-                                >
-                                  <option value="fixed">Fixed</option>
-                                  <option value="percentage">Basis %</option>
-                                  <option value="formula">Expression</option>
-                                </select>
-                              </div>
-                            </div>
-                            <div className="md:col-span-2 space-y-2 text-sm">
-                              <label className="text-slate-400 font-medium flex items-center justify-between">
-                                Calculation Logic
-                                {comp.calculationType === 'formula' && (
-                                  <span className="text-[10px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 uppercase tracking-tighter">Ready for Engine</span>
-                                )}
-                              </label>
-                              <div className="relative group/input">
-                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/input:text-indigo-500 transition-colors">
-                                  {comp.calculationType === 'formula' ? <Calculator size={18} /> : 
-                                   comp.calculationType === 'percentage' ? <Percent size={18} /> : 
-                                   <DollarSign size={18} />}
-                                </div>
-                                {comp.calculationType === 'formula' ? (
-                                  <input 
-                                    value={comp.formula}
-                                    placeholder="e.g. BASIC * 0.4"
-                                    onChange={(e) => updateComponent(idx, 'formula', e.target.value)}
-                                    className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-mono text-indigo-600"
-                                  />
-                                ) : (
-                                  <input 
-                                    type="number"
-                                    value={comp.value}
-                                    onChange={(e) => updateComponent(idx, 'value', parseFloat(e.target.value))}
-                                    className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-semibold"
-                                  />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {activeTab === 'statutory' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Provident Fund */}
-                  <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+                  <div className="bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-200 dark:border-[#333333] shadow-sm space-y-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
                          <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
                            <IndianRupee size={24} />
                          </div>
                          <div>
-                           <h4 className="font-bold text-slate-800 text-lg leading-tight">Provident Fund (EPF)</h4>
-                           <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Statutory Deductions</span>
+                           <h4 className="font-bold text-slate-800 dark:text-white text-lg leading-tight">Provident Fund (EPF)</h4>
+                           <span className="text-xs text-slate-400 dark:text-gray-500 font-medium uppercase tracking-wider">Statutory Deductions</span>
                          </div>
                       </div>
                       <input 
@@ -281,48 +166,48 @@ const PayrollPolicyTab = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-4 pt-2">
                        <div className="space-y-2">
-                         <label className="text-xs font-bold text-slate-500 uppercase">Employee Contribution %</label>
+                         <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Employee Contribution %</label>
                          <input 
                            type="number"
                            value={policy.statutory.pf.employeeRate}
                            onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, pf: { ...policy.statutory.pf, employeeRate: parseFloat(e.target.value) } } })}
-                           className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700"
+                           className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
                          />
                        </div>
                        <div className="space-y-2">
-                         <label className="text-xs font-bold text-slate-500 uppercase">Employer Contribution %</label>
+                         <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Employer Contribution %</label>
                          <input 
                            type="number"
                            value={policy.statutory.pf.employerRate}
                            onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, pf: { ...policy.statutory.pf, employerRate: parseFloat(e.target.value) } } })}
-                           className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700"
+                           className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
                          />
                        </div>
                     </div>
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Wage Ceiling for PF Calculation</label>
+                     <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-[#333333]">
+                      <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase block mb-2">Wage Ceiling for PF Calculation</label>
                       <div className="flex items-center gap-3">
-                        <IndianRupee size={16} className="text-slate-400" />
+                        <IndianRupee size={16} className="text-slate-400 dark:text-gray-600" />
                         <input 
                           type="number"
-                          value={policy.statutory.pf.wageLimit}
+                           value={policy.statutory.pf.wageLimit}
                           onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, pf: { ...policy.statutory.pf, wageLimit: parseFloat(e.target.value) } } })}
-                          className="bg-transparent text-lg font-bold text-slate-800 outline-none w-full"
+                          className="bg-transparent text-lg font-bold text-slate-800 dark:text-white outline-none w-full"
                         />
                       </div>
                     </div>
                   </div>
 
                   {/* ESI */}
-                  <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+                   <div className="bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-200 dark:border-[#333333] shadow-sm space-y-6">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                         <div className="p-3 bg-red-100 text-red-600 rounded-2xl">
+                       <div className="flex items-center gap-4">
+                         <div className="p-3 bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-2xl">
                            <Briefcase size={24} />
                          </div>
                          <div>
-                           <h4 className="font-bold text-slate-800 text-lg leading-tight">State Insurance (ESI)</h4>
-                           <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Statutory Deductions</span>
+                           <h4 className="font-bold text-slate-800 dark:text-white text-lg leading-tight">State Insurance (ESI)</h4>
+                           <span className="text-xs text-slate-400 dark:text-gray-500 font-medium uppercase tracking-wider">Statutory Deductions</span>
                          </div>
                       </div>
                       <input 
@@ -334,26 +219,26 @@ const PayrollPolicyTab = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-4 pt-2">
                        <div className="space-y-2">
-                         <label className="text-xs font-bold text-slate-500 uppercase">Employee Rate %</label>
+                         <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Employee Rate %</label>
                          <input 
                            type="number"
                            step="0.01"
                            value={policy.statutory.esi.employeeRate}
                            onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, esi: { ...policy.statutory.esi, employeeRate: parseFloat(e.target.value) } } })}
-                           className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700"
+                           className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
                          />
                        </div>
                        <div className="space-y-2">
-                         <label className="text-xs font-bold text-slate-500 uppercase">Wage Limit Ceiling</label>
+                         <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Wage Limit Ceiling</label>
                          <input 
                            type="number"
                            value={policy.statutory.esi.wageLimit}
                            onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, esi: { ...policy.statutory.esi, wageLimit: parseFloat(e.target.value) } } })}
-                           className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700"
+                           className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
                          />
                        </div>
                     </div>
-                    <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                    <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-500/10 rounded-2xl border border-amber-100 dark:border-amber-500/20">
                       <AlertCircle size={18} className="text-amber-600 mt-1 flex-shrink-0" />
                       <p className="text-xs text-amber-800 font-medium leading-relaxed">
                         ESI is only applicable for employees whose Gross Salary is less than or equal to the specified wage limit.
@@ -364,74 +249,74 @@ const PayrollPolicyTab = () => {
               )}
 
               {activeTab === 'attendance' && (
-                <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+                <div className="bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-200 dark:border-[#333333] shadow-sm space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-6">
                       <div className="flex items-center gap-4">
-                        <div className="p-3 bg-slate-100 text-slate-600 rounded-2xl">
+                        <div className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl">
                           <Clock size={24} />
                         </div>
-                        <h4 className="font-bold text-slate-800 text-xl">Attendance Policy</h4>
+                        <h4 className="font-bold text-slate-800 dark:text-white text-xl">Attendance Policy</h4>
                       </div>
                       <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-[#333333]">
                           <div>
-                             <p className="font-bold text-slate-700">Standard Working Days</p>
-                             <p className="text-xs text-slate-400">Used for per-day calculation basis</p>
+                             <p className="font-bold text-slate-700 dark:text-slate-200">Standard Working Days</p>
+                             <p className="text-xs text-slate-400 dark:text-gray-500">Used for per-day calculation basis</p>
                           </div>
                           <input 
                             type="number"
                             value={policy.attendance.workingDaysPerMonth}
                             onChange={(e) => setPolicy({ ...policy, attendance: { ...policy.attendance, workingDaysPerMonth: parseInt(e.target.value) } })}
-                            className="bg-transparent text-right font-black text-2xl text-indigo-600 outline-none w-16"
+                            className="bg-transparent text-right font-black text-2xl text-indigo-600 dark:text-indigo-400 outline-none w-16"
                           />
                         </div>
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-[#333333]">
                           <div>
-                             <p className="font-bold text-slate-700">Salary Proration</p>
-                             <p className="text-xs text-slate-400">Adjust components based on attendance</p>
+                             <p className="font-bold text-slate-700 dark:text-slate-200">Salary Proration</p>
+                             <p className="text-xs text-slate-400 dark:text-gray-500">Adjust components based on attendance</p>
                           </div>
                           <input 
                             type="checkbox"
                             checked={policy.attendance.prorateSalary}
                             onChange={(e) => setPolicy({ ...policy, attendance: { ...policy.attendance, prorateSalary: e.target.checked } })}
-                            className="w-6 h-6 rounded-lg text-indigo-600 focus:ring-indigo-500"
+                            className="w-6 h-6 rounded-lg text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
                           />
                         </div>
                       </div>
                     </div>
 
-                    <div className="space-y-6">
+                     <div className="space-y-6">
                       <div className="flex items-center gap-4">
-                        <div className="p-3 bg-purple-100 text-purple-600 rounded-2xl">
+                        <div className="p-3 bg-purple-100 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-2xl">
                           <Plus size={24} />
                         </div>
-                        <h4 className="font-bold text-slate-800 text-xl">Overtime Config</h4>
+                        <h4 className="font-bold text-slate-800 dark:text-white text-xl">Overtime Config</h4>
                       </div>
                       <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-[#333333]">
                           <div>
-                             <p className="font-bold text-slate-700">Overtime Calculations</p>
-                             <p className="text-xs text-slate-400">Enable OT for this policy cycle</p>
+                             <p className="font-bold text-slate-700 dark:text-slate-200">Overtime Calculations</p>
+                             <p className="text-xs text-slate-400 dark:text-gray-500">Enable OT for this policy cycle</p>
                           </div>
                           <input 
                             type="checkbox"
                             checked={policy.overtime.enabled}
                             onChange={(e) => setPolicy({ ...policy, overtime: { ...policy.overtime, enabled: e.target.checked } })}
-                            className="w-6 h-6 rounded-lg text-indigo-600 focus:ring-indigo-500"
+                            className="w-6 h-6 rounded-lg text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
                           />
                         </div>
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-[#333333]">
                           <div>
-                             <p className="font-bold text-slate-700">Overtime Multiplier</p>
-                             <p className="text-xs text-slate-400">Rate for extratime above standard hours</p>
+                             <p className="font-bold text-slate-700 dark:text-slate-200">Overtime Multiplier</p>
+                             <p className="text-xs text-slate-400 dark:text-gray-500">Rate for extratime above standard hours</p>
                           </div>
                           <input 
                             type="number"
                             step="0.1"
                             value={policy.overtime.multiplier}
                             onChange={(e) => setPolicy({ ...policy, overtime: { ...policy.overtime, multiplier: parseFloat(e.target.value) } })}
-                            className="bg-transparent text-right font-black text-2xl text-indigo-600 outline-none w-16"
+                            className="bg-transparent text-right font-black text-2xl text-indigo-600 dark:text-indigo-400 outline-none w-16"
                           />
                         </div>
                       </div>
@@ -441,33 +326,33 @@ const PayrollPolicyTab = () => {
               )}
 
               {activeTab === 'rounding' && (
-                <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+                <div className="bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-200 dark:border-[#333333] shadow-sm space-y-8">
                   <div className="flex items-center gap-4">
-                    <div className="p-3 bg-slate-100 text-slate-600 rounded-2xl">
+                    <div className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl">
                       <Settings2 size={24} />
                     </div>
-                    <h4 className="font-bold text-slate-800 text-xl">Engine Configuration</h4>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-xl">Engine Configuration</h4>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-2">
-                      <label className="text-sm font-bold text-slate-500 uppercase">Rounding Strategy</label>
+                      <label className="text-sm font-bold text-slate-500 dark:text-gray-500 uppercase">Rounding Strategy</label>
                       <select 
                         value={policy.rounding.rule}
-                        onChange={(e) => setPolicy({ ...policy, rounding: { ...policy.rounding, rule: e.target.value } })}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700"
+                         onChange={(e) => setPolicy({ ...policy, rounding: { ...policy.rounding, rule: e.target.value } })}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
                       >
-                        <option value="ROUND_OFF">Standard Round Off</option>
-                        <option value="ROUND_UP">Ceiling (Always Up)</option>
-                        <option value="ROUND_DOWN">Floor (Always Down)</option>
+                        <option value="ROUND_OFF" className="dark:bg-[#111111]">Standard Round Off</option>
+                        <option value="ROUND_UP" className="dark:bg-[#111111]">Ceiling (Always Up)</option>
+                        <option value="ROUND_DOWN" className="dark:bg-[#111111]">Floor (Always Down)</option>
                       </select>
                     </div>
                     <div className="space-y-2">
-                       <label className="text-sm font-bold text-slate-500 uppercase">Decimal Precision</label>
+                       <label className="text-sm font-bold text-slate-500 dark:text-gray-500 uppercase">Decimal Precision</label>
                        <input 
                           type="number"
-                          value={policy.rounding.decimals}
+                           value={policy.rounding.decimals}
                           onChange={(e) => setPolicy({ ...policy, rounding: { ...policy.rounding, decimals: parseInt(e.target.value) } })}
-                          className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700"
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
                        />
                     </div>
                   </div>
@@ -478,7 +363,7 @@ const PayrollPolicyTab = () => {
         </div>
 
         {/* Real-time Preview Engine */}
-        <div className="xl:col-span-4 translate-y-0.5">
+        {/* <div className="xl:col-span-4 translate-y-0.5">
           <div className="sticky top-24 space-y-6">
             <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-200 border-4 border-slate-800 overflow-hidden relative">
               <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-600/20 blur-[100px] rounded-full"></div>
@@ -553,7 +438,7 @@ const PayrollPolicyTab = () => {
               )}
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

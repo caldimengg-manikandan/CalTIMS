@@ -1,127 +1,131 @@
-'use strict';
-
 const express = require('express');
 const router = express.Router();
+const { prisma } = require('../../config/database');
 const asyncHandler = require('../../shared/utils/asyncHandler');
 const ApiResponse = require('../../shared/utils/apiResponse');
-const Announcement = require('./announcement.model');
-const User = require('../users/user.model');
-const { authenticate } = require('../../middleware/auth.middleware');
-const { authorize } = require('../../middleware/rbac.middleware');
 const { parsePagination, buildPaginationMeta } = require('../../shared/utils/pagination');
-const notificationService = require('../notifications/notification.service');
-const { logAction } = require('../audit/audit.routes');
+const { authenticate } = require('../../middleware/auth.middleware');
+const { authorize, checkPermission } = require('../../middleware/rbac.middleware');
 
 router.use(authenticate);
 
-// Get active announcements visible to the current user's role
+// ─── Public/Role-based View ───────────────────────────────────────────────────
 router.get('/', asyncHandler(async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
   const now = new Date();
-  const filter = {
+  
+  const where = {
     organizationId: req.organizationId,
     isActive: true,
-    $and: [
-      { $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }] },
-      { $or: [{ targetRoles: { $size: 0 } }, { targetRoles: req.user.role }] },
-    ],
+    OR: [
+      { expiresAt: null },
+      { expiresAt: { gt: now } }
+    ]
   };
 
+  // Use standardized permission utility
+  const { hasPermission } = require('../../shared/utils/rbac');
+  const canViewAll = hasPermission(req.user.permissions, 'Announcements', 'Announcements', 'view');
+
+  if (!canViewAll) {
+    where.AND = [
+      {
+        OR: [
+          { targetRoles: { has: req.user.role } },
+          { targetRoles: { equals: [] } }
+        ]
+      }
+    ];
+  }
+
   const [announcements, total] = await Promise.all([
-    Announcement.find(filter)
-      .populate('publishedBy', 'name email')
-      .sort({ createdAt: -1 })
-      .skip(skip).limit(limit).lean(),
-    Announcement.countDocuments(filter),
+    prisma.announcement.findMany({
+      where,
+      include: { author: { select: { name: true, avatar: true } } },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit
+    }),
+    prisma.announcement.count({ where }),
   ]);
 
   ApiResponse.success(res, { data: announcements, pagination: buildPaginationMeta(total, page, limit) });
 }));
 
-// Admin-only: Get ALL announcements (including inactive/expired) for management view
-router.get('/admin', authorize('admin'), asyncHandler(async (req, res) => {
+// ─── Admin View ───────────────────────────────────────────────────────────────
+router.get('/admin', checkPermission('Announcements', 'Announcements', 'view'), asyncHandler(async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
-  const filter = { organizationId: req.organizationId };
+  const where = { 
+    organizationId: req.organizationId,
+    isDeleted: false 
+  };
+  
   const [announcements, total] = await Promise.all([
-    Announcement.find(filter)
-      .populate('publishedBy', 'name email')
-      .sort({ createdAt: -1 })
-      .skip(skip).limit(limit).lean(),
-    Announcement.countDocuments(filter),
+    prisma.announcement.findMany({
+      where,
+      include: { author: { select: { name: true, avatar: true } } },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit
+    }),
+    prisma.announcement.count({ where }),
   ]);
+  
   ApiResponse.success(res, { data: announcements, pagination: buildPaginationMeta(total, page, limit) });
 }));
 
-// Admin-only: Create announcement + notify all active users
-router.post('/', authorize('admin'), asyncHandler(async (req, res) => {
-  const ann = await Announcement.create({ ...req.body, publishedBy: req.user._id, organizationId: req.organizationId });
-
-  // Determine who to notify based on targetRoles
-  const targetRoles = req.body.targetRoles && req.body.targetRoles.length > 0
-    ? req.body.targetRoles
-    : ['admin', 'manager', 'employee'];
-
-  const usersToNotify = await User.find(
-    { organizationId: req.organizationId, isActive: true, role: { $in: targetRoles }, _id: { $ne: req.user._id } },
-    '_id'
-  ).lean();
-
-  const typeEmoji = { urgent: '🚨', warning: '⚠️', info: 'ℹ️' };
-  const emoji = typeEmoji[ann.type] || 'ℹ️';
-
-  // Fire-and-forget bulk notifications
-  const notifPromises = usersToNotify.map(u =>
-    notificationService.create({
-      userId: u._id,
-      type: 'announcement',
-      title: `${emoji} ${ann.title}`,
-      message: ann.content.length > 120 ? ann.content.slice(0, 117) + '...' : ann.content,
-      refId: ann._id,
-      refModel: 'Announcement',
-    })
-  );
-  await Promise.allSettled(notifPromises); // don't fail if one notification fails
-
-  ApiResponse.created(res, { message: 'Announcement created', data: ann });
-
-  logAction({
-    userId: req.user._id,
-    action: 'CREATE_ANNOUNCEMENT',
-    entityType: 'Announcement',
-    entityId: ann._id,
-    details: { title: ann.title, type: ann.type },
-    organizationId: req.organizationId
+// ─── Create ──────────────────────────────────────────────────────────────────
+router.post('/', checkPermission('Announcements', 'Announcements', 'create'), asyncHandler(async (req, res) => {
+  const { title, content, type, priority, targetRoles, expiresAt } = req.body;
+  
+  const ann = await prisma.announcement.create({
+    data: {
+      title,
+      content,
+      type: type || 'INFO',
+      priority: priority || 'LOW',
+      targetRoles: targetRoles || [],
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      organizationId: req.organizationId,
+      authorId: req.user.id,
+    }
   });
+
+  ApiResponse.created(res, { message: 'Announcement published', data: ann });
 }));
 
-router.put('/:id', authorize('admin'), asyncHandler(async (req, res) => {
-  const ann = await Announcement.findOneAndUpdate({ _id: req.params.id, organizationId: req.organizationId }, req.body, { new: true, runValidators: true });
-  if (!ann) return ApiResponse.notFound(res);
+// ─── Update ──────────────────────────────────────────────────────────────────
+router.put('/:id', checkPermission('Announcements', 'Announcements', 'edit'), asyncHandler(async (req, res) => {
+  const { title, content, type, priority, targetRoles, expiresAt, isActive } = req.body;
+
+  const ann = await prisma.announcement.update({
+    where: { 
+      id: req.params.id,
+      organizationId: req.organizationId 
+    },
+    data: {
+      title,
+      content,
+      type,
+      priority,
+      targetRoles,
+      isActive,
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+    }
+  });
   ApiResponse.success(res, { message: 'Announcement updated', data: ann });
-
-  logAction({
-    userId: req.user._id,
-    action: 'UPDATE_ANNOUNCEMENT',
-    entityType: 'Announcement',
-    entityId: req.params.id,
-    details: { title: ann.title, type: ann.type },
-    organizationId: req.organizationId
-  });
 }));
 
-router.delete('/:id', authorize('admin'), asyncHandler(async (req, res) => {
-  const ann = await Announcement.findOneAndDelete({ _id: req.params.id, organizationId: req.organizationId });
-  if (!ann) return ApiResponse.notFound(res);
-  ApiResponse.success(res, { message: 'Announcement deleted' });
-
-  logAction({
-    userId: req.user._id,
-    action: 'DELETE_ANNOUNCEMENT',
-    entityType: 'Announcement',
-    entityId: req.params.id,
-    details: { title: ann.title },
-    organizationId: req.organizationId
+// ─── Delete ──────────────────────────────────────────────────────────────────
+router.delete('/:id', checkPermission('Announcements', 'Announcements', 'edit'), asyncHandler(async (req, res) => {
+  await prisma.announcement.update({
+    where: { 
+      id: req.params.id,
+      organizationId: req.organizationId
+    },
+    data: { isDeleted: true, isActive: false }
   });
+  ApiResponse.success(res, { message: 'Announcement deleted' });
 }));
 
 module.exports = router;

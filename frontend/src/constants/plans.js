@@ -1,15 +1,15 @@
 export const PLAN_FEATURES = Object.freeze({
   TRIAL: {
     timesheets: true,
-    reports: false,
-    advanced_reports: false,
-    analytics: false,
-    support: false, // Help & Support
-    payroll: false,
-    leave_management: false,
-    payslips: false,
-    audit_logs: false,
-    ai: false,
+    reports: true,
+    advanced_reports: true,
+    analytics: true,
+    support: true, // Help & Support
+    payroll: true,
+    leave_management: true,
+    payslips: true,
+    audit_logs: true,
+    ai: true,
     maxEmployees: 10,
   },
   BASIC: {

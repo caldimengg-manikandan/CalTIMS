@@ -48,6 +48,10 @@ export default function EmployeeFormPage() {
             navigate('/employees')
         },
         onError: (error) => {
+            const serverErrors = error.response?.data?.errors
+            if (serverErrors) {
+                setErrors(serverErrors)
+            }
             const message = error.response?.data?.message || 'Failed to create employee'
             toast.error(message)
         }
@@ -100,7 +104,7 @@ export default function EmployeeFormPage() {
             setFormData(prev => ({ 
                 ...prev, 
                 role: value,
-                roleId: selectedRole?._id || ''
+                roleId: selectedRole?.id || ''
             }))
         } else {
             setFormData(prev => ({ ...prev, [name]: value }))
@@ -151,6 +155,7 @@ export default function EmployeeFormPage() {
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Employee ID (Optional)</label>
                         <input name="employeeId" className={getInputClass('employeeId')} placeholder="e.g. EMP001"
                             value={formData.employeeId} onChange={handleChange} />
+                        {errors.employeeId && <p className="text-[10px] text-red-500 font-medium">{typeof errors.employeeId === 'string' ? errors.employeeId : ''}</p>}
                     </div>
 
                     <div className="space-y-1.5">
@@ -163,6 +168,7 @@ export default function EmployeeFormPage() {
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Email Address *</label>
                         <input name="email" type="email" className={getInputClass('email')} placeholder="john@example.com"
                             value={formData.email} onChange={handleChange} />
+                        {errors.email && <p className="text-[10px] text-red-500 font-medium">{typeof errors.email === 'string' ? errors.email : 'Invalid email'}</p>}
                     </div>
 
                     <div className="space-y-1.5">
@@ -182,9 +188,12 @@ export default function EmployeeFormPage() {
                                 disabled={rolesLoading}
                             >
                                 <option value="">Select Role</option>
-                                {roles.map(r => (
-                                    <option key={r._id} value={r.name.toLowerCase()}>{r.name}</option>
-                                ))}
+                                {roles
+                                    .filter(r => r.name.toLowerCase() !== 'super_admin' && r.name.toLowerCase() !== 'super admin')
+                                    .map(r => (
+                                        <option key={r.id} value={r.name.toLowerCase()}>{r.name}</option>
+                                    ))
+                                }
                             </select>
                             {rolesLoading && (
                                 <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-primary animate-spin" />
@@ -218,6 +227,7 @@ export default function EmployeeFormPage() {
                                 e.target.value = e.target.value.replace(/[^0-9]/g, '');
                             }}
                         />
+                        {errors.phone && <p className="text-[10px] text-red-500 font-medium">{typeof errors.phone === 'string' ? errors.phone : 'Invalid phone number'}</p>}
                     </div>
 
                     <div className="space-y-1.5">
@@ -257,6 +267,7 @@ export default function EmployeeFormPage() {
                         <label className="text-sm font-medium text-slate-700 dark:text-white">IFSC Code *</label>
                         <input name="ifscCode" className={getInputClass('ifscCode')} placeholder="e.g. HDFC0001234"
                             value={formData.ifscCode} onChange={handleChange} maxLength={11} />
+                        {errors.ifscCode && <p className="text-[10px] text-red-500 font-medium">{typeof errors.ifscCode === 'string' ? errors.ifscCode : 'Invalid IFSC Code'}</p>}
                     </div>
 
                     <div className="space-y-1.5">
@@ -267,6 +278,7 @@ export default function EmployeeFormPage() {
                                 e.target.value = e.target.value.replace(/[^0-9]/g, '');
                             }}
                         />
+                        {errors.uan && <p className="text-[10px] text-red-500 font-medium">{typeof errors.uan === 'string' ? errors.uan : 'Invalid UAN Number'}</p>}
                     </div>
 
                     {/* Personal Details */}
@@ -278,6 +290,7 @@ export default function EmployeeFormPage() {
                         <label className="text-sm font-medium text-slate-700 dark:text-white">PAN Number *</label>
                         <input name="pan" className={getInputClass('pan')} placeholder="e.g. ABCDE1234F"
                             value={formData.pan} onChange={handleChange} maxLength={10} />
+                        {errors.pan && <p className="text-[10px] text-red-500 font-medium">{typeof errors.pan === 'string' ? errors.pan : 'Invalid PAN Number'}</p>}
                     </div>
 
                     <div className="space-y-1.5">
@@ -288,6 +301,7 @@ export default function EmployeeFormPage() {
                                 e.target.value = e.target.value.replace(/[^0-9]/g, '');
                             }}
                         />
+                        {errors.aadhaar && <p className="text-[10px] text-red-500 font-medium">{typeof errors.aadhaar === 'string' ? errors.aadhaar : 'Invalid Aadhaar Number'}</p>}
                     </div>
                 </div>
 

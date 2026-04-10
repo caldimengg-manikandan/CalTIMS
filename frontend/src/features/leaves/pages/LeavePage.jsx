@@ -16,6 +16,7 @@ import {
 import toast from 'react-hot-toast'
 import Pagination from '@/components/ui/Pagination';
 import ProGuard from '@/components/ui/ProGuard';
+import { hasPermission } from '@/utils/rbac'
 
 
 
@@ -42,19 +43,19 @@ function EditEligibilityModal({ user, onClose, onSave, isPending }) {
         queryKey: ['settings', 'timesheet'],
         queryFn: () => settingsAPI.getTimesheetSettings().then(r => r.data.data),
     })
-    const LEAVE_TYPES = tsSettings?.eligibleLeaveTypes || ['annual', 'sick', 'casual']
+    const LEAVE_TYPES = React.useMemo(() => (tsSettings?.eligibleLeaveTypes?.length > 0) ? tsSettings.eligibleLeaveTypes : ['annual', 'sick', 'casual'], [tsSettings?.eligibleLeaveTypes])
 
     const [form, setForm] = React.useState({})
 
     React.useEffect(() => {
-        if (user?.leaveBalance) {
+        if (user?.leaveBalance && Object.keys(form).length === 0) {
             const initial = {}
             LEAVE_TYPES.forEach(t => {
                 initial[t] = user.leaveBalance[t] || 0
             })
             setForm(initial)
         }
-    }, [user, LEAVE_TYPES])
+    }, [user, LEAVE_TYPES, form])
 
     return (
         <Modal open onClose={onClose} maxWidth="max-w-md">
@@ -73,12 +74,12 @@ function EditEligibilityModal({ user, onClose, onSave, isPending }) {
             <div className="px-6 py-5 space-y-5">
                 {LEAVE_TYPES.map(type => (
                     <div key={type} className="space-y-1.5">
-                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 capitalize">{type} Leave Entitlement (Days)</label>
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 capitalize">{type} (Days)</label>
                         <input
                             type="number"
                             className="input"
-                            value={form[type]}
-                            onChange={e => setForm(f => ({ ...f, [type]: Number(e.target.value) }))}
+                            value={form[type] ?? ''}
+                            onChange={e => setForm(f => ({ ...f, [type]: e.target.value }))}
                             min="0"
                         />
                     </div>
@@ -103,13 +104,14 @@ function ApplyLeaveModal({ onClose, balance }) {
         queryKey: ['settings', 'timesheet'],
         queryFn: () => settingsAPI.getTimesheetSettings().then(r => r.data.data),
     })
-    const LEAVE_TYPES = tsSettings?.eligibleLeaveTypes || ['annual', 'sick', 'casual']
+    const LEAVE_TYPES = React.useMemo(() => (tsSettings?.eligibleLeaveTypes?.length > 0) ? tsSettings.eligibleLeaveTypes : ['annual', 'sick', 'casual'], [tsSettings?.eligibleLeaveTypes])
 
     const [form, setForm] = React.useState({
         leaveType: 'annual',
         startDate: format(new Date(), 'yyyy-MM-dd'),
         endDate: '',
         reason: '',
+        isHalfDay: false,
     })
 
     React.useEffect(() => {
@@ -119,7 +121,7 @@ function ApplyLeaveModal({ onClose, balance }) {
     }, [LEAVE_TYPES])
 
     const days = form.startDate && form.endDate
-        ? Math.max(1, differenceInCalendarDays(new Date(form.endDate), new Date(form.startDate)) + 1)
+        ? (form.isHalfDay ? 0.5 : Math.max(1, differenceInCalendarDays(new Date(form.endDate), new Date(form.startDate)) + 1))
         : 0
 
     const mutation = useMutation({
@@ -132,7 +134,10 @@ function ApplyLeaveModal({ onClose, balance }) {
             queryClient.invalidateQueries({ queryKey: ['calendar-leaves'] })
             onClose()
         },
-        onError: (err) => toast.error(err.response?.data?.message || 'Failed to apply'),
+        onError: (err) => {
+            const msg = err.response?.data?.message || err.message || 'Failed to apply'
+            toast.error(msg)
+        },
     })
 
     const currentBalance = balance?.[form.leaveType] || 0
@@ -402,19 +407,19 @@ function LeaveDetailModal({ leave, onClose, onApprove, onReject }) {
                     <StatusBadge status={leave.status} />
                     {leave.approvedBy?.name && (
                         <span className="text-xs text-slate-400">
-                            {leave.status === 'approved' ? 'Approved by' : leave.status === 'rejected' ? 'Rejected by' : 'Processed by'}{' '}
+                            {leave.status?.toLowerCase() === 'approved' ? 'Approved by' : leave.status?.toLowerCase() === 'rejected' ? 'Rejected by' : 'Processed by'}{' '}
                             <span className="font-semibold text-slate-600 dark:text-slate-300">{leave.approvedBy.name}</span>
                         </span>
                     )}
                 </div>
             </div>
-            {leave.status === 'pending' && onApprove && onReject && (
+            {leave.status?.toLowerCase() === 'pending' && onApprove && onReject && (
                 <div className="flex gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0">
                     <button onClick={() => { onClose(); onReject(leave) }}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-sm font-semibold transition-colors">
                         <Ban size={14} /> Reject
                     </button>
-                    <button onClick={() => { onApprove(leave._id); onClose() }}
+                    <button onClick={() => { onApprove(leave.id); onClose() }}
                         className="flex-[2] flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors">
                         <Check size={14} /> Approve
                     </button>
@@ -434,7 +439,7 @@ function AdminLeaveView() {
         queryKey: ['settings', 'timesheet'],
         queryFn: () => settingsAPI.getTimesheetSettings().then(r => r.data.data),
     })
-    const LEAVE_TYPES = tsSettings?.eligibleLeaveTypes || ['annual', 'sick', 'casual']
+    const LEAVE_TYPES = React.useMemo(() => (tsSettings?.eligibleLeaveTypes?.length > 0) ? tsSettings.eligibleLeaveTypes : ['annual', 'sick', 'casual'], [tsSettings?.eligibleLeaveTypes])
 
     const { data: filterOptions } = useQuery({
         queryKey: ['leaves-filter-options'],
@@ -516,21 +521,25 @@ function AdminLeaveView() {
     // Stats
     const stats = React.useMemo(() => ({
         total: leaves.length,
-        pending: leaves.filter(l => l.status === 'pending').length,
-        approved: leaves.filter(l => l.status === 'approved').length,
-        rejected: leaves.filter(l => l.status === 'rejected').length,
+        pending: leaves.filter(l => l.status?.toLowerCase() === 'pending').length,
+        approved: leaves.filter(l => l.status?.toLowerCase() === 'approved').length,
+        rejected: leaves.filter(l => l.status?.toLowerCase() === 'rejected').length,
     }), [leaves])
+
 
     const approveMutation = useMutation({
         mutationFn: (id) => leaveAPI.approve(id),
         onSuccess: () => {
             toast.success('Leave approved!')
             queryClient.invalidateQueries({ queryKey: ['leaves-admin'] })
-            queryClient.invalidateQueries({ queryKey: ['calendar-leaves'] })
-            queryClient.invalidateQueries({ queryKey: ['employees'] })
+            // Only invalidate shared queries that actually changed
             queryClient.invalidateQueries({ queryKey: ['leave-balance'] })
+            queryClient.invalidateQueries({ queryKey: ['calendar-leaves'] })
         },
-        onError: (err) => toast.error(err.response?.data?.message || 'Failed to approve'),
+        onError: (err) => {
+            const msg = err.response?.data?.message || err.message || 'Failed to approve'
+            toast.error(msg)
+        },
     })
 
     const rejectMutation = useMutation({
@@ -541,7 +550,10 @@ function AdminLeaveView() {
             queryClient.invalidateQueries({ queryKey: ['leaves-admin'] })
             queryClient.invalidateQueries({ queryKey: ['calendar-leaves'] })
         },
-        onError: (err) => toast.error(err.response?.data?.message || 'Failed to reject'),
+        onError: (err) => {
+            const msg = err.response?.data?.message || err.message || 'Failed to reject'
+            toast.error(msg)
+        },
     })
 
     const updateEligibilityMutation = useMutation({
@@ -552,7 +564,10 @@ function AdminLeaveView() {
             queryClient.invalidateQueries({ queryKey: ['employees'] })
             queryClient.invalidateQueries({ queryKey: ['leave-balance'] })
         },
-        onError: (err) => toast.error(err.response?.data?.message || 'Failed to update eligibility'),
+        onError: (err) => {
+            const msg = err.response?.data?.message || err.message || 'Failed to update eligibility'
+            toast.error(msg)
+        },
     })
 
     // CSV Export
@@ -725,7 +740,7 @@ function AdminLeaveView() {
                                                                 >
                                                                     <option value="">All Employees</option>
                                                                     {employees.map(emp => (
-                                                                        <option key={emp._id} value={emp._id}>{emp.name}</option>
+                                                                        <option key={emp.id} value={emp.id}>{emp.name}</option>
                                                                     ))}
                                                                 </select>
                                                             </div>
@@ -754,7 +769,7 @@ function AdminLeaveView() {
                                                                 >
                                                                     <option value="">All Types</option>
                                                                     {filterOptions?.leaveTypes?.map(t => (
-                                                                        <option key={t} value={t} className="capitalize">{t}</option>
+                                                                        <option key={t.id || t} value={t.name || t} className="capitalize">{t.name || t}</option>
                                                                     ))}
                                                                 </select>
                                                             </div>
@@ -780,7 +795,7 @@ function AdminLeaveView() {
                         </div>
 
                         <div className="card p-0 flex flex-col overflow-hidden min-h-0">
-                            {isLoading ? (
+                            {isLoading && !leaves.length ? (
                                 <div className="flex justify-center py-16"><Spinner size="lg" /></div>
                             ) : leaves.length === 0 ? (
                                 <div className="py-20 text-center">
@@ -805,7 +820,7 @@ function AdminLeaveView() {
                                         </thead>
                                         <tbody>
                                             {leaves.map((leave) => (
-                                                <tr key={leave._id}>
+                                                <tr key={leave.id}>
                                                     <td>
                                                         <span className="text-[10px] font-mono font-bold px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg">{leave.leaveId || '—'}</span>
                                                     </td>
@@ -837,10 +852,10 @@ function AdminLeaveView() {
                                                     <td className="text-right">
                                                         <div className="flex justify-end items-center gap-1">
                                                             <button onClick={() => setViewTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"><Eye size={16} /></button>
-                                                            {leave.status === 'pending' && (
+                                                            {leave.status?.toLowerCase() === 'pending' && (
                                                                 <>
-                                                                    <button onClick={() => setRejectTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><XCircle size={16} /></button>
-                                                                    <button onClick={() => approveMutation.mutate(leave._id)} disabled={approveMutation.isPending} className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"><CheckCircle2 size={16} /></button>
+                                                                    <button onClick={() => setRejectTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><XCircle size={16} /></button>
+                                                                    <button onClick={() => approveMutation.mutate(leave.id)} disabled={approveMutation.isPending} className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"><CheckCircle2 size={16} /></button>
                                                                 </>
                                                             )}
                                                         </div>
@@ -961,14 +976,14 @@ function AdminLeaveView() {
                                         <tr>
                                             <th>Employee</th>
                                             {LEAVE_TYPES.map(t => (
-                                                <th key={t} className="text-center capitalize">{t} Leave</th>
+                                                <th key={t} className="text-center capitalize">{t.toLowerCase().endsWith('leave') ? t : `${t} Leave`}</th>
                                             ))}
                                             <th className="text-right">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {filteredEmployees.map((emp) => (
-                                            <tr key={emp._id}>
+                                            <tr key={emp.id}>
                                                 <td>
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs shrink-0">{emp.name?.charAt(0)?.toUpperCase()}</div>
@@ -1027,7 +1042,7 @@ function AdminLeaveView() {
                         <RejectModal
                             leave={rejectTarget}
                             onClose={() => setRejectTarget(null)}
-                            onConfirm={(reason) => rejectMutation.mutate({ id: rejectTarget._id, reason })}
+                            onConfirm={(reason) => rejectMutation.mutate({ id: rejectTarget.id, reason })}
                             isPending={rejectMutation.isPending}
                         />
                     )
@@ -1043,7 +1058,7 @@ function AdminLeaveView() {
                         <EditEligibilityModal
                             user={editTarget}
                             onClose={() => setEditTarget(null)}
-                            onSave={(leaveBalance) => updateEligibilityMutation.mutate({ id: editTarget._id, leaveBalance })}
+                            onSave={(leaveBalance) => updateEligibilityMutation.mutate({ id: editTarget.id, leaveBalance })}
                             isPending={updateEligibilityMutation.isPending}
                         />
                     )
@@ -1069,7 +1084,7 @@ function EmployeeLeaveView() {
         queryKey: ['settings', 'timesheet'],
         queryFn: () => settingsAPI.getTimesheetSettings().then(r => r.data.data),
     })
-    const LEAVE_TYPES = tsSettings?.eligibleLeaveTypes || ['annual', 'sick', 'casual']
+    const LEAVE_TYPES = React.useMemo(() => (tsSettings?.eligibleLeaveTypes?.length > 0) ? tsSettings.eligibleLeaveTypes : ['annual', 'sick', 'casual'], [tsSettings?.eligibleLeaveTypes])
 
     const { data: balance } = useQuery({
         queryKey: ['leave-balance', user?.id],
@@ -1116,7 +1131,19 @@ function EmployeeLeaveView() {
                 {balance && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4">
                         {Object.entries(balance)
-                            .filter(([type]) => LEAVE_TYPES.includes(type))
+                            .filter(([type]) => {
+                                const normalizedType = type.toLowerCase();
+                                return LEAVE_TYPES.some(lt => {
+                                    const ltl = lt.toLowerCase();
+                                    return ltl === normalizedType || 
+                                           (ltl === 'annual' && normalizedType === 'annual leave') ||
+                                           (ltl === 'annual leave' && normalizedType === 'annual') ||
+                                           (ltl === 'sick' && normalizedType === 'sick leave') ||
+                                           (ltl === 'sick leave' && normalizedType === 'sick') ||
+                                           (ltl === 'casual' && normalizedType === 'casual leave') ||
+                                           (ltl === 'casual leave' && normalizedType === 'casual');
+                                });
+                            })
                             .map(([type, days], i) => (
                                 <div key={type} className="card text-center hover:shadow-md transition-shadow">
                                     <p className={`text-3xl font-bold ${balanceColors[i % balanceColors.length]}`}>{days}</p>
@@ -1127,7 +1154,11 @@ function EmployeeLeaveView() {
                         {/* LOP Card — shows days taken (no balance exists for LOP) */}
                         {(() => {
                             const lopDays = (leaves || [])
-                                .filter(l => l.leaveType === 'lop' && ['approved', 'pending'].includes(l.status))
+                                .filter(l => {
+                                    const type = (l.leaveType || '').toLowerCase();
+                                    return (type === 'lop' || type === 'loss of pay' || type === 'unpaid') && 
+                                           ['approved', 'pending'].includes(l.status?.toLowerCase());
+                                })
                                 .reduce((sum, l) => sum + (l.totalDays || 0), 0)
                             return (
                                 <div className="card text-center hover:shadow-md transition-shadow border border-red-100 dark:border-red-900/30">
@@ -1169,7 +1200,7 @@ function EmployeeLeaveView() {
                                 </thead>
                                 <tbody>
                                     {leaves.map((leave) => (
-                                        <tr key={leave._id}>
+                                        <tr key={leave.id}>
                                             <td>
                                                 <span className="text-[10px] font-mono font-bold px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg">{leave.leaveId || '—'}</span>
                                             </td>
@@ -1183,22 +1214,23 @@ function EmployeeLeaveView() {
                                                     <StatusBadge status={leave.status} />
                                                     {leave.approvedBy?.name && (
                                                         <span className="text-[10px] text-slate-400">
-                                                            {leave.status === 'approved' ? 'Approved by' : 'Rejected by'} {leave.approvedBy.name.split(' ')[0]}
+                                                            {leave.status?.toLowerCase() === 'approved' ? 'Approved by' : 'Rejected by'} {leave.approvedBy.name.split(' ')[0]}
                                                         </span>
                                                     )}
-                                                    {leave.status === 'rejected' && leave.rejectionReason && (
+                                                    {leave.status?.toLowerCase() === 'rejected' && leave.rejectionReason && (
                                                         <span className="text-[9px] text-rose-400 italic max-w-[100px] truncate">"{leave.rejectionReason}"</span>
                                                     )}
-                                                    {leave.status === 'cancelled' && leave.cancellationReason && (
+                                                    {leave.status?.toLowerCase() === 'cancelled' && leave.cancellationReason && (
                                                         <span className="text-[9px] text-orange-400 italic max-w-[100px] truncate">"{leave.cancellationReason}"</span>
                                                     )}
+
                                                 </div>
                                             </td>
                                             <td className="text-slate-400">{format(new Date(leave.createdAt), 'MMM d, yyyy')}</td>
                                             <td>
                                                 <div className="flex items-center gap-1">
                                                     <button onClick={() => setViewTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"><Eye size={16} /></button>
-                                                    {leave.status === 'pending' && (
+                                                    {leave.status?.toLowerCase() === 'pending' && (
                                                         <button
                                                             onClick={() => setCancelTarget(leave)}
                                                             disabled={cancelMutation.isPending}
@@ -1208,6 +1240,7 @@ function EmployeeLeaveView() {
                                                         </button>
                                                     )}
                                                 </div>
+
                                             </td>
                                         </tr>
                                     ))}
@@ -1230,7 +1263,7 @@ function EmployeeLeaveView() {
                     <CancelModal
                         leave={cancelTarget}
                         onClose={() => setCancelTarget(null)}
-                        onConfirm={(reason) => cancelMutation.mutate({ id: cancelTarget._id, reason })}
+                        onConfirm={(reason) => cancelMutation.mutate({ id: cancelTarget.id, reason })}
                         isPending={cancelMutation.isPending}
                     />
                 )}
@@ -1244,14 +1277,27 @@ function EmployeeLeaveView() {
 }
 
 // ─── Main Export: Role-based routing ─────────────────────────────────────────
-export default function LeavePage() {
+export default function LeavePage({ isAdminView: propIsAdminView }) {
     const { user } = useAuthStore()
     const location = useLocation()
-    const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'super_admin'
-    const isManageView = location.pathname.includes('/manage')
+    
+    // Check if the user has permission to manage leaves
+    const hasManagementPermission = hasPermission(user, 'Leave Management', 'Leave Requests', 'view')
+    
+    // Role-based privilege (though hasPermission already checks this, let's be explicit here if needed)
+    const userRoleLower = (user?.role || '').toLowerCase()
+    const isAdminOrManager = ['admin', 'manager', 'super_admin', 'hr', 'owner'].includes(userRoleLower)
 
-    if (isAdminOrManager && isManageView) {
+    const isManageRoute = location.pathname.includes('/manage')
+    
+    // Determine if we should show the management view
+    // 1. If explicitly passed as a prop from App.jsx
+    // 2. If the user is on the /manage route AND they have the right role/permission
+    const shouldShowManagement = propIsAdminView || (isManageRoute && (isAdminOrManager || hasManagementPermission))
+
+    if (shouldShowManagement) {
         return <AdminLeaveView />
     }
+    
     return <EmployeeLeaveView />
 }

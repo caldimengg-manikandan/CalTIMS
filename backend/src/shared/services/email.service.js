@@ -3,7 +3,7 @@
 const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
 const { Parser } = require('json2csv');
-const Timesheet = require('../../modules/timesheets/timesheet.model');
+const { prisma } = require('../../config/database');
 const { TIMESHEET_STATUS } = require('../../constants');
 
 const logger = require('../utils/logger');
@@ -29,55 +29,57 @@ function getTransporter() {
 }
 
 // ── Report Data Fetcher ──────────────────────────────────────────────────────
-async function buildReportData(reportType, companyName = 'TimesheetPro', projectIds = []) {
+async function buildReportData(reportType, companyName = 'CALTIMS', projectIds = []) {
   const now = new Date();
   const from = new Date(now);
-  from.setDate(from.getDate() - 90); // last 90 days (full quarter)
+  from.setDate(from.getDate() - 90);
 
-  let statusFilter;
   let reportTitle;
+  const where = { workDate: { gte: from, lte: now } };
 
   switch (reportType) {
     case 'approved':
-      statusFilter = TIMESHEET_STATUS.APPROVED;
+      where.status = 'APPROVED';
       reportTitle = 'Approved Timesheets';
       break;
     case 'rejected':
-      statusFilter = TIMESHEET_STATUS.REJECTED;
+      where.status = 'REJECTED';
       reportTitle = 'Rejected Timesheets';
       break;
     case 'pending':
-      statusFilter = TIMESHEET_STATUS.SUBMITTED;
+      where.status = 'SUBMITTED';
       reportTitle = 'Pending (Submitted) Timesheets';
       break;
-    case 'all':
     default:
-      statusFilter = null; // no status filter
+      where.status = { not: 'DRAFT' };
       reportTitle = 'All Timesheets (Full Report)';
       break;
   }
 
-  // Always exclude draft timesheets from all reports
-  const query = { weekStartDate: { $gte: from, $lte: now }, status: { $ne: TIMESHEET_STATUS.DRAFT } };
-  if (statusFilter) query.status = statusFilter;
-
-  let timesheets = await Timesheet.find(query)
-    .populate('userId', 'name email employeeId department')
-    .populate('rows.projectId', 'name code')
-    .sort({ weekStartDate: -1 })
-    .limit(100)
-    .lean();
-
-  // Filter by project if specific projects selected
   if (projectIds && projectIds.length > 0) {
-    const mongoose = require('mongoose');
-    const projIdStrings = projectIds.filter(id => id !== null && id !== undefined).map(id => id.toString());
-    timesheets = timesheets.filter(ts =>
-      ts.rows?.some(row => row.projectId && projIdStrings.includes(row.projectId._id?.toString() || (row.projectId.toString ? row.projectId.toString() : '')))
-    );
+    where.projectId = { in: projectIds };
   }
 
-  return { timesheets, reportTitle, companyName, generatedAt: now.toISOString(), projectIds };
+  const timesheets = await prisma.timesheet.findMany({
+    where,
+    include: {
+      employee: { include: { user: { select: { name: true, email: true } } } },
+      project: { select: { name: true, code: true } },
+    },
+    orderBy: { workDate: 'desc' },
+    take: 100,
+  });
+
+  // Normalize shape for HTML/PDF builders
+  const normalizedTimesheets = timesheets.map(ts => ({
+    userId: { name: ts.employee?.user?.name || 'Unknown', employeeId: ts.employee?.employeeCode || '', department: '' },
+    weekStartDate: ts.workDate,
+    totalHours: ts.hours,
+    status: ts.status?.toLowerCase(),
+    rows: [{ projectId: ts.project }],
+  }));
+
+  return { timesheets: normalizedTimesheets, reportTitle, companyName, generatedAt: now.toISOString(), projectIds };
 }
 
 // ── HTML Email Builder ───────────────────────────────────────────────────────
@@ -562,12 +564,12 @@ const emailService = {
   /**
    * Send payslip email to employee
    */
-  async sendPayslipEmail(recipientEmail, payroll, companyName = 'CALTIMS') {
+  async sendPayslipEmail(recipientEmail, payroll, organizationId, companyName = 'CALTIMS') {
     const transporter = getTransporter();
     const payslipService = require('../../modules/payroll/payslip.service');
     
     try {
-        const buffer = await payslipService.generatePayslipBuffer(payroll);
+        const buffer = await payslipService.generatePayslipBuffer(payroll, organizationId);
         const monthName = new Date(payroll.year, payroll.month - 1).toLocaleString('default', { month: 'long' });
         const fileName = `Payslip_${payroll.employeeInfo?.employeeId || 'NA'}_${monthName}_${payroll.year}.pdf`;
 

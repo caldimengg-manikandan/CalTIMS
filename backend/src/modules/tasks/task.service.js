@@ -1,38 +1,51 @@
-'use strict';
-
-const Task = require('./task.model');
-const Project = require('../projects/project.model');
+const { prisma } = require('../../config/database');
 const { parsePagination, buildPaginationMeta } = require('../../shared/utils/pagination');
 
 class TaskService {
-  async getAll(query = {}, organizationId) {
+  async getAll(query = {}, context) {
+    const { organizationId, role, employeeId, userId } = context;
     const { page, limit, skip } = parsePagination(query);
-    const { search, projectId, status, isActive } = query;
-    const filter = { organizationId };
+    const { search, projectId, status } = query;
+    
+    const where = { organizationId, isDeleted: false };
 
     if (search) {
-      filter.name = { $regex: search, $options: 'i' };
+      where.name = { contains: search, mode: 'insensitive' };
     }
 
     if (projectId) {
-      filter.projectId = projectId;
+      where.projectId = projectId;
     }
 
     if (status) {
-      filter.status = status;
+      where.status = status;
     }
 
-    if (isActive !== undefined) {
-      filter.isActive = isActive === 'true' || isActive === true;
+    // Filter by assignee if requested OR if the user is an employee/manager (unless they are admin)
+    const assignedOnly = query.assignedOnly === 'true';
+    const targetUserId = query.userId || (assignedOnly || role === 'employee' || role === 'manager' ? userId : null);
+    const targetEmployeeId = query.employeeId || (assignedOnly || role === 'employee' || role === 'manager' ? employeeId : null);
+
+    if (targetUserId || targetEmployeeId) {
+      where.assignees = {
+        some: {
+          OR: [
+            ...(targetEmployeeId ? [{ id: targetEmployeeId }] : []),
+            ...(targetUserId ? [{ userId: targetUserId }] : [])
+          ]
+        }
+      };
     }
 
     const [tasks, total] = await Promise.all([
-      Task.find(filter)
-        .populate('projectId', 'name code')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      Task.countDocuments(filter),
+      prisma.task.findMany({
+        where,
+        include: { project: { select: { name: true, code: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.task.count({ where }),
     ]);
 
     return { 
@@ -42,25 +55,68 @@ class TaskService {
   }
 
   async getById(id, organizationId) {
-    return await Task.findOne({ _id: id, organizationId }).populate('projectId', 'name code');
+    return await prisma.task.findFirst({
+        where: { id, organizationId, isDeleted: false },
+        include: { project: { select: { name: true, code: true } } }
+    });
   }
 
   async create(data) {
-    // Note: organizationId check handled by controller passing it in data
-    return await Task.create(data);
+    const { name, description, projectId, organizationId, priority, status, dueDate } = data;
+    return await prisma.task.create({
+      data: {
+        name,
+        description,
+        projectId,
+        organizationId,
+        priority: (priority || 'MEDIUM').toUpperCase(),
+        status: (status || 'TODO').toUpperCase(),
+        dueDate: dueDate ? new Date(dueDate) : null
+      }
+    });
   }
 
   async bulkCreate(tasks, organizationId) {
-    const tasksWithOrg = tasks.map(t => ({ ...t, organizationId }));
-    return await Task.insertMany(tasksWithOrg);
+    const cleanedTasks = tasks.map(t => ({
+      name: t.name,
+      description: t.description,
+      projectId: t.projectId,
+      organizationId,
+      priority: (t.priority || 'MEDIUM').toUpperCase(),
+      status: (t.status || 'TODO').toUpperCase(),
+      dueDate: t.dueDate ? new Date(t.dueDate) : null
+    }));
+    return await prisma.task.createMany({ data: cleanedTasks });
   }
 
   async update(id, data, organizationId) {
-    return await Task.findOneAndUpdate({ _id: id, organizationId }, data, { new: true, runValidators: true });
+    // Only allow specific fields to be updated
+    const allowedFields = ['name', 'description', 'projectId', 'priority', 'status', 'dueDate', 'isDeleted'];
+    const updateData = {};
+    
+    allowedFields.forEach(field => {
+      if (data[field] !== undefined) {
+        if (field === 'priority' || field === 'status') {
+          updateData[field] = data[field].toUpperCase();
+        } else if (field === 'dueDate' && data[field]) {
+          updateData[field] = new Date(data[field]);
+        } else {
+          updateData[field] = data[field];
+        }
+      }
+    });
+
+    return await prisma.task.update({
+      where: { id },
+      data: updateData
+    });
   }
 
   async delete(id, organizationId) {
-    return await Task.findOneAndDelete({ _id: id, organizationId });
+    return await prisma.task.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() }
+    });
   }
 }
 

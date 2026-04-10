@@ -39,7 +39,7 @@ export default function PermissionAuditLogsTab() {
                 log.changedByName,
                 log.action,
                 log.roleName,
-                log.changes.map(c => `${c.module} > ${c.submodule} > ${c.action}: ${c.previous} -> ${c.current}`).join(' | ')
+                (log.details?.changes || []).map(c => `${c.module} > ${c.submodule} > ${c.action}: ${c.previous} -> ${c.current}`).join(' | ')
             ])
 
             const csvContent = "data:text/csv;charset=utf-8," 
@@ -184,7 +184,7 @@ export default function PermissionAuditLogsTab() {
                                     </td>
                                 </tr>
                             ) : logs.map((log) => (
-                                <tr key={log._id} className="group hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                <tr key={log.id} className="group hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                                     <td className="px-6 py-5">
                                         <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                             {new Date(log.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -214,7 +214,7 @@ export default function PermissionAuditLogsTab() {
                                         <div className="flex items-center gap-2">
                                             <div className="h-1 w-3 bg-primary/30 rounded-full" />
                                             <p className="text-xs font-medium text-slate-500 truncate max-w-[200px]">
-                                                {log.changes.length} change(s) recorded
+                                                {log.details?.changes?.length || 0} change(s) recorded
                                             </p>
                                         </div>
                                     </td>
@@ -263,7 +263,7 @@ export default function PermissionAuditLogsTab() {
                         <div>
                             <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4 px-1">Granular Changes (Diff)</h4>
                             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                                {selectedLog.changes.map((change, idx) => (
+                                {(selectedLog.details?.changes || []).map((change, idx) => (
                                     <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/10 shadow-sm">
                                         <div className="min-w-[150px]">
                                             <p className="text-[10px] font-black text-primary uppercase tracking-tighter mb-0.5">{change.module}</p>

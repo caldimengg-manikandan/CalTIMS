@@ -9,3 +9,14 @@ export const formatCurrency = (val) => {
     maximumFractionDigits: 2
   }).format(val || 0);
 };
+
+export const getCurrencySymbol = (currencyCode = 'INR') => {
+    const symbols = {
+        INR: '₹',
+        USD: '$',
+        EUR: '€',
+        GBP: '£',
+        AED: 'د.إ'
+    };
+    return symbols[currencyCode] || '₹';
+};

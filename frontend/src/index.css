@@ -95,6 +95,12 @@
   .dark .custom-scrollbar::-webkit-scrollbar-thumb {
     background: #334155/50;
   }
+
+  /* Hide browser default password reveal button */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
 }
 
 /* ─── Component Layer ────────────────────────────────────────────────────────── */

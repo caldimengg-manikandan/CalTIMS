@@ -13,7 +13,8 @@ export default function AuthLayout() {
     const [legalType, setLegalType] = useState(null) // 'privacy' | 'terms' | 'support'
 
     useEffect(() => {
-        applyTheme()
+        // Force default theme (Indigo/Violet) for authentication pages
+        applyTheme(true)
     }, [applyTheme])
 
 

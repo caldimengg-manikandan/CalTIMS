@@ -14,16 +14,14 @@ export const useFeatureAccess = () => {
      * @returns {boolean} - True if accessible, false if locked
      */
     const hasAccess = (featureKey) => {
-        // 1. Super Admin Exception: Always has full access
-        if (user?.role === 'super_admin') return true;
+        // 1. Absolute Privileged Roles Bypass: Super Admin and Owner Always have access
+        const role = user?.role?.toLowerCase();
+        if (role === 'super_admin' || user.isOwner) return true;
 
-        // 2. If no subscription, default to TRIAL (or handle as locked)
+        // 2. Organization Plan Check
         const plan = subscription?.planType || 'TRIAL';
-        
-        // 3. Check if feature exists in PLAN_FEATURES for this plan
         const features = PLAN_FEATURES[plan];
         
-        // If feature is explicitly set to true, return true
         if (features && features[featureKey] === true) {
             return true;
         }

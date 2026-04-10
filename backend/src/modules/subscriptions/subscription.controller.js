@@ -11,7 +11,7 @@ const subscriptionController = {
    */
   upgrade: asyncHandler(async (req, res) => {
     const { planType } = req.body;
-    const { organizationId, _id: userId } = req.user;
+    const { organizationId, id: userId } = req.user;
 
     if (!['BASIC', 'PRO'].includes(planType)) {
       throw new AppError('Invalid plan type. Must be BASIC or PRO.', 400);
@@ -24,12 +24,12 @@ const subscriptionController = {
     const subscription = await subscriptionService.upgradeSubscription(organizationId, {
       planType,
       userId,
-      req
+      req,
     });
 
     ApiResponse.success(res, {
       message: `Successfully upgraded to ${planType} plan`,
-      data: subscription
+      data: subscription,
     });
   }),
 
@@ -43,7 +43,30 @@ const subscriptionController = {
     }
 
     const subscription = await subscriptionService.getSubscription(organizationId);
-    ApiResponse.success(res, { data: subscription });
+
+    ApiResponse.success(res, {
+      data: subscription || {
+        planType: 'TRIAL',
+        status: 'ACTIVE',
+        organizationId,
+      },
+    });
+  }),
+
+  /**
+   * Get subscription history
+   */
+  getHistory: asyncHandler(async (req, res) => {
+    const { organizationId } = req.user;
+    if (!organizationId) {
+      throw new AppError('User is not associated with an organization', 403);
+    }
+
+    const history = await subscriptionService.getSubscriptionHistory(organizationId);
+
+    ApiResponse.success(res, {
+      data: history,
+    });
   }),
 };
 

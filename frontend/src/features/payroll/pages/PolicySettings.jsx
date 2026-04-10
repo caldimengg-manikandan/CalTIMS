@@ -35,7 +35,7 @@ export const PolicySettings = () => {
 
   if (isLoading || !formData) {
     return (
-      <div className="h-[70vh] flex items-center justify-center bg-white border-gray-200 border">
+      <div className="h-[70vh] flex items-center justify-center bg-white dark:bg-[#111111] border-gray-200 dark:border-[#333333] border">
         <Spinner size="lg" />
       </div>
     );
@@ -81,35 +81,35 @@ export const PolicySettings = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         
         {/* Payroll Policy */}
-        <div className="bg-white border p-8 rounded-2xl shadow-sm space-y-8">
-          <div className="flex items-center gap-4 border-b border-gray-100 pb-4">
-             <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+        <div className="bg-white dark:bg-[#111111] border dark:border-[#333333] p-8 rounded-2xl shadow-sm space-y-8">
+          <div className="flex items-center gap-4 border-b border-gray-100 dark:border-[#333333] pb-4">
+             <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center">
                 <Briefcase size={24} />
              </div>
-             <h3 className="text-xl font-semibold text-gray-900 tracking-tight">Payroll Logic</h3>
+             <h3 className="text-xl font-semibold text-gray-900 dark:text-white tracking-tight">Payroll Logic</h3>
           </div>
           
           <div className="space-y-6">
-             <div className="space-y-2">
-                <label className="text-sm font-semibold text-gray-500">Working Days Per Month</label>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-500 dark:text-gray-400">Working Days Per Month</label>
                 <input type="number" 
-                   className="w-full px-4 py-3 rounded-xl bg-gray-50 border outline-none focus:ring-2 focus:ring-indigo-500/20"
+                   className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-[#0a0a0a] border dark:border-[#333333] outline-none focus:ring-2 focus:ring-indigo-500/20 dark:text-white"
                    value={formData.payroll.workingDaysPerMonth}
                    onChange={e => handlePayrollChange('workingDaysPerMonth', Number(e.target.value))}
                 />
-             </div>
-             <div className="space-y-2">
-                <label className="text-sm font-semibold text-gray-500">Working Hours Per Day</label>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-500 dark:text-gray-400">Working Hours Per Day</label>
                 <input type="number" 
-                   className="w-full px-4 py-3 rounded-xl bg-gray-50 border outline-none focus:ring-2 focus:ring-indigo-500/20"
+                   className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-[#0a0a0a] border dark:border-[#333333] outline-none focus:ring-2 focus:ring-indigo-500/20 dark:text-white"
                    value={formData.payroll.workingHoursPerDay}
                    onChange={e => handlePayrollChange('workingHoursPerDay', Number(e.target.value))}
                 />
-             </div>
-             <div className="space-y-2">
-                <label className="text-sm font-semibold text-gray-500">LOP Calc Engine</label>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-500 dark:text-gray-400">LOP Calc Engine</label>
                 <select 
-                   className="w-full px-4 py-3 rounded-xl bg-gray-50 border outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none"
+                   className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-[#0a0a0a] border dark:border-[#333333] outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none dark:text-white"
                    value={formData.payroll.lopCalculation}
                    onChange={e => handlePayrollChange('lopCalculation', e.target.value)}
                 >
@@ -117,8 +117,8 @@ export const PolicySettings = () => {
                    <option value="PER_HOUR">Per Hour Exact Deduction</option>
                 </select>
              </div>
-             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border">
-                <span className="text-sm font-semibold text-gray-700">Salary Proration Enable</span>
+              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-[#0a0a0a] rounded-xl border dark:border-[#333333]">
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Salary Proration Enable</span>
                 <input type="checkbox" className="w-5 h-5 accent-indigo-600 cursor-pointer"
                    checked={formData.payroll.salaryProration}
                    onChange={e => handlePayrollChange('salaryProration', e.target.checked)} />
@@ -127,25 +127,25 @@ export const PolicySettings = () => {
         </div>
 
         {/* Attendance Policy */}
-        <div className="bg-white border p-8 rounded-2xl shadow-sm space-y-8">
-          <div className="flex items-center gap-4 border-b border-gray-100 pb-4">
-             <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center">
+        <div className="bg-white dark:bg-[#111111] border dark:border-[#333333] p-8 rounded-2xl shadow-sm space-y-8">
+          <div className="flex items-center gap-4 border-b border-gray-100 dark:border-[#333333] pb-4">
+             <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl flex items-center justify-center">
                 <Clock size={24} />
              </div>
-             <h3 className="text-xl font-semibold text-gray-900 tracking-tight">Clock Integrity</h3>
+             <h3 className="text-xl font-semibold text-gray-900 dark:text-white tracking-tight">Clock Integrity</h3>
           </div>
           
           <div className="space-y-6">
-             <div className="space-y-2">
-                <label className="text-sm font-semibold text-gray-500">Min. Hours / Day for Present</label>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-500 dark:text-gray-400">Min. Hours / Day for Present</label>
                 <input type="number" 
-                   className="w-full px-4 py-3 rounded-xl bg-gray-50 border outline-none focus:ring-2 focus:ring-rose-500/20"
+                   className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-[#0a0a0a] border dark:border-[#333333] outline-none focus:ring-2 focus:ring-rose-500/20 dark:text-white"
                    value={formData.attendance.minHoursPerDay}
                    onChange={e => handleAttendanceChange('minHoursPerDay', Number(e.target.value))}
                 />
-             </div>
-             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border mt-4">
-                <span className="text-sm font-semibold text-gray-700">Allow Half-Day Markings</span>
+              </div>
+              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-[#0a0a0a] rounded-xl border dark:border-[#333333] mt-4">
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Allow Half-Day Markings</span>
                 <input type="checkbox" className="w-5 h-5 accent-rose-600 cursor-pointer"
                    checked={formData.attendance.allowHalfDay}
                    onChange={e => handleAttendanceChange('allowHalfDay', e.target.checked)} />
@@ -154,38 +154,38 @@ export const PolicySettings = () => {
         </div>
 
         {/* Leave Policy */}
-        <div className="bg-white border p-8 rounded-2xl shadow-sm space-y-8">
-          <div className="flex items-center gap-4 border-b border-gray-100 pb-4">
-             <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+        <div className="bg-white dark:bg-[#111111] border dark:border-[#333333] p-8 rounded-2xl shadow-sm space-y-8">
+          <div className="flex items-center gap-4 border-b border-gray-100 dark:border-[#333333] pb-4">
+             <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center">
                 <Calendar size={24} />
              </div>
-             <h3 className="text-xl font-semibold text-gray-900 tracking-tight">Leave Taxonomy</h3>
+             <h3 className="text-xl font-semibold text-gray-900 dark:text-white tracking-tight">Leave Taxonomy</h3>
           </div>
           
           <div className="space-y-4">
-             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border mb-6">
-                <span className="text-sm font-semibold text-gray-700">Allow Negative Global Balance</span>
+              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-[#0a0a0a] rounded-xl border dark:border-[#333333] mb-6">
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Allow Negative Global Balance</span>
                 <input type="checkbox" className="w-5 h-5 accent-emerald-600 cursor-pointer"
                    checked={formData.leave?.allowNegativeBalance}
                    onChange={e => setFormData(prev => ({...prev, leave: {...prev.leave, allowNegativeBalance: e.target.checked}}))} />
              </div>
 
-             <div className="flex justify-between items-center mb-2">
-                 <h4 className="text-sm font-semibold text-gray-500">Leave Categories</h4>
+              <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400">Leave Categories</h4>
                  <button onClick={addLeaveType} className="text-emerald-600 flex items-center gap-1 text-xs font-bold hover:underline">
                     <Plus size={14} /> Add Node
                  </button>
              </div>
 
-             <div className="space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
                 {formData.leave?.types?.map((type, idx) => (
-                   <div key={idx} className="flex items-center gap-3 p-3 border rounded-xl bg-gray-50">
+                   <div key={idx} className="flex items-center gap-3 p-3 border dark:border-[#333333] rounded-xl bg-gray-50 dark:bg-[#0a0a0a]">
                       <input type="text" 
-                         className="flex-1 px-3 py-2 border rounded-lg text-sm font-medium outline-none"
+                         className="flex-1 px-3 py-2 border dark:border-[#333333] rounded-lg text-sm font-medium outline-none bg-white dark:bg-[#111111] dark:text-white"
                          value={type.name}
                          onChange={(e) => updateLeaveType(idx, 'name', e.target.value)}
                       />
-                      <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 whitespace-nowrap">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
                          <input type="checkbox" className="w-4 h-4 accent-emerald-600 cursor-pointer"
                             checked={type.paid}
                             onChange={(e) => updateLeaveType(idx, 'paid', e.target.checked)}

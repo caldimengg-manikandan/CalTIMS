@@ -11,12 +11,12 @@ const timesheetController = {
   }),
 
   getAll: asyncHandler(async (req, res) => {
-    const { timesheets, pagination, holidays } = await timesheetService.getAll(req.query, req.user, req.organizationId);
-    ApiResponse.success(res, { data: timesheets, pagination, holidays });
+    const result = await timesheetService.getAll(req.query, req.context);
+    ApiResponse.success(res, result);
   }),
 
   getById: asyncHandler(async (req, res) => {
-    const ts = await timesheetService.getById(req.params.id, req.user, req.organizationId);
+    const ts = await timesheetService.getById(req.params.id, req.organizationId);
     ApiResponse.success(res, { data: ts });
   }),
 
@@ -46,17 +46,17 @@ const timesheetController = {
   }),
 
   getDashboardSummary: asyncHandler(async (req, res) => {
-    const summary = await timesheetService.getDashboardSummary(req.user._id, req.user.role, req.organizationId, req.query);
+    const summary = await timesheetService.getDashboardSummary(req.query, req.context);
     ApiResponse.success(res, { data: summary });
   }),
 
   bulkUpsert: asyncHandler(async (req, res) => {
-    const timesheets = await timesheetService.bulkUpsert(req.body, req.user._id, req.organizationId);
+    const timesheets = await timesheetService.bulkUpsert(req.body, req.context);
     ApiResponse.success(res, { message: 'Timesheets saved', data: timesheets });
   }),
 
   bulkSubmit: asyncHandler(async (req, res) => {
-    const timesheets = await timesheetService.bulkSubmit(req.body, req.user._id, req.organizationId);
+    const timesheets = await timesheetService.bulkSubmit(req.body, req.context);
     ApiResponse.success(res, { message: 'Timesheets submitted', data: timesheets });
   }),
 
@@ -67,8 +67,9 @@ const timesheetController = {
   }),
 
   getHistory: asyncHandler(async (req, res) => {
-    const { data, pagination } = await timesheetService.getHistory(req.query, req.user, req.organizationId);
-    ApiResponse.success(res, { data, pagination });
+    const result = await timesheetService.getHistory(req.query, req.context);
+    ApiResponse.success(res, result);
+
   }),
 
   getCompliance: asyncHandler(async (req, res) => {

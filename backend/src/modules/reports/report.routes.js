@@ -4,9 +4,7 @@ const express = require('express');
 const router = express.Router();
 const asyncHandler = require('../../shared/utils/asyncHandler');
 const ApiResponse = require('../../shared/utils/apiResponse');
-const Timesheet = require('../timesheets/timesheet.model');
-const Leave = require('../leaves/leave.model');
-const User = require('../users/user.model');
+const { prisma } = require('../../config/database');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { checkPermission } = require('../../middleware/rbac.middleware');
 const { TIMESHEET_STATUS, LEAVE_STATUS } = require('../../constants');
@@ -16,7 +14,38 @@ const { getPeriodRange } = require('../../shared/utils/dateHelpers');
 router.use(authenticate);
 router.use(checkSubscription);
 router.use(requireFeature('reports'));
-router.use(checkPermission('viewReports'));
+router.use(checkPermission('Reports', 'Reports Dashboard', 'view'));
+
+// Helper to calculate total hours for a row if not already present
+const getRowTotal = (row) => {
+  if (typeof row.totalHours === 'number') return row.totalHours;
+  if (Array.isArray(row.entries)) {
+    return row.entries.reduce((sum, e) => {
+      const h = parseFloat(e.hoursWorked || e.hours || 0);
+      return sum + (isNaN(h) ? 0 : h);
+    }, 0);
+  }
+  return 0;
+};
+
+// ─── Get dynamic filter options (Years) ──────────────────────────────────────
+router.get('/filter-options', asyncHandler(async (req, res) => {
+  const firstTs = await prisma.timesheetWeek.findFirst({
+    where: { organizationId: req.organizationId, isDeleted: false },
+    orderBy: { weekStartDate: 'asc' },
+    select: { weekStartDate: true }
+  });
+  
+  const startYear = firstTs ? new Date(firstTs.weekStartDate).getFullYear() : new Date().getFullYear();
+  const currentYear = new Date().getFullYear();
+  
+  const years = [];
+  for (let y = startYear; y <= currentYear + 1; y++) {
+    years.push(y);
+  }
+  
+  ApiResponse.success(res, { years });
+}));
 
 // ─── Timesheet hours summary (by employee and project) ─────────────────────
 router.get('/timesheet-summary', asyncHandler(async (req, res) => {
@@ -28,47 +57,79 @@ router.get('/timesheet-summary', asyncHandler(async (req, res) => {
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
-  if (from) match.weekStartDate = { $gte: new Date(from) };
-  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
-  if (userId) match.userId = require('mongoose').Types.ObjectId.createFromHexString(userId);
+  const where = {
+    organizationId: req.organizationId,
+    status: 'APPROVED',
+    isDeleted: false
+  };
 
-  const summary = await Timesheet.aggregate([
-    { $match: match },
-    { $unwind: '$rows' },
-    ...(projectId ? [{ $match: { 'rows.projectId': require('mongoose').Types.ObjectId.createFromHexString(projectId) } }] : []),
-    {
-      $group: {
-        _id: { userId: '$userId', projectId: '$rows.projectId' },
-        totalHours: { $sum: '$rows.totalHours' },
-        timesheetCount: { $addToSet: '$_id' },
-      },
-    },
-    { $addFields: { timesheetCount: { $size: '$timesheetCount' } } },
-    {
-      $lookup: {
-        from: 'users',
-        localField: '_id.userId',
-        foreignField: '_id',
-        as: 'user',
-        pipeline: [{ $project: { name: 1, email: 1, employeeId: 1, department: 1, role: 1 } }],
-      },
-    },
-    {
-      $lookup: {
-        from: 'projects',
-        localField: '_id.projectId',
-        foreignField: '_id',
-        as: 'project',
-        pipeline: [{ $project: { name: 1, code: 1 } }],
-      },
-    },
-    { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
-    { $unwind: { path: '$project', preserveNullAndEmptyArrays: true } },
-    { $sort: { totalHours: -1 } },
+  if (from) where.weekStartDate = { gte: new Date(from) };
+  if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
+  if (userId) where.userId = userId;
+
+  const timesheetWeeks = await prisma.timesheetWeek.findMany({
+    where,
+    include: {
+      organization: { select: { name: true } }
+    }
+  });
+
+  const grouping = {};
+
+  timesheetWeeks.forEach(ts => {
+    const rows = Array.isArray(ts.rows) ? ts.rows : [];
+    rows.forEach(row => {
+      if (projectId && row.projectId !== projectId) return;
+      
+      const key = `${ts.userId}_${row.projectId}`;
+      if (!grouping[key]) {
+        grouping[key] = {
+          userId: ts.userId,
+          projectId: row.projectId,
+          totalHours: 0,
+          timesheetIds: new Set()
+        };
+      }
+      grouping[key].totalHours += getRowTotal(row);
+      grouping[key].timesheetIds.add(ts.id);
+    });
+  });
+
+  const summary = Object.values(grouping);
+
+  // Enrichment
+  const userIds = [...new Set(summary.map(s => s.userId))];
+  const projectIds = [...new Set(summary.map(s => s.projectId))];
+
+  const [users, projects] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, email: true, role: true, employee: { select: { employeeCode: true, department: { select: { name: true } } } } }
+    }),
+    prisma.project.findMany({
+      where: { id: { in: projectIds } },
+      select: { id: true, name: true, code: true }
+    })
   ]);
 
-  ApiResponse.success(res, { data: summary });
+  const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+  const projectMap = Object.fromEntries(projects.map(p => [p.id, p]));
+
+  const enriched = summary.map(s => ({
+    _id: { userId: s.userId, projectId: s.projectId },
+    totalHours: Math.round(s.totalHours * 100) / 100,
+    timesheetCount: s.timesheetIds.size,
+    user: userMap[s.userId] ? {
+      name: userMap[s.userId].name,
+      email: userMap[s.userId].email,
+      employeeId: userMap[s.userId].employee?.employeeCode,
+      department: userMap[s.userId].employee?.department?.name,
+      role: userMap[s.userId].role
+    } : null,
+    project: projectMap[s.projectId] || null
+  })).sort((a, b) => b.totalHours - a.totalHours);
+
+  ApiResponse.success(res, { data: enriched });
 }));
 
 // ─── NEW: Compliance Summary (Donut Chart Data) ───────────────────────────
@@ -81,51 +142,37 @@ router.get('/compliance-summary', requireFeature('advanced_reports'), asyncHandl
     to = range.to;
   }
 
-  const match = { organizationId: req.organizationId };
-  if (from) match.weekStartDate = { $gte: new Date(from) };
-  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
-  if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
+  const where = { organizationId: req.organizationId, isDeleted: false };
+  if (from) where.weekStartDate = { gte: new Date(from) };
+  if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
 
-  // 1. Get total active employees of the organization
-  const totalEmployees = await User.countDocuments({ organizationId: req.organizationId, role: 'employee', isActive: true });
+  // Note: if projectId is passed, we must filter at JS level because it's inside JSON rows
+  const timesheetWeeks = await prisma.timesheetWeek.findMany({ where });
 
-  // 2. We need to determine "Expected Timesheets". 
-  // If no date range provided, we just look at the last 4 weeks as a proxy, 
-  // or simply group by status for whatever is queried
-
-  // A simple strategy for pie chart: group by status within the date range
-  const complianceStats = await Timesheet.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: '$status',
-        count: { $sum: 1 }
-      }
-    }
-  ]);
-
-  // Format into a friendly structure for the frontend PieChart
   const result = {
-    approved: 0,
-    submitted: 0,
-    rejected: 0,
-    draft: 0
+    APPROVED: 0,
+    SUBMITTED: 0,
+    REJECTED: 0,
+    DRAFT: 0
   };
 
-  let totalTimesheetsInRange = 0;
-
-  complianceStats.forEach(stat => {
-    if (result[stat._id] !== undefined) {
-      result[stat._id] = stat.count;
+  timesheetWeeks.forEach(ts => {
+    // Project filter if applicable
+    if (projectId) {
+      const rows = Array.isArray(ts.rows) ? ts.rows : [];
+      if (!rows.some(r => r.projectId === projectId)) return;
     }
-    totalTimesheetsInRange += stat.count;
+
+    if (result[ts.status] !== undefined) {
+      result[ts.status]++;
+    }
   });
 
   const formattedData = [
-    { name: 'Approved', value: result.approved, fill: '#22c55e' },
-    { name: 'Pending Review', value: result.submitted, fill: '#f59e0b' },
-    { name: 'Rejected', value: result.rejected, fill: '#ef4444' },
-    { name: 'Draft/Incomplete', value: result.draft, fill: '#94a3b8' }
+    { name: 'Approved', value: result.APPROVED, fill: '#22c55e' },
+    { name: 'Pending Review', value: result.SUBMITTED, fill: '#f59e0b' },
+    { name: 'Rejected', value: result.REJECTED, fill: '#ef4444' },
+    { name: 'Draft/Incomplete', value: result.DRAFT, fill: '#94a3b8' }
   ].filter(d => d.value > 0);
 
   ApiResponse.success(res, { data: formattedData });
@@ -141,115 +188,118 @@ router.get('/project-utilization', requireFeature('advanced_reports'), asyncHand
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
-  if (from) match.weekStartDate = { $gte: new Date(from) };
-  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
-  if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
+  const where = {
+    organizationId: req.organizationId,
+    status: 'APPROVED',
+    isDeleted: false
+  };
 
-  const data = await Timesheet.aggregate([
-    { $match: match },
-    { $unwind: '$rows' },
-    ...(projectId ? [{ $match: { 'rows.projectId': require('mongoose').Types.ObjectId.createFromHexString(projectId) } }] : []),
-    {
-      $group: {
-        _id: '$rows.projectId',
-        totalHours: { $sum: '$rows.totalHours' },
-        employees: {
-          $push: {
-            userId: '$userId',
-            hours: '$rows.totalHours'
-          }
-        },
-        employeeCount: { $addToSet: '$userId' },
-      },
-    },
-    { $addFields: { employeeCount: { $size: '$employeeCount' } } },
-    {
-      $lookup: {
-        from: 'projects',
-        localField: '_id',
-        foreignField: '_id',
-        as: 'project',
-        pipeline: [{ $project: { name: 1, code: 1, allocatedEmployees: 1, budgetHours: 1 } }],
-      },
-    },
-    { $unwind: { path: '$project', preserveNullAndEmptyArrays: true } },
-    // Enrich allocatedEmployees with user names
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'project.allocatedEmployees.userId',
-        foreignField: '_id',
-        as: 'allocatedUserInfos'
-      }
-    },
-    {
-      $addFields: {
-        capacity: {
-          $cond: {
-            if: { $gt: ['$project.budgetHours', 0] },
-            then: '$project.budgetHours',
-            else: {
-              $multiply: [
-                { $cond: { if: { $isArray: '$project.allocatedEmployees' }, then: { $size: '$project.allocatedEmployees' }, else: '$employeeCount' } },
-                40
-              ]
-            }
-          }
-        },
-        employeeDetails: {
-          $map: {
-            input: '$project.allocatedEmployees',
-            as: 'alloc',
-            in: {
-              userId: {
-                $let: {
-                  vars: {
-                    userInfo: {
-                      $filter: {
-                        input: '$allocatedUserInfos',
-                        as: 'u',
-                        cond: { $eq: ['$$u._id', '$$alloc.userId'] }
-                      }
-                    }
-                  },
-                  in: {
-                    _id: '$$alloc.userId',
-                    name: { $arrayElemAt: ['$$userInfo.name', 0] }
-                  }
-                }
-              },
-              role: '$$alloc.role',
-              budgetHours: '$$alloc.budgetHours',
-              loggedHours: {
-                $reduce: {
-                  input: '$employees',
-                  initialValue: 0,
-                  in: {
-                    $cond: [{ $eq: ['$$this.userId', '$$alloc.userId'] }, { $add: ['$$value', '$$this.hours'] }, '$$value']
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      $addFields: {
-        utilizationPercentage: {
-          $cond: [
-            { $gt: ['$capacity', 0] },
-            { $multiply: [{ $divide: ['$totalHours', '$capacity'] }, 100] },
-            0
-          ]
-        }
-      }
-    },
-    { $sort: { totalHours: -1 } },
-  ]);
+  if (from) where.weekStartDate = { gte: new Date(from) };
+  if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
 
-  ApiResponse.success(res, { data });
+  const timesheetWeeks = await prisma.timesheetWeek.findMany({ where });
+
+  const projectStats = {};
+
+  timesheetWeeks.forEach(ts => {
+    const rows = Array.isArray(ts.rows) ? ts.rows : [];
+    rows.forEach(row => {
+      if (projectId && row.projectId !== projectId) return;
+
+      if (!projectStats[row.projectId]) {
+        projectStats[row.projectId] = {
+          projectId: row.projectId,
+          totalHours: 0,
+          employees: {},
+          employeeCount: new Set()
+        };
+      }
+
+      const stats = projectStats[row.projectId];
+      const rowHours = getRowTotal(row);
+      stats.totalHours += rowHours;
+      stats.employeeCount.add(ts.userId);
+
+      if (!stats.employees[ts.userId]) {
+        stats.employees[ts.userId] = { userId: ts.userId, hours: 0 };
+      }
+      stats.employees[ts.userId].hours += rowHours;
+    });
+  });
+
+  const projectIds = Object.keys(projectStats);
+  const projects = await prisma.project.findMany({
+    where: { id: { in: projectIds } },
+    include: { 
+      members: { 
+        select: { 
+          role: true, 
+          budgetHours: true, 
+          employee: { select: { userId: true, user: { select: { name: true } } } } 
+        } 
+      } 
+    }
+  });
+
+  const normalizedProjects = projects.map(p => ({
+    ...p,
+    allocatedEmployees: p.members.map(m => ({
+      userId: m.employee.userId,
+      role: m.role,
+      budgetHours: m.budgetHours
+    }))
+  }));
+
+  const userIds = new Set();
+  normalizedProjects.forEach(p => {
+    const alloc = p.allocatedEmployees;
+    alloc.forEach(a => userIds.add(a.userId));
+  });
+  // Also add employees who actually logged hours but might not be allocated
+  Object.values(projectStats).forEach(s => {
+    Object.keys(s.employees).forEach(uid => userIds.add(uid));
+  });
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: Array.from(userIds) } },
+    select: { id: true, name: true }
+  });
+  const userMap = Object.fromEntries(users.map(u => [u.id, u.name]));
+
+  const result = normalizedProjects.map(p => {
+    const stats = projectStats[p.id] || { totalHours: 0, employees: {}, employeeCount: new Set() };
+    const employeeCount = stats.employeeCount.size;
+    const alloc = p.allocatedEmployees;
+
+    const capacity = p.budgetHours > 0 ? p.budgetHours : (alloc.length || employeeCount) * 40;
+
+    const employeeDetails = alloc.map(a => {
+        const logged = stats.employees[a.userId]?.hours || 0;
+        return {
+            userId: { _id: a.userId, name: userMap[a.userId] || 'Unknown' },
+            role: a.role,
+            budgetHours: a.budgetHours,
+            loggedHours: Math.round(logged * 100) / 100
+        };
+    });
+
+    return {
+      _id: p.id,
+      totalHours: Math.round(stats.totalHours * 100) / 100,
+      employeeCount,
+      project: {
+        name: p.name,
+        code: p.code,
+        allocatedEmployees: p.allocatedEmployees,
+        budgetHours: p.budgetHours
+      },
+      capacity,
+      employeeDetails,
+      utilizationPercentage: capacity > 0 ? (stats.totalHours / capacity) * 100 : 0
+    };
+  }).sort((a, b) => b.totalHours - a.totalHours);
+
+  ApiResponse.success(res, { data: result });
 }));
 
 // ─── Leave summary ─────────────────────────────────────────────────────────
@@ -262,76 +312,98 @@ router.get('/leave-summary', asyncHandler(async (req, res) => {
     to = range.to;
   }
 
-  const match = { organizationId: req.organizationId };
-  if (from) match.startDate = { $gte: new Date(from) };
-  if (to) match.startDate = { ...match.startDate, $lte: new Date(to) };
+  const where = { organizationId: req.organizationId, isDeleted: false };
+  if (from) where.startDate = { gte: new Date(from) };
+  if (to) where.startDate = { ...where.startDate, lte: new Date(to) };
 
-  const data = await Leave.aggregate([
-    { $match: match },
-    { $group: { _id: { leaveType: '$leaveType', status: '$status' }, count: { $sum: 1 }, totalDays: { $sum: '$totalDays' } } },
-    { $sort: { '_id.leaveType': 1 } },
-  ]);
+  // Use Prisma groupBy
+  const groups = await prisma.leave.groupBy({
+    by: ['leaveTypeId', 'status'],
+    where,
+    _count: { _all: true },
+    _sum: { totalDays: true }
+  });
 
-  ApiResponse.success(res, { data });
+  const formatted = groups.map(g => ({
+    _id: { leaveType: g.leaveTypeId, status: g.status },
+    count: g._count._all,
+    totalDays: g._sum.totalDays || 0
+  })).sort((a, b) => a._id.leaveType.localeCompare(b._id.leaveType));
+
+  ApiResponse.success(res, { data: formatted });
 }));
 
 // ─── Leave details (drill-down for a specific type) ────────────────────────
 router.get('/leave-details', asyncHandler(async (req, res) => {
   const { leaveType, from, to } = req.query;
-  const match = { status: LEAVE_STATUS.APPROVED, organizationId: req.organizationId };
-  if (leaveType) match.leaveType = leaveType;
-  if (from) match.startDate = { $gte: new Date(from) };
-  if (to) match.startDate = { ...match.startDate, $lte: new Date(to) };
+  const where = { status: LEAVE_STATUS.APPROVED, organizationId: req.organizationId, isDeleted: false };
+  if (leaveType) where.leaveTypeId = leaveType;
+  if (from) where.startDate = { gte: new Date(from) };
+  if (to) where.startDate = { ...where.startDate, lte: new Date(to) };
 
-  const details = await Leave.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: '$userId',
-        totalDays: { $sum: '$totalDays' },
-        leaveCount: { $sum: 1 },
-      },
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: '_id',
-        foreignField: '_id',
-        as: 'user',
-        pipeline: [{ $project: { name: 1, role: 1, employeeId: 1, department: 1 } }],
-      },
-    },
-    { $unwind: '$user' },
-    { $sort: { totalDays: -1 } },
-  ]);
+  const groups = await prisma.leave.groupBy({
+    by: ['employeeId'],
+    where,
+    _sum: { totalDays: true },
+    _count: { _all: true }
+  });
 
-  ApiResponse.success(res, { data: details });
+  const employeeIds = groups.map(g => g.employeeId);
+  const users = await prisma.user.findMany({
+    where: { employee: { id: { in: employeeIds } } },
+    select: { name: true, role: true, employee: { select: { id: true, employeeCode: true, department: { select: { name: true } } } } }
+  });
+
+  const userMap = Object.fromEntries(users.map(u => [u.employee?.id, u]));
+
+  const result = groups.map(g => ({
+    _id: g.employeeId,
+    totalDays: g._sum.totalDays || 0,
+    leaveCount: g._count._all,
+    user: userMap[g.employeeId] ? {
+        name: userMap[g.employeeId].name,
+        role: userMap[g.employeeId].role,
+        employeeId: userMap[g.employeeId].employee?.employeeCode,
+        department: userMap[g.employeeId].employee?.department?.name
+    } : null
+  })).sort((a, b) => b.totalDays - a.totalDays);
+
+  ApiResponse.success(res, { data: result });
 }));
 
 // ─── Individual task details (drill-down for user/project/period) ──────────
 router.get('/timesheet-details', asyncHandler(async (req, res) => {
   const { userId, projectId, from, to } = req.query;
-  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
-  if (userId) match.userId = require('mongoose').Types.ObjectId.createFromHexString(userId);
-  if (from) match.weekStartDate = { $gte: new Date(from) };
-  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
+  const where = {
+    organizationId: req.organizationId,
+    status: TIMESHEET_STATUS.APPROVED,
+    isDeleted: false
+  };
+  if (userId) where.userId = userId;
+  if (from) where.weekStartDate = { gte: new Date(from) };
+  if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
 
-  const details = await Timesheet.aggregate([
-    { $match: match },
-    { $unwind: '$rows' },
-    ...(projectId ? [{ $match: { 'rows.projectId': require('mongoose').Types.ObjectId.createFromHexString(projectId) } }] : []),
-    { $unwind: '$rows.entries' },
-    {
-      $project: {
-        date: '$rows.entries.date',
-        hoursWorked: '$rows.entries.hoursWorked',
-        taskDescription: '$rows.entries.taskDescription',
-        category: '$rows.category',
-        weekStartDate: '$weekStartDate'
-      }
-    },
-    { $sort: { date: -1 } }
-  ]);
+  const timesheetWeeks = await prisma.timesheetWeek.findMany({ where });
+
+  const details = [];
+  timesheetWeeks.forEach(ts => {
+    const rows = Array.isArray(ts.rows) ? ts.rows : [];
+    rows.forEach(row => {
+      if (projectId && row.projectId !== projectId) return;
+      const entries = Array.isArray(row.entries) ? row.entries : [];
+      entries.forEach(entry => {
+        details.push({
+          date: entry.date,
+          hoursWorked: entry.hoursWorked,
+          taskDescription: entry.taskDescription,
+          category: row.category,
+          weekStartDate: ts.weekStartDate
+        });
+      });
+    });
+  });
+
+  details.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   ApiResponse.success(res, { data: details });
 }));
@@ -346,19 +418,52 @@ router.get('/employee-attendance', asyncHandler(async (req, res) => {
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
-  if (from) match.weekStartDate = { $gte: new Date(from) };
-  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
+  const where = {
+    organizationId: req.organizationId,
+    status: TIMESHEET_STATUS.APPROVED,
+    isDeleted: false
+  };
+  if (from) where.weekStartDate = { gte: new Date(from) };
+  if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
 
-  const data = await Timesheet.aggregate([
-    { $match: match },
-    { $group: { _id: { userId: '$userId', week: '$weekStartDate' }, totalHours: { $sum: '$totalHours' } } },
-    { $lookup: { from: 'users', localField: '_id.userId', foreignField: '_id', as: 'user', pipeline: [{ $project: { name: 1, employeeId: 1, department: 1, role: 1 } }] } },
-    { $unwind: '$user' },
-    { $sort: { '_id.week': -1, totalHours: -1 } },
-  ]);
+  const timesheetWeeks = await prisma.timesheetWeek.findMany({
+    where,
+    select: { userId: true, weekStartDate: true, rows: true }
+  });
 
-  ApiResponse.success(res, { data });
+  const grouping = {};
+  timesheetWeeks.forEach(ts => {
+      const key = `${ts.userId}_${ts.weekStartDate.toISOString()}`;
+      if (!grouping[key]) {
+          grouping[key] = { userId: ts.userId, week: ts.weekStartDate, totalHours: 0 };
+      }
+      const rows = Array.isArray(ts.rows) ? ts.rows : [];
+      rows.forEach(row => {
+          grouping[key].totalHours += getRowTotal(row);
+      });
+  });
+
+  const groups = Object.values(grouping);
+
+  const userIds = [...new Set(groups.map(g => g.userId))];
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, role: true, employee: { select: { employeeCode: true, department: { select: { name: true } } } } }
+  });
+  const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+
+  const result = groups.map(g => ({
+    _id: { userId: g.userId, week: g.week },
+    totalHours: g.totalHours || 0,
+    user: userMap[g.userId] ? {
+        name: userMap[g.userId].name,
+        employeeId: userMap[g.userId].employee?.employeeCode,
+        department: userMap[g.userId].employee?.department?.name,
+        role: userMap[g.userId].role
+    } : null
+  })).sort((a, b) => new Date(b._id.week) - new Date(a._id.week) || b.totalHours - a.totalHours);
+
+  ApiResponse.success(res, { data: result });
 }));
 
 // ─── NEW: Weekly hours trend (for line chart) ─────────────────────────────
@@ -371,41 +476,59 @@ router.get('/weekly-trend', requireFeature('advanced_reports'), asyncHandler(asy
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
-  if (from) match.weekStartDate = { $gte: new Date(from) };
-  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
-  if (userId) match.userId = require('mongoose').Types.ObjectId.createFromHexString(userId);
-  if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
+  const where = {
+    organizationId: req.organizationId,
+    status: TIMESHEET_STATUS.APPROVED,
+    isDeleted: false
+  };
+  if (from) where.weekStartDate = { gte: new Date(from) };
+  if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
+  if (userId) where.userId = userId;
 
-  const data = await Timesheet.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: '$weekStartDate',
-        totalHours: { $sum: '$totalHours' },
-        employeeCount: { $addToSet: '$userId' },
-        timesheetCount: { $sum: 1 },
-      },
-    },
-    {
-      $project: {
-        week: '$_id',
-        totalHours: 1,
-        employeeCount: { $size: '$employeeCount' },
-        timesheetCount: 1,
-        avgHoursPerEmployee: {
-          $cond: [
-            { $gt: [{ $size: '$employeeCount' }, 0] },
-            { $divide: ['$totalHours', { $size: '$employeeCount' }] },
-            0
-          ]
-        }
-      },
-    },
-    { $sort: { week: 1 } },
-  ]);
+  // For projectId, we must fetch and filter in JS because it's in JSON rows
+  const timesheetWeeks = await prisma.timesheetWeek.findMany({ where });
 
-  ApiResponse.success(res, { data: data });
+  const weekMap = {};
+  timesheetWeeks.forEach(ts => {
+    const rows = Array.isArray(ts.rows) ? ts.rows : [];
+    let weekTotal = 0;
+    let matchesProject = !projectId;
+
+    rows.forEach(row => {
+      if (projectId && row.projectId === projectId) {
+        matchesProject = true;
+        weekTotal += getRowTotal(row);
+      } else if (!projectId) {
+        weekTotal += getRowTotal(row);
+      }
+    });
+
+    if (!matchesProject) return;
+
+    const key = ts.weekStartDate.toISOString();
+    if (!weekMap[key]) {
+      weekMap[key] = {
+        week: ts.weekStartDate,
+        totalHours: 0,
+        employees: new Set(),
+        timesheetCount: 0
+      };
+    }
+    const w = weekMap[key];
+    w.totalHours += weekTotal;
+    w.employees.add(ts.userId);
+    w.timesheetCount += 1;
+  });
+
+  const result = Object.values(weekMap).map(w => ({
+    week: w.week,
+    totalHours: Math.round(w.totalHours * 100) / 100,
+    employeeCount: w.employees.size,
+    timesheetCount: w.timesheetCount,
+    avgHoursPerEmployee: w.employees.size > 0 ? (w.totalHours / w.employees.size) : 0
+  })).sort((a, b) => new Date(a.week) - new Date(b.week));
+
+  ApiResponse.success(res, { data: result });
 }));
 
 // ─── NEW: Department hours summary (for stacked bar chart) ────────────────
@@ -418,69 +541,74 @@ router.get('/department-summary', requireFeature('advanced_reports'), asyncHandl
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
-  if (from) match.weekStartDate = { $gte: new Date(from) };
-  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
-  if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
+  const where = {
+    organizationId: req.organizationId,
+    status: TIMESHEET_STATUS.APPROVED,
+    isDeleted: false
+  };
+  if (from) where.weekStartDate = { gte: new Date(from) };
+  if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
 
-  const data = await Timesheet.aggregate([
-    { $match: match },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'userId',
-        foreignField: '_id',
-        as: 'user',
-        pipeline: [{ $project: { department: 1, organizationId: 1 } }],
-      },
-    },
-    { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
-    { $unwind: '$rows' },
-    ...(projectId ? [{ $match: { 'rows.projectId': require('mongoose').Types.ObjectId.createFromHexString(projectId) } }] : []),
-    {
-      $group: {
-        _id: {
-          department: { $ifNull: ['$user.department', 'Unassigned'] },
-          projectId: '$rows.projectId',
-        },
-        totalHours: { $sum: '$rows.totalHours' },
-        employeeCount: { $addToSet: '$userId' },
-      },
-    },
-    {
-      $lookup: {
-        from: 'projects',
-        localField: '_id.projectId',
-        foreignField: '_id',
-        as: 'project',
-        pipeline: [{ $project: { name: 1, code: 1 } }],
-      },
-    },
-    { $unwind: { path: '$project', preserveNullAndEmptyArrays: true } },
-    {
-      $group: {
-        _id: '$_id.department',
-        totalHours: { $sum: '$totalHours' },
-        employeeCount: { $addToSet: '$employeeCount' },
-        projects: {
-          $push: {
-            name: { $ifNull: ['$project.name', 'Unknown'] },
-            hours: '$totalHours',
-          },
-        },
-      },
-    },
-    {
-      $project: {
-        department: '$_id',
-        totalHours: 1,
-        projects: 1,
-      },
-    },
-    { $sort: { totalHours: -1 } },
-  ]);
+  const timesheetWeeks = await prisma.timesheetWeek.findMany({
+    where,
+    include: {
+      user: {
+        select: {
+          employee: {
+            select: {
+              department: { select: { name: true } }
+            }
+          }
+        }
+      }
+    }
+  });
 
-  ApiResponse.success(res, { data });
+  const deptStats = {};
+  const projectIds = new Set();
+
+  timesheetWeeks.forEach(ts => {
+    const dept = ts.user?.employee?.department?.name || 'Unassigned';
+    if (!deptStats[dept]) {
+      deptStats[dept] = {
+        department: dept,
+        totalHours: 0,
+        projects: {}
+      };
+    }
+    const d = deptStats[dept];
+    const rows = Array.isArray(ts.rows) ? ts.rows : [];
+    
+    rows.forEach(row => {
+      if (projectId && row.projectId !== projectId) return;
+      
+      projectIds.add(row.projectId);
+      const rowHours = getRowTotal(row);
+      d.totalHours += rowHours;
+      
+      if (!d.projects[row.projectId]) {
+        d.projects[row.projectId] = { hours: 0 };
+      }
+      d.projects[row.projectId].hours += rowHours;
+    });
+  });
+
+  const projects = await prisma.project.findMany({
+    where: { id: { in: Array.from(projectIds) } },
+    select: { id: true, name: true }
+  });
+  const projectMap = Object.fromEntries(projects.map(p => [p.id, p.name]));
+
+  const result = Object.values(deptStats).map(d => ({
+    department: d.department,
+    totalHours: Math.round(d.totalHours * 100) / 100,
+    projects: Object.entries(d.projects).map(([pid, stats]) => ({
+      name: projectMap[pid] || 'Unknown',
+      hours: Math.round(stats.hours * 100) / 100
+    }))
+  })).sort((a, b) => b.totalHours - a.totalHours);
+
+  ApiResponse.success(res, { data: result });
 }));
 
 // ─── NEW: Smart Insights Generator ──────────────────────────────────────────
@@ -493,45 +621,63 @@ router.get('/smart-insights', requireFeature('advanced_reports'), asyncHandler(a
     to = range.to;
   }
 
-  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
-  if (from) match.weekStartDate = { $gte: new Date(from) };
-  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: new Date(to) };
-  if (projectId) match['rows.projectId'] = require('mongoose').Types.ObjectId.createFromHexString(projectId);
+  const where = {
+    organizationId: req.organizationId,
+    status: TIMESHEET_STATUS.APPROVED,
+    isDeleted: false
+  };
+  if (from) where.weekStartDate = { gte: new Date(from) };
+  if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
 
-  const [totalHoursRes, deptStats, leaveStats] = await Promise.all([
-    Timesheet.aggregate([
-      { $match: match },
-      { $unwind: '$rows' },
-      ...(projectId ? [{ $match: { 'rows.projectId': require('mongoose').Types.ObjectId.createFromHexString(projectId) } }] : []),
-      { $group: { _id: null, totalHours: { $sum: '$rows.totalHours' } } }
-    ]),
-    Timesheet.aggregate([
-      { $match: match },
-      { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
-      { $unwind: '$user' },
-      { $group: { _id: '$user.department', hours: { $sum: '$totalHours' } } },
-      { $sort: { hours: -1 } },
-      { $limit: 1 }
-    ]),
-    Leave.aggregate([
-      { $match: { status: LEAVE_STATUS.APPROVED, organizationId: req.organizationId } },
-      { $group: { _id: null, totalDays: { $sum: '$totalDays' } } }
-    ])
+  const [timesheetWeeks, leaveStats] = await Promise.all([
+    prisma.timesheetWeek.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            employee: {
+              select: {
+                department: { select: { name: true } }
+              }
+            }
+          }
+        }
+      }
+    }),
+    prisma.leave.aggregate({
+      where: { status: LEAVE_STATUS.APPROVED, organizationId: req.organizationId, isDeleted: false },
+      _sum: { totalDays: true }
+    })
   ]);
 
-  const total = totalHoursRes[0]?.totalHours || 0;
-  const topDept = deptStats[0];
-  const totalLeaves = leaveStats[0]?.totalDays || 0;
+  let totalHours = 0;
+  const deptHours = {};
+
+  timesheetWeeks.forEach(ts => {
+    const dept = ts.user?.employee?.department?.name || 'Unassigned';
+    if (!deptHours[dept]) deptHours[dept] = 0;
+    
+    const rows = Array.isArray(ts.rows) ? ts.rows : [];
+    rows.forEach(row => {
+      if (projectId && row.projectId !== projectId) return;
+      const rowHours = getRowTotal(row);
+      totalHours += rowHours;
+      deptHours[dept] += rowHours;
+    });
+  });
+
+  const topDeptEntry = Object.entries(deptHours).sort((a,b) => b[1] - a[1])[0];
+  const totalLeaves = leaveStats._sum.totalDays || 0;
 
   const insights = [];
 
-  if (total > 0 && topDept) {
-    const percentage = ((topDept.hours / total) * 100).toFixed(0);
-    insights.push(`${topDept._id || 'Unassigned'} contributed ${percentage}% of all logged hours.`);
+  if (totalHours > 0 && topDeptEntry) {
+    const percentage = ((topDeptEntry[1] / totalHours) * 100).toFixed(0);
+    insights.push(`${topDeptEntry[0]} contributed ${percentage}% of all logged hours.`);
   }
 
   if (totalLeaves > 0) {
-    const assumedWorkDays = Math.max(1, (total / 8)); // 8h per day approx
+    const assumedWorkDays = Math.max(1, (totalHours / 8)); 
     const leaveImpact = ((totalLeaves / (assumedWorkDays + totalLeaves)) * 100).toFixed(1);
     insights.push(`Leave accounted for ~${leaveImpact}% of total potential capacity.`);
   }
@@ -543,7 +689,6 @@ router.get('/smart-insights', requireFeature('advanced_reports'), asyncHandler(a
 
 // ─── NEW: PDF Export ────────────────────────────────────────────────────────
 router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async (req, res) => {
-  const mongoose = require('mongoose');
   const pdfGeneratorService = require('./pdfGenerator.service');
 
   let { from, to, period, userId, projectId } = req.query;
@@ -557,88 +702,137 @@ router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async
   from = from ? new Date(from) : null;
   to = to ? new Date(to) : null;
 
-  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
-  if (from) match.weekStartDate = { $gte: from };
-  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: to };
-  if (userId) match.userId = mongoose.Types.ObjectId.createFromHexString(userId);
-  if (projectId) match['rows.projectId'] = mongoose.Types.ObjectId.createFromHexString(projectId);
+  const where = {
+    organizationId: req.organizationId,
+    status: TIMESHEET_STATUS.APPROVED,
+    isDeleted: false
+  };
+  if (from) where.weekStartDate = { gte: from };
+  if (to) where.weekStartDate = { ...where.weekStartDate, lte: to };
+  if (userId) where.userId = userId;
 
-  // Fetch all needed data in parallel (all strictly scoped to organizationId)
-  const [timesheetStats, projectData, leaveData, weeklyTrend, employeeData, deptStats, complianceRes] = await Promise.all([
-    // 1. Overall stats
-    Timesheet.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: null,
-          totalHours: { $sum: '$totalHours' },
-          totalTimesheets: { $sum: 1 },
-          uniqueEmployees: { $addToSet: '$userId' },
+  // Fetch all needed data in parallel
+  const [timesheetWeeks, leaveRes, complianceRes] = await Promise.all([
+    prisma.timesheetWeek.findMany({
+      where,
+      include: {
+        user: {
+          select: { name: true, role: true, employee: { select: { employeeCode: true, department: { select: { name: true } } } } }
+        }
+      }
+    }),
+    prisma.leave.groupBy({
+        by: ['leaveTypeId'],
+        where: { 
+            organizationId: req.organizationId, 
+            status: LEAVE_STATUS.APPROVED,
+            isDeleted: false,
+            ...(from ? { startDate: { gte: from } } : {}),
+            ...(to ? { endDate: { lte: to } } : {})
         },
-      },
-    ]),
-    // 2. Project hours
-    Timesheet.aggregate([
-      { $match: match },
-      { $unwind: '$rows' },
-      { $group: { _id: '$rows.projectId', totalHours: { $sum: '$rows.totalHours' } } },
-      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'project', pipeline: [{ $project: { name: 1, code: 1, budgetHours: 1, organizationId: 1 } }] } },
-      { $unwind: { path: '$project', preserveNullAndEmptyArrays: true } },
-      { $sort: { totalHours: -1 } },
-      { $limit: 15 },
-    ]),
-    // 3. Leave summary
-    Leave.aggregate([
-      { $match: { status: LEAVE_STATUS.APPROVED, organizationId: req.organizationId, ...(from ? { startDate: { $gte: from } } : {}), ...(to ? { endDate: { $lte: to } } : {}) } },
-      { $group: { _id: '$leaveType', count: { $sum: 1 }, totalDays: { $sum: '$totalDays' } } },
-      { $sort: { totalDays: -1 } },
-    ]),
-    // 4. Weekly trend
-    Timesheet.aggregate([
-      { $match: match },
-      { $group: { _id: '$weekStartDate', totalHours: { $sum: '$totalHours' }, employeeCount: { $addToSet: '$userId' } } },
-      { $project: { week: '$_id', totalHours: 1, employeeCount: { $size: '$employeeCount' } } },
-      { $sort: { week: 1 } },
-      { $limit: 20 },
-    ]),
-    // 5. Top employees
-    Timesheet.aggregate([
-      { $match: match },
-      { $group: { _id: '$userId', totalHours: { $sum: '$totalHours' }, timesheetCount: { $sum: 1 } } },
-      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user', pipeline: [{ $project: { name: 1, employeeId: 1, department: 1, organizationId: 1 } }] } },
-      { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
-      { $sort: { totalHours: -1 } },
-      { $limit: 15 },
-    ]),
-    // 6. Department stats
-    Timesheet.aggregate([
-      { $match: match },
-      { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
-      { $unwind: '$user' },
-      { $group: { _id: '$user.department', totalHours: { $sum: '$totalHours' }, employeeCount: { $addToSet: '$userId' } } },
-      { $sort: { totalHours: -1 } }
-    ]),
-    // 7. Compliance Stats (simple overall group)
-    Timesheet.aggregate([
-      { $match: { organizationId: req.organizationId, ...(from ? { weekStartDate: { $gte: from } } : {}), ...(to ? { weekStartDate: { $lte: to } } : {}) } },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ])
+        _count: { _all: true },
+        _sum: { totalDays: true }
+    }),
+    prisma.timesheetWeek.groupBy({
+        by: ['status'],
+        where: {
+            organizationId: req.organizationId,
+            isDeleted: false,
+            ...(from ? { weekStartDate: { gte: from } } : {}),
+            ...(to ? { weekStartDate: { lte: to } } : {})
+        },
+        _count: { _all: true }
+    })
   ]);
 
-  const stats = timesheetStats[0] || { totalHours: 0, totalTimesheets: 0, uniqueEmployees: [] };
+  // Aggregate project hours and employee stats from timesheetWeeks
+  const projectStats = {};
+  const employeeStats = {};
+  const weeklyTrendMap = {};
+  const deptStatsMap = {};
+  
+  let totalHours = 0;
+  const uniqueEmployees = new Set();
+
+  timesheetWeeks.forEach(ts => {
+    uniqueEmployees.add(ts.userId);
+    const rows = Array.isArray(ts.rows) ? ts.rows : [];
+    
+    // Weekly Trend
+    const weekKey = ts.weekStartDate.toISOString();
+    if (!weeklyTrendMap[weekKey]) weeklyTrendMap[weekKey] = { week: ts.weekStartDate, totalHours: 0, employeeCount: new Set() };
+    const wt = weeklyTrendMap[weekKey];
+    wt.employeeCount.add(ts.userId);
+
+    // Dept Stats
+    const dept = ts.user?.employee?.department?.name || 'Unassigned';
+    if (!deptStatsMap[dept]) deptStatsMap[dept] = { _id: dept, totalHours: 0, employeeCount: new Set() };
+    const ds = deptStatsMap[dept];
+    ds.employeeCount.add(ts.userId);
+
+    rows.forEach(row => {
+      if (projectId && row.projectId !== projectId) return;
+      
+      const rowHours = getRowTotal(row);
+      totalHours += rowHours;
+      wt.totalHours += rowHours;
+      ds.totalHours += rowHours;
+
+      // Project Stats
+      if (!projectStats[row.projectId]) projectStats[row.projectId] = { _id: row.projectId, totalHours: 0 };
+      projectStats[row.projectId].totalHours += rowHours;
+
+      // Employee Stats
+      if (!employeeStats[ts.userId]) employeeStats[ts.userId] = { _id: ts.userId, totalHours: 0, timesheetCount: 0, user: ts.user };
+      employeeStats[ts.userId].totalHours += rowHours;
+    });
+    
+    if (employeeStats[ts.userId]) employeeStats[ts.userId].timesheetCount += 1;
+  });
+
+  const projectIds = Object.keys(projectStats);
+  const projects = await prisma.project.findMany({
+    where: { id: { in: projectIds } },
+    select: { id: true, name: true, code: true, budgetHours: true }
+  });
+  const projectMap = Object.fromEntries(projects.map(p => [p.id, p]));
+
+  const formattedProjectData = Object.values(projectStats).map(ps => ({
+    ...ps,
+    project: projectMap[ps._id] || { name: 'Unknown', code: '?' }
+  })).sort((a,b) => b.totalHours - a.totalHours).slice(0, 15);
+
+  const formattedEmployeeData = Object.values(employeeStats).map(es => ({
+    _id: es._id,
+    totalHours: es.totalHours,
+    timesheetCount: es.timesheetCount,
+    user: {
+        name: es.user?.name,
+        employeeId: es.user?.employee?.employeeCode,
+        department: es.user?.employee?.department?.name,
+        organizationId: req.organizationId
+    }
+  })).sort((a, b) => b.totalHours - a.totalHours).slice(0, 15);
+
+  const stats = {
+    totalHours,
+    totalTimesheets: timesheetWeeks.length,
+    uniqueEmployees: Array.from(uniqueEmployees)
+  };
+
   const complianceStats = { total: 0, approved: 0, submitted: 0, rejected: 0, draft: 0 };
   complianceRes.forEach(r => {
-    complianceStats[r._id] = r.count;
-    complianceStats.total += r.count;
+    complianceStats[r.status] = r._count._all;
+    complianceStats.total += r._count._all;
   });
 
   const data = {
     stats,
-    projectData,
-    leaveData,
-    weeklyTrend,
-    employeeData,
-    deptStats,
+    projectData: formattedProjectData,
+    leaveData: leaveRes.map(l => ({ _id: l.leaveType, count: l._count._all, totalDays: l._sum.totalDays || 0 })),
+    weeklyTrend: Object.values(weeklyTrendMap).map(w => ({ ...w, employeeCount: w.employeeCount.size })).sort((a,b) => a.week - b.week),
+    employeeData: formattedEmployeeData,
+    deptStats: Object.values(deptStatsMap).map(d => ({ ...d, employeeCount: d.employeeCount.size })),
     complianceStats
   };
 
@@ -648,8 +842,6 @@ router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async
 
 // ─── NEW: CSV Export ─────────────────────────────────────────────────────────
 router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async (req, res) => {
-  const mongoose = require('mongoose');
-  
   let { from, to, period, userId, projectId } = req.query;
 
   if (period) {
@@ -661,60 +853,79 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
   from = from ? new Date(from) : null;
   to = to ? new Date(to) : null;
 
-  const match = { status: TIMESHEET_STATUS.APPROVED, organizationId: req.organizationId };
-  if (from) match.weekStartDate = { $gte: from };
-  if (to) match.weekStartDate = { ...match.weekStartDate, $lte: to };
-  if (userId) match.userId = mongoose.Types.ObjectId.createFromHexString(userId);
-  if (projectId) match['rows.projectId'] = mongoose.Types.ObjectId.createFromHexString(projectId);
+  const where = {
+    organizationId: req.organizationId,
+    status: TIMESHEET_STATUS.APPROVED,
+    isDeleted: false
+  };
+  if (from) where.weekStartDate = { gte: from };
+  if (to) where.weekStartDate = { ...where.weekStartDate, lte: to };
+  if (userId) where.userId = userId;
 
-  // Fetch categorized summary data (paralleling the PDF data, all strictly scoped)
-  const [timesheetStats, projectData, employeeData, deptStats, complianceRes] = await Promise.all([
-    Timesheet.aggregate([
-      { $match: match },
-      { $group: { _id: null, totalHours: { $sum: '$totalHours' }, totalTimesheets: { $sum: 1 }, uniqueEmployees: { $addToSet: '$userId' } } },
-    ]),
-    Timesheet.aggregate([
-      { $match: match },
-      { $unwind: '$rows' },
-      { $group: { _id: '$rows.projectId', totalHours: { $sum: '$rows.totalHours' } } },
-      { $lookup: { from: 'projects', localField: '_id', foreignField: '_id', as: 'p', pipeline: [{ $project: { name: 1, budgetHours: 1, organizationId: 1 } }] } },
-      { $unwind: '$p' },
-      { $sort: { totalHours: -1 } },
-      { $limit: 15 }
-    ]),
-    Timesheet.aggregate([
-      { $match: match },
-      { $group: { _id: '$userId', totalHours: { $sum: '$totalHours' } } },
-      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'u', pipeline: [{ $project: { name: 1, employeeId: 1, department: 1, organizationId: 1 } }] } },
-      { $unwind: '$u' },
-      { $sort: { totalHours: -1 } },
-      { $limit: 20 }
-    ]),
-    Timesheet.aggregate([
-      { $match: match },
-      { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'u' } },
-      { $unwind: '$u' },
-      { $group: { _id: '$u.department', totalHours: { $sum: '$totalHours' } } },
-      { $sort: { totalHours: -1 } }
-    ]),
-    Timesheet.aggregate([
-      { $match: { organizationId: req.organizationId, ...(from ? { weekStartDate: { $gte: from } } : {}), ...(to ? { weekStartDate: { $lte: to } } : {}) } },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ])
-  ]);
+  const timesheetWeeks = await prisma.timesheetWeek.findMany({
+    where,
+    include: {
+      user: {
+        select: { name: true, role: true, employee: { select: { employeeCode: true, department: { select: { name: true } } } } }
+      }
+    }
+  });
 
-  const stats = timesheetStats[0] || { totalHours: 0, totalTimesheets: 0, uniqueEmployees: [] };
+  const projectStats = {};
+  const employeeStats = {};
+  const deptStatsMap = {};
+  let totalHours = 0;
+  const uniqueEmployees = new Set();
+
+  timesheetWeeks.forEach(ts => {
+    uniqueEmployees.add(ts.userId);
+    const rows = Array.isArray(ts.rows) ? ts.rows : [];
+    
+    const dept = ts.user?.employee?.department?.name || 'Unassigned';
+    if (!deptStatsMap[dept]) deptStatsMap[dept] = { totalHours: 0 };
+    
+    rows.forEach(row => {
+      if (projectId && row.projectId !== projectId) return;
+      
+      const rowHours = getRowTotal(row);
+      totalHours += rowHours;
+      deptStatsMap[dept].totalHours += rowHours;
+
+      if (!projectStats[row.projectId]) projectStats[row.projectId] = { totalHours: 0 };
+      projectStats[row.projectId].totalHours += rowHours;
+
+      if (!employeeStats[ts.userId]) employeeStats[ts.userId] = { totalHours: 0, user: ts.user };
+      employeeStats[ts.userId].totalHours += rowHours;
+    });
+  });
+
+  const projects = await prisma.project.findMany({
+    where: { id: { in: Object.keys(projectStats) } },
+    select: { id: true, name: true, budgetHours: true }
+  });
+  const projectMap = Object.fromEntries(projects.map(p => [p.id, p]));
+
+  const complianceRes = await prisma.timesheetWeek.groupBy({
+    by: ['status'],
+    where: {
+        organizationId: req.organizationId,
+        isDeleted: false,
+        ...(from ? { weekStartDate: { gte: from } } : {}),
+        ...(to ? { weekStartDate: { lte: to } } : {})
+    },
+    _count: { _all: true }
+  });
+
   let totalComp = 0, approvedComp = 0;
   complianceRes.forEach(r => {
-    totalComp += r.count;
-    if (r._id === 'approved') approvedComp = r.count;
+    totalComp += r._count._all;
+    if (r.status === 'APPROVED') approvedComp = r._count._all;
   });
   const complianceRate = totalComp > 0 ? ((approvedComp / totalComp) * 100).toFixed(0) : '0';
-  const avgHours = stats.uniqueEmployees?.length > 0 ? (stats.totalHours / stats.uniqueEmployees.length).toFixed(1) : '0';
+  const avgHours = uniqueEmployees.size > 0 ? (totalHours / uniqueEmployees.size).toFixed(1) : '0';
 
   const escapeCsv = (str) => typeof str === 'string' ? `"${str.replace(/"/g, '""')}"` : str;
 
-  // Build CSV Content
   let csv = `EXECUTIVE WORKFORCE REPORT SUMMARY\n`;
   csv += `Organization,${req.user.organizationName || 'Current Organization'}\n`;
   csv += `Reporting Period,${from ? from.toISOString().split('T')[0] : 'All Time'} to ${to ? to.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}\n`;
@@ -722,37 +933,38 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
 
   csv += `1. KEY PERFORMANCE INDICATORS\n`;
   csv += `Metric,Value,Description\n`;
-  csv += `Total Hours Logged,${stats.totalHours},Total approved hours in period\n`;
+  csv += `Total Hours Logged,${totalHours},Total approved hours in period\n`;
   csv += `Compliance Rate,${complianceRate}%,Accuracy of timesheet submissions\n`;
   csv += `Average Hours/Employee,${avgHours},Average productive hours per active resource\n`;
-  csv += `Resource Count,${stats.uniqueEmployees?.length || 0},Total distinct employees contributing\n\n`;
+  csv += `Resource Count,${uniqueEmployees.size},Total distinct employees contributing\n\n`;
 
   csv += `2. DEPARTMENTAL UTILIZATION\n`;
   csv += `Department,Total Hours Contribution,% of Total\n`;
-  deptStats.forEach(d => {
-    const perc = stats.totalHours > 0 ? ((d.totalHours / stats.totalHours) * 100).toFixed(1) : 0;
-    csv += `${escapeCsv(d._id || 'Unassigned')},${d.totalHours},${perc}%\n`;
+  Object.entries(deptStatsMap).forEach(([dept, d]) => {
+    const perc = totalHours > 0 ? ((d.totalHours / totalHours) * 100).toFixed(1) : 0;
+    csv += `${escapeCsv(dept)},${d.totalHours},${perc}%\n`;
   });
   csv += `\n`;
 
   csv += `3. PROJECT FOCUS AREAS\n`;
   csv += `Project Name,Total Productive Hours,Budget Hours,Utilization %\n`;
-  projectData.forEach(p => {
-    const budget = p.p?.budgetHours || 0;
-    const util = budget > 0 ? ((p.totalHours / budget) * 100).toFixed(1) : 'N/A';
-    csv += `${escapeCsv(p.p?.name || 'Unknown')},${p.totalHours},${budget},${util}%\n`;
+  Object.entries(projectStats).forEach(([pid, ps]) => {
+    const p = projectMap[pid];
+    const budget = p?.budgetHours || 0;
+    const util = budget > 0 ? ((ps.totalHours / budget) * 100).toFixed(1) : 'N/A';
+    csv += `${escapeCsv(p?.name || 'Unknown')},${ps.totalHours},${budget},${util}%\n`;
   });
   csv += `\n`;
 
   csv += `4. TOP RESOURCE PERFORMANCE (TOP 20)\n`;
   csv += `Employee Name,Employee ID,Department,Total Hours Logged\n`;
-  employeeData.forEach(e => {
-    csv += `${escapeCsv(e.u?.name || 'Unknown')},${escapeCsv(e.u?.employeeId || '-')},${escapeCsv(e.u?.department || '-')},${e.totalHours.toFixed(2)}\n`;
+  Object.values(employeeStats).sort((a,b) => b.totalHours - a.totalHours).slice(0, 20).forEach(e => {
+    csv += `${escapeCsv(e.user?.name || 'Unknown')},${escapeCsv(e.user?.employee?.employeeCode || '-')},${escapeCsv(e.user?.employee?.department?.name || '-')},${e.totalHours.toFixed(2)}\n`;
   });
 
-  const now = new Date().toISOString().split('T')[0];
+  const nowStr = new Date().toISOString().split('T')[0];
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename="Enterprise-Summary-${now}.csv"`);
+  res.setHeader('Content-Disposition', `attachment; filename="Enterprise-Summary-${nowStr}.csv"`);
   res.send(csv);
 }));
 

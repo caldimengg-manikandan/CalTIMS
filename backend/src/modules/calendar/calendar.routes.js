@@ -1,95 +1,318 @@
-'use strict';
-
 const express = require('express');
 const router = express.Router();
+const { prisma } = require('../../config/database');
 const asyncHandler = require('../../shared/utils/asyncHandler');
 const ApiResponse = require('../../shared/utils/apiResponse');
-const CalendarEvent = require('./calendar.model');
 const { authenticate } = require('../../middleware/auth.middleware');
+const { authorize, checkPermission } = require('../../middleware/rbac.middleware');
+const calendarService = require('./calendar.service');
+const { google } = require('googleapis');
+const axios = require('axios');
+const { encrypt } = require('../../shared/utils/security');
+
+// Public callback routes (must be before authenticate middleware or handle auth inside)
+// Actually, it's better to keep them protected if we can pass state, but usually OAuth callbacks are public and we verify state.
+// For simplicity in this implementation, I'll use a 'state' parameter that contains the user's JWT or a temporary token.
+// Or just let the frontend handle the callback and send the code to a protected endpoint.
+// Let's do the latter: Frontend handles callback -> sends code to /api/calendar/connect/google/callback (Protected)
 
 router.use(authenticate);
 
-// Get events (supports month=YYYY-MM or range)
+// ── GET calendar events (Merged) ─────────────────────────────────────────────
 router.get('/', asyncHandler(async (req, res) => {
-  const { _id } = req.user;
-  const { month, from, to, eventType } = req.query;
+  const { from, to } = req.query;
+  const userId = req.user.id;
   const organizationId = req.organizationId;
 
-  // Base filter: events belonging to this organization AND (Global for org OR created by user)
-  let filter = { organizationId };
+  const start = from ? new Date(from) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const end = to ? new Date(to) : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
 
-  filter.$or = [
-    { isGlobal: true },
-    { createdBy: _id }
-  ];
-
-  if (month) {
-    const [year, m] = month.split('-').map(Number);
-    const startOfMonth = new Date(Date.UTC(year, m - 1, 1));
-    const endOfMonth = new Date(Date.UTC(year, m, 0, 23, 59, 59));
-
-    filter.startDate = { $lte: endOfMonth };
-    filter.endDate = { $gte: startOfMonth };
-  } else if (from || to) {
-    if (from) filter.startDate = { $gte: new Date(from) };
-    if (to) filter.endDate = { $lte: new Date(to) };
-  }
-
-  if (eventType) {
-    filter.eventType = eventType;
-  }
-
-  const events = await CalendarEvent.find(filter)
-    .populate('createdBy', 'name email')
-    .sort({ startDate: 1 })
-    .lean();
-
+  const isAdmin = req.user.isSuperAdmin || req.user.isOwner || (req.user.permissions?.['Settings']?.['General']?.['edit'] === true);
+  const events = await calendarService.getMergedEvents(userId, organizationId, start, end, isAdmin);
   ApiResponse.success(res, { data: events });
 }));
 
-router.post('/', asyncHandler(async (req, res) => {
-  // Non-admins can only create personal events — enforce isGlobal: false server-side
-  const payload = {
-    ...req.body,
-    createdBy: req.user._id,
-    organizationId: req.organizationId,
-    isGlobal: req.user.role === 'admin' ? (req.body.isGlobal ?? false) : false,
-  };
-  const event = await CalendarEvent.create(payload);
-  ApiResponse.created(res, { message: 'Event created', data: event });
+// ── GET integration status ───────────────────────────────────────────────────
+router.get('/integrations', asyncHandler(async (req, res) => {
+  const integrations = await prisma.calendarIntegration.findMany({
+    where: { userId: req.user.id }
+  });
+  ApiResponse.success(res, { data: integrations });
 }));
 
-router.put('/:id', asyncHandler(async (req, res) => {
-  const event = await CalendarEvent.findOne({ _id: req.params.id, organizationId: req.organizationId });
-  if (!event) return ApiResponse.notFound(res);
+// ── OAuth Initiation Endpoints ──────────────────────────────────────────────
+router.get('/connect/google', (req, res) => {
+  // Use the frontend URL for redirection so the settings tab can handle the code
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const redirectUri = `${clientUrl}/settings?tab=integrations&provider=google`;
 
-  // Only admin or the creator can update
-  if (req.user.role !== 'admin' && event.createdBy.toString() !== req.user._id.toString()) {
-    return ApiResponse.forbidden(res, { message: 'You do not have permission to update this event' });
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri
+  );
+
+  const url = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: [
+      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/userinfo.email'
+    ],
+    state: req.user.id
+  });
+
+  res.redirect(url);
+});
+
+router.get('/connect/outlook', (req, res) => {
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const redirectUri = `${clientUrl}/settings?tab=integrations&provider=outlook`;
+
+  const baseUrl = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize';
+  const params = new URLSearchParams({
+    client_id: process.env.MICROSOFT_CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: redirectUri,
+    response_mode: 'query',
+    scope: 'offline_access User.Read Calendars.Read',
+    state: req.user.id
+  });
+
+  res.redirect(`${baseUrl}?${params.toString()}`);
+});
+
+// ── OAuth Callback Handlers (Protected - Frontend usually redirects here) ───
+router.post('/callback/google', asyncHandler(async (req, res) => {
+  const { code } = req.body;
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const redirectUri = `${clientUrl}/settings?tab=integrations&provider=google`;
+
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri
+  );
+
+  const { tokens } = await oauth2Client.getToken(code);
+  
+  const integration = await prisma.calendarIntegration.upsert({
+    where: { 
+      userId_provider: { userId: req.user.id, provider: 'google' } 
+    },
+    create: {
+      userId: req.user.id,
+      organizationId: req.organizationId,
+      provider: 'google',
+      accessToken: encrypt(tokens.access_token),
+      refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined,
+      tokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+      status: 'CONNECTED'
+    },
+    update: {
+      accessToken: encrypt(tokens.access_token),
+      refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined,
+      tokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+      status: 'CONNECTED'
+    }
+  });
+
+  // Trigger initial sync
+  await calendarService.syncEvents(integration.id);
+
+  ApiResponse.success(res, { message: 'Google Calendar connected successfully', data: integration });
+}));
+
+router.post('/callback/outlook', asyncHandler(async (req, res) => {
+  const { code } = req.body;
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const redirectUri = `${clientUrl}/settings?tab=integrations&provider=outlook`;
+  
+  const params = new URLSearchParams();
+  params.append('client_id', process.env.MICROSOFT_CLIENT_ID);
+  params.append('client_secret', process.env.MICROSOFT_CLIENT_SECRET);
+  params.append('grant_type', 'authorization_code');
+  params.append('code', code);
+  params.append('redirect_uri', redirectUri);
+
+  const response = await axios.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', params);
+  const { access_token, refresh_token, expires_in } = response.data;
+
+  const integration = await prisma.calendarIntegration.upsert({
+    where: { 
+      userId_provider: { userId: req.user.id, provider: 'microsoft' } 
+    },
+    create: {
+      userId: req.user.id,
+      organizationId: req.organizationId,
+      provider: 'microsoft',
+      accessToken: encrypt(access_token),
+      refreshToken: refresh_token ? encrypt(refresh_token) : undefined,
+      tokenExpiry: new Date(Date.now() + expires_in * 1000),
+      status: 'CONNECTED'
+    },
+    update: {
+      accessToken: encrypt(access_token),
+      refreshToken: refresh_token ? encrypt(refresh_token) : undefined,
+      tokenExpiry: new Date(Date.now() + expires_in * 1000),
+      status: 'CONNECTED'
+    }
+  });
+
+  // Trigger initial sync
+  await calendarService.syncEvents(integration.id);
+
+  ApiResponse.success(res, { message: 'Outlook Calendar connected successfully', data: integration });
+}));
+
+// ── Disconnect Integration ───────────────────────────────────────────────────
+router.delete('/integrations/:provider', asyncHandler(async (req, res) => {
+  const { provider } = req.params;
+  
+  await prisma.$transaction([
+    prisma.calendarIntegration.delete({
+      where: { userId_provider: { userId: req.user.id, provider } }
+    }),
+    prisma.calendarEvent.deleteMany({
+      where: { userId: req.user.id, provider }
+    })
+  ]);
+
+  ApiResponse.success(res, { message: `${provider} Calendar disconnected` });
+}));
+
+// ── Manual Sync ──────────────────────────────────────────────────────────────
+router.post('/sync', asyncHandler(async (req, res) => {
+  const integrations = await prisma.calendarIntegration.findMany({
+    where: { userId: req.user.id, status: 'CONNECTED' }
+  });
+
+  for (const integration of integrations) {
+    await calendarService.syncEvents(integration.id).catch(err => {
+        logger.error(`Manual sync failed for ${integration.provider}: ${err.message}`);
+    });
   }
 
-  const updateData = { ...req.body };
-  // Non-admins cannot change isGlobal status
-  if (req.user.role !== 'admin') {
-    delete updateData.isGlobal;
+  ApiResponse.success(res, { message: 'Sync triggered successfully' });
+}));
+
+// ── Create Event ─────────────────────────────────────────────────────────────
+router.post('/', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
+  const { title, eventType, startDate, endDate, description, isGlobal } = req.body;
+  const organizationId = req.organizationId;
+  const userId = req.user.id;
+
+  let event;
+  if (eventType === 'holiday') {
+    event = await prisma.holiday.create({
+      data: {
+        name: title,
+        date: new Date(startDate),
+        organizationId,
+        isPublic: isGlobal ?? true
+      }
+    });
+  } else if (eventType === 'company_event') {
+    event = await prisma.companyEvent.create({
+      data: {
+        title,
+        description,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate || startDate),
+        organizationId
+      }
+    });
+  } else {
+    // Default to personal event
+    event = await prisma.calendarEvent.create({
+      data: {
+        title,
+        description,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate || startDate),
+        organizationId,
+        userId,
+        provider: 'internal'
+      }
+    });
   }
 
-  Object.assign(event, updateData);
-  await event.save();
+  ApiResponse.success(res, { message: 'Event created', data: event });
+}));
+
+// ── Update Event ─────────────────────────────────────────────────────────────
+router.put('/:id', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { title, eventType, startDate, endDate, description, isGlobal } = req.body;
+  const organizationId = req.organizationId;
+
+  let event;
+  // We try to update in each table since we don't know which one it is
+  // A better way would be to pass the type from frontend, but let's try this for now
+  try {
+    event = await prisma.holiday.update({
+      where: { id, organizationId },
+      data: {
+        name: title,
+        date: new Date(startDate),
+        isPublic: isGlobal ?? true
+      }
+    });
+  } catch (e) {
+    try {
+      event = await prisma.companyEvent.update({
+        where: { id, organizationId },
+        data: {
+          title,
+          description,
+          startDate: new Date(startDate),
+          endDate: new Date(endDate || startDate)
+        }
+      });
+    } catch (e2) {
+      event = await prisma.calendarEvent.update({
+        where: { id, organizationId, userId: req.user.id },
+        data: {
+          title,
+          description,
+          startDate: new Date(startDate),
+          endDate: new Date(endDate || startDate)
+        }
+      });
+    }
+  }
 
   ApiResponse.success(res, { message: 'Event updated', data: event });
 }));
 
-router.delete('/:id', asyncHandler(async (req, res) => {
-  const event = await CalendarEvent.findOne({ _id: req.params.id, organizationId: req.organizationId });
-  if (!event) return ApiResponse.notFound(res);
+// ── Delete Event ─────────────────────────────────────────────────────────────
+router.delete('/:id', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const organizationId = req.organizationId;
 
-  // Only admin or the creator can delete
-  if (req.user.role !== 'admin' && event.createdBy.toString() !== req.user._id.toString()) {
-    return ApiResponse.forbidden(res, { message: 'You do not have permission to delete this event' });
+  // Try to delete from each table
+  let deleted = false;
+  try {
+    await prisma.holiday.delete({ where: { id, organizationId } });
+    deleted = true;
+  } catch (e) {
+    try {
+      await prisma.companyEvent.delete({ where: { id, organizationId } });
+      deleted = true;
+    } catch (e2) {
+      try {
+        await prisma.calendarEvent.delete({ where: { id, organizationId, userId: req.user.id } });
+        deleted = true;
+      } catch (e3) {
+        // Not found in any table
+      }
+    }
   }
 
-  await event.deleteOne();
+  if (!deleted) {
+    return ApiResponse.error(res, 'Event not found', 404);
+  }
+
   ApiResponse.success(res, { message: 'Event deleted' });
 }));
 

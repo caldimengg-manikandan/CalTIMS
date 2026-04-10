@@ -1,19 +1,14 @@
 'use strict';
 
-const Subscription = require('../../modules/subscriptions/subscription.model');
-const User = require('../../modules/users/user.model');
+const { prisma } = require('../../config/database');
 const emailService = require('./email.service');
 const { ROLES } = require('../../constants');
 
 const subscriptionReminderService = {
-  /**
-   * Check all active trials and send reminder emails based on remaining days.
-   */
   async checkTrialReminders() {
     const now = new Date();
-    const activeTrials = await Subscription.find({
-      planType: 'TRIAL',
-      status: 'ACTIVE'
+    const activeTrials = await prisma.subscription.findMany({
+      where: { planType: 'TRIAL', status: 'ACTIVE' },
     });
 
     console.log(`[SubscriptionReminder] Checking ${activeTrials.length} active trials...`);
@@ -21,95 +16,50 @@ const subscriptionReminderService = {
     for (const subscription of activeTrials) {
       try {
         const trialEndDate = new Date(subscription.trialEndDate);
-        const diffTime = trialEndDate - now;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const diffDays = Math.ceil((trialEndDate - now) / (1000 * 60 * 60 * 24));
 
-        // Find the organization admin to notify
-        const admin = await User.findOne({ 
-          organizationId: subscription.organizationId, 
-          role: ROLES.ADMIN 
+        const admin = await prisma.user.findFirst({
+          where: { 
+            organizationId: subscription.organizationId, 
+            isOwner: true,
+            isActive: true 
+          },
         });
 
         if (!admin) {
-          console.warn(`[SubscriptionReminder] No admin found for organization ${subscription.organizationId}`);
+          console.warn(`[SubscriptionReminder] No admin found for org ${subscription.organizationId}`);
           continue;
         }
 
-        // 1. Expiration (0 or fewer days)
         if (diffDays <= 0 && !subscription.notifiedExpired) {
           await this.sendExpirationNotice(admin, subscription);
-          continue;
-        }
-
-        // 2. 3 Days Remaining (25th day)
-        if (diffDays === 3 && !subscription.notified3Days) {
+        } else if (diffDays === 3 && !subscription.notified3Days) {
           await this.sendReminder(admin, subscription, 3);
-          subscription.notified3Days = true;
-          await subscription.save();
-          continue;
-        }
-
-        // 3. 8 Days Remaining (20th day)
-        if (diffDays === 8 && !subscription.notified8Days) {
+          await prisma.subscription.update({ where: { id: subscription.id }, data: { notified3Days: true } });
+        } else if (diffDays === 8 && !subscription.notified8Days) {
           await this.sendReminder(admin, subscription, 8);
-          subscription.notified8Days = true;
-          await subscription.save();
-          continue;
+          await prisma.subscription.update({ where: { id: subscription.id }, data: { notified8Days: true } });
         }
-
       } catch (err) {
-        console.error(`[SubscriptionReminder] Error processing subscription ${subscription._id}:`, err.message);
+        console.error(`[SubscriptionReminder] Error processing subscription ${subscription.id}:`, err.message);
       }
     }
   },
 
-  /**
-   * Send a reminder email for upcoming trial expiration.
-   */
   async sendReminder(admin, subscription, daysLeft) {
     const title = `Your CALTIMS trial expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`;
-    const message = `
-      Hello ${admin.name},<br><br>
-      This is a friendly reminder that your free trial of CALTIMS will expire in <strong>${daysLeft} day${daysLeft > 1 ? 's' : ''}</strong>. 
-      To ensure uninterrupted access for your team, please choose a subscription plan.<br><br>
-      Don't worry, all your data will be saved!
-    `;
-
-    await emailService.sendNotificationEmail(admin.email, {
-      title,
-      message,
-      actionLink: `${process.env.CLIENT_URL}/settings?tab=subscription`,
-      actionLabel: 'Upgrade Now'
-    });
-
+    const message = `Hello ${admin.name},<br><br>Your free trial of CALTIMS will expire in <strong>${daysLeft} day${daysLeft > 1 ? 's' : ''}</strong>. Please upgrade to ensure uninterrupted access.`;
+    await emailService.sendNotificationEmail(admin.email, { title, message, actionLink: `${process.env.CLIENT_URL}/settings?tab=subscription`, actionLabel: 'Upgrade Now' });
     console.log(`[SubscriptionReminder] Sent ${daysLeft}-day reminder to ${admin.email}`);
   },
 
-  /**
-   * Send final expiration notice and update subscription status.
-   */
   async sendExpirationNotice(admin, subscription) {
     const title = 'Your CALTIMS trial has expired';
-    const message = `
-      Hello ${admin.name},<br><br>
-      Your 28-day trial of CALTIMS has expired. Your account access has been restricted.<br><br>
-      To regain access to your timesheets, reports, and team management, please upgrade to a paid plan. 
-      Your data is safe and will be available as soon as you upgrade.
-    `;
-
-    await emailService.sendNotificationEmail(admin.email, {
-      title,
-      message,
-      actionLink: `${process.env.CLIENT_URL}/settings?tab=subscription`,
-      actionLabel: 'Upgrade Now'
-    });
-
-    subscription.status = 'EXPIRED';
-    subscription.notifiedExpired = true;
-    await subscription.save();
-
-    console.log(`[SubscriptionReminder] Sent expiration notice to ${admin.email} and locked subscription.`);
-  }
+    const message = `Hello ${admin.name},<br><br>Your 28-day trial of CALTIMS has expired. Please upgrade to regain access.`;
+    await emailService.sendNotificationEmail(admin.email, { title, message, actionLink: `${process.env.CLIENT_URL}/settings?tab=subscription`, actionLabel: 'Upgrade Now' });
+    await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'EXPIRED', notifiedExpired: true } });
+    console.log(`[SubscriptionReminder] Sent expiration notice to ${admin.email}`);
+  },
 };
 
 module.exports = subscriptionReminderService;

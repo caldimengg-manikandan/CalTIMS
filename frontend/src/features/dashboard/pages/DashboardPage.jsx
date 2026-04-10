@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import React, { useState, useEffect, useMemo } from 'react'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Clock, CheckCircle, XCircle, AlertCircle, CalendarDays, Award, ChevronRight, ChevronLeft, Activity as LucideActivity, Bell, Megaphone, HelpCircle, FileText, Settings2, Lock, Briefcase, Filter, ChevronDown } from 'lucide-react'
 import { timesheetAPI, leaveAPI, announcementAPI, notificationAPI, projectAPI } from '@/services/endpoints'
 import { useAuthStore } from '@/store/authStore'
@@ -9,7 +9,7 @@ import { toast } from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import Spinner from '@/components/ui/Spinner'
 import Modal from '@/components/ui/Modal'
-import { format, startOfWeek, endOfWeek, isSameDay, addWeeks, subWeeks, addDays, setHours, setMinutes, isAfter, differenceInHours, differenceInMinutes, differenceInDays, setSeconds, setMilliseconds } from 'date-fns'
+import { format, formatDistanceToNow, startOfWeek, endOfWeek, isSameDay, addWeeks, subWeeks, addDays, setHours, setMinutes, isAfter, differenceInHours, differenceInMinutes, differenceInDays, setSeconds, setMilliseconds, startOfToday } from 'date-fns'
 import CalendarWidget from '@/features/dashboard/components/CalendarWidget'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -24,25 +24,35 @@ const fadeUp = {
 
 export default function DashboardPage() {
     const { user, isPro } = useAuthStore()
+    const queryClient = useQueryClient()
     const { general } = useSettingsStore()
-    const isAdmin = ['admin', 'manager'].includes(user?.role)
+    const userRole = (user?.role?.name || user?.role || '').toLowerCase()
+    const isAdmin = ['admin', 'manager', 'owner', 'super_admin'].includes(userRole)
     const navigate = useNavigate()
- 
+
 
     const today = new Date()
 
     const weekStartsOn = general?.weekStartDay?.toLowerCase() === 'sunday' ? 0 : 1
-    const [currentWeekStart, setCurrentWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn }))
+    // BUG 2: Use weekOffset for navigation
+    const [weekOffset, setWeekOffset] = useState(0)
 
-    // Reset week to current if the system week start setting changes
+    const startDate = useMemo(() => {
+        const todayAtMidnight = startOfToday();
+        const start = startOfWeek(todayAtMidnight, { weekStartsOn });
+        return addWeeks(start, weekOffset);
+    }, [weekOffset, weekStartsOn]);
+
+    const endDate = useMemo(() => endOfWeek(startDate, { weekStartsOn }), [startDate, weekStartsOn]);
+
+    // Keep currentWeekStart for backward compatibility
+    const currentWeekStart = startDate;
+    const currentWeekEnd = endDate;
+
+    // Reset week offset if user changes week settings (optional, but keep it stable)
     useEffect(() => {
-        const newStart = startOfWeek(new Date(), { weekStartsOn })
-        if (newStart.getTime() !== currentWeekStart.getTime()) {
-            setCurrentWeekStart(newStart)
-        }
-    }, [weekStartsOn, currentWeekStart])
-
-    const currentWeekEnd = endOfWeek(currentWeekStart, { weekStartsOn })
+        setWeekOffset(0)
+    }, [weekStartsOn])
 
     // State
     const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -94,12 +104,67 @@ export default function DashboardPage() {
         queryFn: () => announcementAPI.getAll({ limit: 10 }).then(r => r.data.data),
     })
 
-    const { data: notifications } = useQuery({
+    const { data: notifications = [] } = useQuery({
         queryKey: ['notifications', 'recent'],
-        queryFn: () => notificationAPI.getAll({ limit: 5 }).then(r => r.data.data.notifications || []),
+        queryFn: () => notificationAPI.getAll({ limit: 6 }).then(r => r.data.data.notifications || []),
+        enabled: !!user?.id
     })
 
-    if (summaryLoading) return (
+    const markReadMutation = useMutation({
+        mutationFn: (id) => notificationAPI.markRead(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['notifications'] })
+            queryClient.invalidateQueries({ queryKey: ['notif-unread-count'] })
+        }
+    })
+
+    const handleNotificationClick = (notif) => {
+        if (!notif.isRead) {
+            markReadMutation.mutate(notif.id)
+        }
+
+        const type = notif.type?.toUpperCase()
+        switch (type) {
+            case 'LEAVE_APPLIED':
+            case 'LEAVE_APPROVED':
+            case 'LEAVE_REJECTED':
+            case 'LEAVE_CANCELLED':
+                navigate('/leaves')
+                break
+            case 'TIMESHEET_SUBMITTED':
+                navigate('/timesheets/manage')
+                break
+            case 'TIMESHEET_APPROVED':
+            case 'TIMESHEET_REJECTED':
+                navigate('/timesheets/history')
+                break
+            case 'INCIDENT_CREATED':
+            case 'INCIDENT_UPDATED':
+            case 'INCIDENT_RESPONSE':
+            case 'INCIDENT_RESOLVED':
+                if (notif.refId) navigate(`/incidents/${notif.refId}`)
+                else navigate('/incidents')
+                break
+            case 'PROJECT_ALLOCATED':
+                navigate('/projects')
+                break
+            default:
+                if (notif.link) {
+                    let cleanLink = notif.link.replace(/^\/app/, '')
+                    if (cleanLink.startsWith('/timesheets/') && !cleanLink.includes('/history') && !cleanLink.includes('/manage')) {
+                        cleanLink = '/timesheets/manage'
+                    }
+                    if (cleanLink.startsWith('/leaves/') && !cleanLink.includes('/manage')) {
+                        cleanLink = '/leaves'
+                    }
+                    navigate(cleanLink)
+                }
+                break
+        }
+    }
+
+    // Initial loading state only (don't show full-page spinner on week navigation)
+    if (summaryLoading && !summaryData) return (
         <div className="flex justify-center items-center h-[70vh]"><Spinner size="lg" /></div>
     )
 
@@ -298,7 +363,7 @@ export default function DashboardPage() {
                                 >
                                     <option value="all">All Projects</option>
                                     {projects.map(p => (
-                                        <option key={p._id} value={p._id}>{p.name}</option>
+                                        <option key={p.id} value={p.id}>{p.name}</option>
                                     ))}
                                 </select>
                                 <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-primary-500 transition-colors" />
@@ -316,10 +381,16 @@ export default function DashboardPage() {
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className={clsx(
+                    "grid grid-cols-1 sm:grid-cols-2 gap-5",
+                    isAdmin ? "lg:grid-cols-5" : "lg:grid-cols-4"
+                )}>
+                    {/* Approved / Annual Leave */}
                     <div
                         onClick={() => isAdmin ? navigate('/timesheets/manage?status=Approved') : navigate('/leaves')}
-                        className="card p-5 group hover:border-emerald-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer"
+                        className="card p-5 group hover:border-emerald-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 dark:hover:shadow-black/50 transition-all duration-300 cursor-pointer active:scale-[0.98] relative z-10"
+                        role="button"
+                        tabIndex={0}
                     >
                         <div className="flex items-start justify-between">
                             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -333,9 +404,12 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
+                    {/* Pending Approval / Pending Sheets */}
                     <div
                         onClick={() => isAdmin ? navigate('/timesheets/manage?status=Submitted') : navigate('/timesheets/history')}
-                        className="card p-5 group hover:border-amber-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer"
+                        className="card p-5 group hover:border-amber-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 dark:hover:shadow-black/50 transition-all duration-300 cursor-pointer active:scale-[0.98] relative z-10"
+                        role="button"
+                        tabIndex={0}
                     >
                         <div className="flex items-start justify-between">
                             <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -349,37 +423,62 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
+                    {/* Rejected Card (Show for both, but different navigation) */}
                     <div
-                        onClick={(e) => {
-                            isAdmin ? navigate('/timesheets/compliance') : navigate('/timesheets')
-                        }}
-                        className={clsx(
-                            "card p-5 group hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer",
-                            isAdmin && !isPro() ? "opacity-60 grayscale cursor-not-allowed" : "hover:border-rose-500/30"
-                        )}
+                        onClick={() => isAdmin ? navigate('/timesheets/manage?status=Rejected') : navigate('/timesheets/history')}
+                        className="card p-5 group hover:border-rose-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 dark:hover:shadow-black/50 transition-all duration-300 cursor-pointer active:scale-[0.98] relative z-10"
+                        role="button"
+                        tabIndex={0}
                     >
                         <div className="flex items-start justify-between">
                             <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-110 transition-transform">
                                 <XCircle size={20} />
                             </div>
-                            <span className="text-2xl font-black text-slate-800 flex items-center gap-2">
-                                {isAdmin ? summaryData?.notSubmittedCount : summaryData?.rejectedTimesheets}
-                                {isAdmin && !isPro() && <Lock size={14} style={{ color: '#9333ea' }} />}
-                            </span>
+                            <span className="text-2xl font-black text-slate-800">{summaryData?.rejectedTimesheets || 0}</span>
                         </div>
                         <div className="mt-4">
-                            <h4 className="text-sm font-bold text-slate-700">{isAdmin ? 'Not Submitted' : 'Rejected'}</h4>
-                            <p className="text-xs text-slate-400 font-medium mt-1">{isAdmin ? 'Missing from staff' : 'Needs your correction'}</p>
+                            <h4 className="text-sm font-bold text-slate-700">Rejected</h4>
+                            <p className="text-xs text-slate-400 font-medium mt-1">{isAdmin ? 'Declined entries' : 'Needs your correction'}</p>
                         </div>
                     </div>
 
+                    {/* Not Submitted (Only for Admin) */}
+                    {isAdmin && (
+                        <div
+                            onClick={() => navigate('/timesheets/compliance')}
+                            className={clsx(
+                                "card p-5 group hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 dark:hover:shadow-black/50 transition-all duration-300 cursor-pointer active:scale-[0.98] relative z-10",
+                                !isPro() ? "opacity-60 grayscale cursor-not-allowed" : "hover:border-purple-500/30"
+                            )}
+                            role="button"
+                            tabIndex={0}
+                        >
+                            <div className="flex items-start justify-between">
+                                <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <Clock size={20} />
+                                </div>
+                                <span className="text-2xl font-black text-slate-800 flex items-center gap-2">
+                                    {summaryData?.notSubmittedCount || 0}
+                                    {!isPro() && <Lock size={14} style={{ color: '#9333ea' }} />}
+                                </span>
+                            </div>
+                            <div className="mt-4">
+                                <h4 className="text-sm font-bold text-slate-700">Not Submitted</h4>
+                                <p className="text-xs text-slate-400 font-medium mt-1">Missing from staff</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Active Staff (Admin) / Casual Leave (Employee) */}
                     <div
                         onClick={() => isAdmin ? navigate('/employees') : navigate('/leaves')}
-                        className="card p-5 group hover:border-primary-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer"
+                        className="card p-5 group hover:border-primary-500/30 hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-200/50 dark:hover:shadow-black/50 transition-all duration-300 cursor-pointer active:scale-[0.98] relative z-10"
+                        role="button"
+                        tabIndex={0}
                     >
                         <div className="flex items-start justify-between">
                             <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <CalendarDays size={20} />
+                                {isAdmin ? <Briefcase size={20} /> : <CalendarDays size={20} />}
                             </div>
                             <span className="text-2xl font-black text-slate-800">{isAdmin ? summaryData?.totalEmployees : (leaveBalance?.casual || 0)}</span>
                         </div>
@@ -402,54 +501,98 @@ export default function DashboardPage() {
                     {/* Weekly Productivity Chart */}
                     {prefs.chart && (
                         <div id="tour-productivity-chart" className="card p-6 flex flex-col h-96">
-                            <div className="flex items-center justify-between xl:justify-start gap-4 mb-6">
+                            {/* BUG 3: Header Alignment with Grid 1fr auto 1fr */}
+                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-6 mb-8 px-1">
                                 <div>
-                                    <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                                    <h3 className="text-base md:text-lg font-black text-slate-800 flex items-center gap-2">
                                         <LucideActivity size={18} className="text-primary-500" /> Hourly Productivity
                                     </h3>
-                                    <p className="text-xs font-bold text-slate-400 mt-1">Logged hours this week</p>
+                                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                                        {isAdmin ? 'Organization Performance' : 'Individual Performance'}
+                                    </p>
                                 </div>
 
-                                <div className="mx-auto flex items-center gap-4 py-1 px-4 bg-slate-100 rounded-xl shadow-inner border border-slate-200/50">
-                                    <button
-                                        onClick={() => setCurrentWeekStart(prev => subWeeks(prev, 1))}
-                                        className="p-1.5 hover:bg-white rounded-lg transition-colors text-slate-500 hover:text-primary-600"
-                                    >
-                                        <ChevronLeft size={16} />
-                                    </button>
-                                    <div className="flex items-center gap-2 text-xs font-black text-slate-700 whitespace-nowrap uppercase tracking-wider">
-                                        <CalendarDays size={14} className="text-primary-500" />
-                                        {format(currentWeekStart, 'MMM d')} - {format(currentWeekEnd, 'MMM d, yyyy')}
+                                <div className="flex items-center gap-2">
+                                    <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-1 shadow-sm">
+                                        <button
+                                            onClick={() => setWeekOffset(prev => prev - 1)}
+                                            className="p-2 hover:bg-white dark:hover:bg-white/10 rounded-lg transition-all text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                                        >
+                                            <ChevronLeft size={16} />
+                                        </button>
+                                        <div className="flex items-center gap-2 px-3 min-w-[200px] justify-center">
+                                            <CalendarDays size={14} className="text-primary-400" />
+                                            <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest leading-none">
+                                                {format(startDate, 'MMM d')} - {format(endDate, 'MMM d, yyyy')}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => setWeekOffset(prev => prev + 1)}
+                                            disabled={weekOffset >= 0}
+                                            className="p-2 hover:bg-white dark:hover:bg-white/10 rounded-lg transition-all text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-10 disabled:cursor-not-allowed"
+                                        >
+                                            <ChevronRight size={16} />
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => setCurrentWeekStart(prev => addWeeks(prev, 1))}
-                                        disabled={startOfWeek(addWeeks(currentWeekStart, 1), { weekStartsOn }) > startOfWeek(new Date(), { weekStartsOn })}
-                                        className={`p-1.5 rounded-lg transition-colors ${startOfWeek(addWeeks(currentWeekStart, 1), { weekStartsOn }) > startOfWeek(new Date(), { weekStartsOn }) ? 'text-slate-300 opacity-50 cursor-not-allowed' : 'text-slate-500 hover:text-primary-600 hover:bg-white'}`}
-                                    >
-                                        <ChevronRight size={16} />
-                                    </button>
                                 </div>
 
                                 <div className="text-right">
-                                    <p className="text-2xl font-black text-slate-800">{(loggedHoursThisWeek || 0).toFixed(2)}h</p>
-                                    <p className="text-[10px] font-black uppercase text-slate-400">Total Week</p>
+                                    <div className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-1.5 justify-end">
+                                        {Number(loggedHoursThisWeek).toFixed(2)}<span className="text-xs font-bold text-slate-400 uppercase tracking-tighter">h</span>
+                                    </div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isAdmin ? 'ORGANIZATION TOTAL' : 'TOTAL THIS WEEK'}</p>
                                 </div>
                             </div>
 
                             <div className="flex-1 w-full min-h-0">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <BarChart
+                                        data={chartData}
+                                        margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                                        onClick={(state) => {
+                                            if (state && state.activeLabel) {
+                                                const day = state.activeLabel;
+                                                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                                                const dayIdx = days.indexOf(day);
+                                                const targetDate = addDays(currentWeekStart, (dayIdx - weekStartsOn + 7) % 7);
+
+                                                if (isAdmin) {
+                                                    const startOfWeekStr = format(startOfWeek(targetDate, { weekStartsOn }), 'yyyy-MM-dd');
+                                                    navigate(`/timesheets/manage?week=${startOfWeekStr}`);
+                                                } else {
+                                                    navigate(`/timesheets?date=${format(targetDate, 'yyyy-MM-dd')}`);
+                                                }
+                                            }
+                                        }}
+                                    >
                                         <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 700 }} dy={10} />
                                         <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 700 }} />
                                         <RechartsTooltip
-                                            cursor={{ fill: '#f1f5f9' }}
-                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                            cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                            contentStyle={{
+                                                borderRadius: '12px',
+                                                border: 'none',
+                                                boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
+                                                backgroundColor: '#111827',
+                                                color: '#fff'
+                                            }}
+                                            itemStyle={{ color: '#fff' }}
+                                            labelStyle={{ color: '#94a3b8' }}
                                             formatter={(value) => [`${Number(value).toFixed(2)}h`, 'Hours']}
                                         />
-                                        <Bar dataKey="hours" radius={[6, 6, 6, 6]} barSize={40}>
-                                            {chartData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.hours >= workingHoursPerDay ? '#10b981' : entry.hours > 0 ? '#6366f1' : '#e2e8f0'} />
-                                            ))}
+                                        <Bar
+                                            dataKey="hours"
+                                            radius={[6, 6, 6, 6]}
+                                            barSize={40}
+                                            className="cursor-pointer transition-all hover:opacity-80 active:scale-95"
+                                        >
+                                            {chartData.map((entry, index) => {
+                                                const h = Number(entry.hours) || 0
+                                                const color = isAdmin
+                                                    ? (h > 0 ? '#6366f1' : '#f1f5f9')
+                                                    : (h >= workingHoursPerDay ? '#10b981' : h > 0 ? '#6366f1' : '#f1f5f9')
+                                                return <Cell key={`cell-${index}`} fill={color} />
+                                            })}
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
@@ -461,62 +604,113 @@ export default function DashboardPage() {
                     {prefs.projects && (() => {
                         // Merge all projects with their hours from summaryData
                         const hourMap = {}
+                        const cumulativeMap = {}
                         summaryData?.projectTotals?.forEach(p => {
-                            if (p.projectId) hourMap[p.projectId] = p.totalHours || 0
+                            if (p.projectId) {
+                                hourMap[p.projectId] = p.totalHours || 0
+                                cumulativeMap[p.projectId] = p.cumulativeHours || 0
+                            }
                         })
-                        const allProjectRows = projects.map(p => ({
-                            _id: p._id,
-                            name: p.name,
-                            hours: hourMap[p._id] || 0,
-                            budgetHours: p.budgetHours || 0,
-                        })).sort((a, b) => b.hours - a.hours)
 
-                        const maxH = allProjectRows[0]?.hours || 1
-                        const pinned = allProjectRows.slice(0, 4)
-                        const rest = allProjectRows.slice(4)
+                        // Map existing project definitions
+                        // BUG 1: Frontend Defensive Filter for Project Defs
+                        const projectDefs = (projects || []).filter(p => (p.type === 'project' || !p.type) && !p.isSystemType);
+
+                        const rows = projectDefs.map(p => ({
+                            id: p.id,
+                            name: p.name,
+                            hours: hourMap[p.id] || 0,
+                            cumulativeHours: cumulativeMap[p.id] || 0,
+                            budgetHours: p.budgetHours || 0,
+                        }))
+
+                        // BUG 1: Also filter summaryData?.projectTotals defensively
+                        summaryData?.projectTotals?.forEach(pt => {
+                            const pid = pt.projectId;
+                            const isLeave = pid === 'LEAVE-SYS' || pt.projectName?.toLowerCase() === 'leave';
+
+                            if (!isLeave && !rows.find(r => r.id === pid) && pt.totalHours > 0) {
+                                rows.push({
+                                    id: pid,
+                                    name: pt.projectName || pt.name || 'System / Other',
+                                    hours: pt.totalHours || 0,
+                                    cumulativeHours: pt.cumulativeHours || 0,
+                                    budgetHours: pt.budgetHours || 0
+                                })
+                            }
+                        })
+
+                        const allProjectRows = rows.sort((a, b) => b.hours - a.hours)
+
+                        const maxH = Math.max(1, ...allProjectRows.map(r => r.hours))
+                        const pinned = allProjectRows.slice(0, 5)
+                        const rest = allProjectRows.slice(5)
 
                         const ProjectRow = ({ p }) => {
-                            const pct = p.budgetHours > 0 
-                                ? Math.min(100, (p.hours / p.budgetHours) * 100)
+                            const hoursToUse = p.cumulativeHours || p.hours || 0
+                            const pct = p.budgetHours > 0
+                                ? Math.min(100, (hoursToUse / p.budgetHours) * 100)
                                 : (p.hours / maxH) * 100
-                            const isSelected = selectedProjectId === p._id
-                            const isOverBudget = p.budgetHours > 0 && p.hours > p.budgetHours
+                            const isSelected = selectedProjectId === p.id
+                            const isOverBudget = p.budgetHours > 0 && hoursToUse > p.budgetHours
 
                             return (
                                 <div
-                                    key={p._id}
-                                    className={`group cursor-pointer px-3 py-2 rounded-xl transition-all ${isSelected ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
-                                    onClick={() => setSelectedProjectId(isSelected ? 'all' : p._id)}
+                                    key={p.id}
+                                    className={`group cursor-pointer px-3 py-2.5 rounded-xl transition-all border border-transparent ${isSelected ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-100 dark:border-primary-800/50' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
+                                    onClick={() => {
+                                        // On mobile/tablet, single click selects. On desktop, we can provide a Go button or similar.
+                                        // For simplicity, let's make it toggle filter, but add a small 'Go' icon.
+                                        setSelectedProjectId(isSelected ? 'all' : p.id)
+                                    }}
                                 >
-                                    <div className="flex justify-between items-end mb-1.5">
+                                    <div className="flex justify-between items-start mb-2">
                                         <div className="flex flex-col min-w-0">
-                                            <span className={`text-sm font-bold transition-colors truncate ${isSelected ? 'text-primary-600' : 'text-slate-700 group-hover:text-primary-600'}`}>
-                                                {p.name}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-sm font-bold transition-colors truncate ${isSelected ? 'text-primary-600' : 'text-slate-700 dark:text-slate-300 group-hover:text-primary-600'}`}>
+                                                    {p.name}
+                                                </span>
+                                                {isSelected && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            navigate(`/timesheets?projectId=${p.id}`)
+                                                        }}
+                                                        className="p-1 rounded-md bg-primary-100 text-primary-600 hover:bg-primary-600 hover:text-white transition-colors"
+                                                        title="Log hours for this project"
+                                                    >
+                                                        <ChevronRight size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
                                             {p.budgetHours > 0 && (
                                                 <div className="flex items-center gap-2 mt-0.5">
                                                     <span className={`text-[10px] font-black uppercase tracking-tight ${isOverBudget ? 'text-rose-500' : 'text-slate-400'}`}>
-                                                        {Math.round((p.hours / p.budgetHours) * 100)}% Used
+                                                        {Math.round(pct)}% Total Budget Used
                                                     </span>
-                                                    <span className="text-[10px] text-slate-300">•</span>
-                                                    <span className="text-[10px] font-medium text-slate-400">Budget: {p.budgetHours}h</span>
                                                 </div>
                                             )}
                                         </div>
                                         <div className="text-right shrink-0 ml-2">
-                                            <span className={`text-sm font-black ${isSelected ? 'text-primary-700' : 'text-slate-800 dark:text-white'}`}>
-                                                {(p.hours || 0).toFixed(1)}<span className="text-[10px] font-bold opacity-40 ml-0.5">h</span>
-                                            </span>
+                                            <div className="flex flex-col">
+                                                <span className={`text-sm font-black ${isSelected ? 'text-primary-700' : 'text-slate-800 dark:text-white'}`}>
+                                                    {(p.hours || 0).toFixed(1)}<span className="text-[10px] font-bold opacity-40 ml-0.5">h this week</span>
+                                                </span>
+                                                {p.cumulativeHours > p.hours && (
+                                                    <span className="text-[9px] font-bold text-slate-400">{(p.cumulativeHours).toFixed(1)}h total</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full rounded-full transition-all ${
-                                                isOverBudget ? 'bg-rose-500' :
-                                                isSelected ? 'bg-primary-500' : 
-                                                'bg-gradient-to-r from-primary-400 to-primary-600'
-                                            }`}
-                                            style={{ width: `${pct}%` }}
+                                        <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${pct}%` }}
+                                            transition={{ duration: 0.8, ease: "easeOut" }}
+                                            className={`h-full rounded-full transition-all ${isOverBudget ? 'bg-rose-500' :
+                                                    isSelected ? 'bg-primary-500' :
+                                                        'bg-gradient-to-r from-primary-400 to-primary-600'
+                                                }`}
                                         />
                                     </div>
                                 </div>
@@ -553,13 +747,13 @@ export default function DashboardPage() {
                                     <>
                                         {/* Pinned first 4 - always visible */}
                                         <div className="space-y-1">
-                                            {pinned.map(p => <ProjectRow key={p._id} p={p} />)}
+                                            {pinned.map(p => <ProjectRow key={p.id} p={p} />)}
                                         </div>
 
                                         {/* Remaining projects in scrollable area */}
                                         {rest.length > 0 && (
                                             <div className="mt-2 max-h-[160px] overflow-y-auto space-y-1 custom-scrollbar border-t border-slate-100 dark:border-slate-700 pt-2">
-                                                {rest.map(p => <ProjectRow key={p._id} p={p} />)}
+                                                {rest.map(p => <ProjectRow key={p.id} p={p} />)}
                                             </div>
                                         )}
                                     </>
@@ -601,21 +795,21 @@ export default function DashboardPage() {
                         <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={() => navigate('/timesheets')}
-                                className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-primary-200 transition-all group"
+                                className="flex flex-col items-center justify-center p-4 bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm hover:shadow-md hover:border-primary-200 dark:hover:border-primary-500/50 transition-all group"
                             >
-                                <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                <div className="w-10 h-10 rounded-full bg-primary-50 dark:bg-primary-500/10 text-primary-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                                     <Clock size={20} />
                                 </div>
-                                <span className="text-xs font-bold text-slate-600 text-center">Log Time</span>
+                                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 text-center">Log Time</span>
                             </button>
                             <button
                                 onClick={() => navigate('/leaves')}
-                                className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-primary-200 transition-all group"
+                                className="flex flex-col items-center justify-center p-4 bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm hover:shadow-md hover:border-primary-200 dark:hover:border-primary-500/50 transition-all group"
                             >
-                                <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                <div className="w-10 h-10 rounded-full bg-primary-50 dark:bg-primary-500/10 text-primary-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                                     <FileText size={20} />
                                 </div>
-                                <span className="text-xs font-bold text-slate-600 text-center">Leaves</span>
+                                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 text-center">Leaves</span>
                             </button>
                         </div>
                     )}
@@ -643,12 +837,19 @@ export default function DashboardPage() {
                                         .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
                                         .map(ann => (
                                             <div
-                                                key={ann._id}
-                                                className="p-3 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors"
+                                                key={ann.id}
+                                                className="p-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl cursor-pointer transition-colors group"
                                                 onClick={() => isAdmin ? navigate('/announcements') : null}
                                             >
-                                                <p className="text-xs font-bold text-slate-800 mb-1">{ann.title}</p>
-                                                <p className="text-[10px] text-slate-500 font-medium leading-relaxed line-clamp-2">{ann.content}</p>
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <p className="text-xs font-black text-slate-800 dark:text-slate-200 truncate uppercase tracking-tight">{ann.title}</p>
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 group-hover:scale-125 transition-transform" />
+                                                </div>
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed line-clamp-2 mb-2">{ann.content}</p>
+                                                <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                                    <span>By {ann.author?.name?.split(' ')[0] || 'Admin'}</span>
+                                                    <span>{format(new Date(ann.createdAt), 'MMM d')}</span>
+                                                </div>
                                             </div>
                                         ))
                                 ) : (
@@ -676,31 +877,49 @@ export default function DashboardPage() {
                 >
                     <div className="flex items-center justify-between mb-8">
                         <div>
-                            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                            <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
                                 <LucideActivity size={20} className="text-primary-500" /> Recent Activity
                             </h3>
-                            <p className="text-xs font-bold text-slate-400 mt-1">Latest system-wide events and updates</p>
+                            <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Latest system-wide events and updates</p>
                         </div>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {notifications?.length ? (
                             notifications.map((notif, index) => (
-                                <div key={notif._id} className="flex gap-4 p-4 rounded-2xl bg-slate-50/50 hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100 group">
-                                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center flex-shrink-0 text-slate-400 group-hover:text-primary-500 transition-colors">
-                                        <LucideActivity size={16} />
+                                <div 
+                                    key={notif.id} 
+                                    onClick={() => handleNotificationClick(notif)}
+                                    className={`flex gap-4 p-4 rounded-2xl border transition-all group cursor-pointer ${
+                                        !notif.isRead 
+                                        ? 'bg-primary-50/30 dark:bg-primary-900/10 border-primary-100 dark:border-primary-900/50' 
+                                        : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800'
+                                    } hover:border-primary-500/30 hover:shadow-lg`}
+                                >
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform ${
+                                        !notif.isRead ? 'bg-primary-500 text-white' : 'bg-primary-50 dark:bg-primary-900/20 text-primary-500'
+                                    }`}>
+                                        <Bell size={18} />
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-bold text-slate-800 mb-0.5">{notif.title}</p>
-                                        <p className="text-xs text-slate-500 font-medium">{notif.message}</p>
-                                    </div>
-                                    <div className="text-[10px] items-center text-slate-400 font-bold uppercase hidden sm:flex">
-                                        {format(new Date(notif.createdAt), 'MMM d, h:mm a')}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                                            <p className={`text-sm font-bold truncate ${!notif.isRead ? 'text-slate-900 dark:text-white' : 'text-slate-800 dark:text-slate-200'}`}>
+                                                {notif.title}
+                                            </p>
+                                            {!notif.isRead && <span className="w-2 h-2 rounded-full bg-primary-500 shrink-0" />}
+                                        </div>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium line-clamp-2">{notif.message}</p>
+                                        <div className="mt-2 text-[10px] text-slate-400 font-black uppercase tracking-tighter">
+                                            {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                                        </div>
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <p className="text-center py-6 text-sm text-slate-400 font-bold bg-slate-50 rounded-2xl border border-dashed border-slate-200">No recent system activity detected.</p>
+                            <div className="col-span-full py-12 text-center bg-slate-50 dark:bg-white/5 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
+                                <Bell size={32} className="mx-auto text-slate-300 dark:text-slate-700 mb-3" />
+                                <p className="text-sm text-slate-400 font-bold">No recent system activity detected.</p>
+                            </div>
                         )}
                     </div>
                 </motion.section>
@@ -717,7 +936,7 @@ export default function DashboardPage() {
                         { key: 'projects', label: 'Top Active Projects' },
                         { key: 'announcements', label: 'Announcements Hub' },
                         { key: 'calendar', label: 'Calendar Widget' },
-                        // { key: 'feed', label: 'Recent Activity Feed' },
+                        { key: 'feed', label: 'Recent Activity Feed' },
                     ].map(widget => (
                         <div key={widget.key} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50">
                             <span className="text-sm font-bold text-slate-700">{widget.label}</span>

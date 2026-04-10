@@ -1,4 +1,5 @@
 import api from './api'
+import { useAuthStore } from '@/store/authStore'
 
 export const authAPI = {
   login: (data) => api.post('/auth/login', data, { skipToast: true }),
@@ -22,6 +23,7 @@ export const userAPI = {
   activate: (id) => api.patch(`/users/${id}/activate`),
   changeRole: (id, role) => api.patch(`/users/${id}/role`, { role }),
   getDepartments: () => api.get('/users/departments'),
+  getRoles: () => api.get('/users/roles'),
   delete: (id) => api.delete(`/users/${id}`),
 }
 
@@ -90,6 +92,17 @@ export const calendarAPI = {
   create: (data) => api.post('/calendar', data),
   update: (id, data) => api.put(`/calendar/${id}`, data),
   delete: (id) => api.delete(`/calendar/${id}`),
+  // Integrations
+  getIntegrations: () => api.get('/calendar/integrations'),
+  connectProvider: (provider) => {
+    const token = useAuthStore.getState().accessToken;
+    // This will redirect, so we handle it slightly differently in UI
+    window.location.href = `${api.defaults.baseURL}/calendar/connect/${provider}?token=${token}`;
+  },
+  callbackGoogle: (code) => api.post('/calendar/callback/google', { code }),
+  callbackOutlook: (code) => api.post('/calendar/callback/outlook', { code }),
+  disconnectProvider: (provider) => api.delete(`/calendar/integrations/${provider}`),
+  sync: () => api.post('/calendar/sync'),
 }
 
 export const reportAPI = {
@@ -103,6 +116,7 @@ export const reportAPI = {
   getDepartmentSummary: (params) => api.get('/reports/department-summary', { params }),
   getComplianceSummary: (params) => api.get('/reports/compliance-summary', { params }),
   getSmartInsights: (params) => api.get('/reports/smart-insights', { params }),
+  getFilterOptions: () => api.get('/reports/filter-options'),
   exportPDF: (params) => api.get('/reports/pdf-export', { params, responseType: 'blob' }),
   exportCSV: (params) => api.get('/reports/csv-export', { params, responseType: 'blob' }),
 }
@@ -183,6 +197,7 @@ export const payrollAPI = {
   getProfiles: () => api.get('/payroll/profiles'),
   getProfile: (userId) => api.get(`/payroll/profiles/${userId}`),
   updateProfile: (data) => api.post('/payroll/profiles', data),
+  setupFullProfile: (data) => api.post('/payroll/setup-profile', data),
   deleteProfile: (id) => api.delete(`/payroll/profiles/${id}`),
   toggleStructureStatus: (id) => api.patch(`/payroll/role-structures/${id}/toggle`),
   deleteStructure: (id) => api.delete(`/payroll/role-structures/${id}`),
@@ -192,6 +207,10 @@ export const payrollAPI = {
   run: (data) => api.post('/payroll/run', data),
   markPaid: (data) => api.post('/payroll/mark-paid', data),
   getHistory: (params) => api.get('/payroll/history', { params }),
+  generatePayslips: (data) => api.post('/payroll/payslips/generate', data),
+  getGeneratedPayslips: (params) => api.get('/payroll/payslips/generated', { params }),
+  markPayslipAsPaid: (id) => api.post(`/payroll/payslips/${id}/mark-paid`),
+  bulkMarkPayslipsAsPaid: (ids) => api.post('/payroll/payslips/bulk-mark-paid', { ids }),
   getMyPayslips: (params) => api.get('/payroll/payslips/my', { params }),
   getPayslip: (id) => api.get(`/payroll/payslips/${id}`),
   downloadPayslip: (id) => api.get(`/payroll/payslip/${id}/download`, { responseType: 'blob' }),
@@ -202,6 +221,9 @@ export const payrollAPI = {
   getDepartmentAnalysis: (params) => api.get('/payroll/reports/department-analysis', { params }),
   getDashboard: (params) => api.get('/payroll/dashboard', { params }),
   getAnalytics: (params) => api.get('/payroll/analytics', { params }),
+
+  getReadiness: (params) => api.get('/payroll/readiness', { params }),
+  getPreview: (params) => api.get('/payroll/preview', { params }),
   getBatches: () => api.get('/payroll/batches'),
 }
 

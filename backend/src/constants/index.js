@@ -2,6 +2,7 @@
 
 const ROLES = Object.freeze({
   SUPER_ADMIN: 'super_admin',
+  OWNER: 'owner',
   ADMIN: 'admin',
   MANAGER: 'manager',
   EMPLOYEE: 'employee',
@@ -11,19 +12,19 @@ const ROLES = Object.freeze({
 });
 
 const TIMESHEET_STATUS = Object.freeze({
-  DRAFT: 'draft',
-  SUBMITTED: 'submitted',
-  APPROVED: 'approved',
-  REJECTED: 'rejected',
-  FROZEN: 'frozen',
-  ADMIN_FILLED: 'admin_filled',
+  DRAFT: 'DRAFT',
+  SUBMITTED: 'SUBMITTED',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  FROZEN: 'FROZEN',
+  ADMIN_FILLED: 'ADMIN_FILLED',
 });
 
 const LEAVE_STATUS = Object.freeze({
-  PENDING: 'pending',
-  APPROVED: 'approved',
-  REJECTED: 'rejected',
-  CANCELLED: 'cancelled',
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED',
 });
 
 const LEAVE_TYPES = Object.freeze({
@@ -72,6 +73,8 @@ const PAGINATION = Object.freeze({
   MAX_LIMIT: 5000,
 });
 
+const { ROLE_PERMISSIONS } = require('./rolePermissions');
+
 module.exports = {
   ROLES,
   TIMESHEET_STATUS,
@@ -82,4 +85,5 @@ module.exports = {
   CALENDAR_EVENT_TYPES,
   HTTP_STATUS,
   PAGINATION,
+  ROLE_PERMISSIONS,
 };

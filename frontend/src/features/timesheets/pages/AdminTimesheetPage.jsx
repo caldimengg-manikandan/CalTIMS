@@ -1,5 +1,6 @@
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { timesheetAPI, projectAPI, userAPI } from '@/services/endpoints'
 import StatusBadge from '@/components/ui/StatusBadge'
 import Spinner from '@/components/ui/Spinner'
@@ -126,16 +127,39 @@ export default function AdminTimesheetPage() {
     const [viewingTs, setViewingTs] = React.useState(null)
     const [rejectTarget, setRejectTarget] = React.useState(null)
 
+    const [searchParams, setSearchParams] = useSearchParams()
+    const urlStatus = searchParams.get('status')
+    const urlUserId = searchParams.get('userId')
+    const urlProjectId = searchParams.get('projectId')
+    const urlWeek = searchParams.get('week')
+    const urlEmployeeId = searchParams.get('employeeId')
+
     const [filters, setFilters] = React.useState({
-        employeeId: '',
-        userId: '',
-        status: '',
-        projectId: '',
+        employeeId: urlEmployeeId || '',
+        userId: urlUserId || '',
+        status: urlStatus || '',
+        projectId: urlProjectId || '',
         year: '',
-        week: '',
+        week: urlWeek || '',
         page: 1,
         limit: 10
     })
+
+    // Update filters if URL params change
+    React.useEffect(() => {
+        if (urlStatus || urlUserId || urlProjectId || urlWeek || urlEmployeeId) {
+            setFilters(prev => ({
+                ...prev,
+                status: urlStatus || prev.status,
+                userId: urlUserId || prev.userId,
+                projectId: urlProjectId || prev.projectId,
+                week: urlWeek || prev.week,
+                employeeId: urlEmployeeId || prev.employeeId,
+                page: 1
+            }))
+        }
+    }, [urlStatus, urlUserId, urlProjectId, urlWeek, urlEmployeeId])
+
     const [tempFilters, setTempFilters] = React.useState(filters)
 
     /* ── Queries ── */
@@ -170,13 +194,22 @@ export default function AdminTimesheetPage() {
     /* ── Mutations ── */
     const { mutate: approve, isPending: isApproving } = useMutation({
         mutationFn: (id) => timesheetAPI.approve(id),
-        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['timesheets'] }); toast.success('Timesheet approved!') },
+        onSuccess: () => { 
+            queryClient.invalidateQueries({ queryKey: ['timesheets', 'admin-list'] }); 
+            queryClient.invalidateQueries({ queryKey: ['timesheets', 'admin-stats'] });
+            toast.success('Timesheet approved!') 
+        },
         onError: () => toast.error('Failed to approve timesheet'),
     })
 
     const { mutate: reject, isPending: isRejecting } = useMutation({
         mutationFn: ({ id, reason }) => timesheetAPI.reject(id, reason),
-        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['timesheets'] }); toast.success('Timesheet rejected'); setRejectTarget(null) },
+        onSuccess: () => { 
+            queryClient.invalidateQueries({ queryKey: ['timesheets', 'admin-list'] }); 
+            queryClient.invalidateQueries({ queryKey: ['timesheets', 'admin-stats'] });
+            toast.success('Timesheet rejected'); 
+            setRejectTarget(null) 
+        },
         onError: () => toast.error('Failed to reject timesheet'),
     })
     const { mutate: submitOverride } = useMutation({
@@ -360,7 +393,7 @@ export default function AdminTimesheetPage() {
                                                 >
                                                     <option value="">All Employees</option>
                                                     {employees?.map(emp => (
-                                                        <option key={emp._id} value={emp._id}>
+                                                        <option key={emp.id || emp._id} value={emp.id || emp._id}>
                                                             {emp.employeeId} — {emp.name}
                                                         </option>
                                                     ))}
@@ -377,7 +410,7 @@ export default function AdminTimesheetPage() {
                                                 >
                                                     <option value="">All Projects</option>
                                                     {projects?.map(p => (
-                                                        <option key={p._id} value={p._id}>{p.name}</option>
+                                                        <option key={p.id || p._id} value={p.id || p._id}>{p.name}</option>
                                                     ))}
                                                 </select>
                                             </div>
@@ -459,7 +492,7 @@ export default function AdminTimesheetPage() {
 
             {/* Table */}
             <div className="card p-0 flex flex-col overflow-hidden min-h-0">
-                {isLoading ? (
+                {isLoading && !listData?.data?.length ? (
                     <div className="py-20 flex justify-center"><Spinner size="lg" /></div>
                 ) : (
                     <div className="table-wrapper max-h-[800px] lg:max-h-[calc(100vh-450px)] overflow-y-auto rounded-none border-0 shadow-none">
@@ -488,9 +521,9 @@ export default function AdminTimesheetPage() {
                                 ) : listData?.data?.length > 0 ? (
                                     listData.data.map((ts) => {
                                         const projectsText = ts.rows?.map(r => r.projectId?.name).filter(Boolean).join(', ') || '—'
-                                        const userId = ts.userId?._id || ts.userId
+                                        const userId = ts.userId?.id || ts.userId?._id || ts.userId
                                         return (
-                                            <tr key={ts._id}>
+                                            <tr key={ts.id || ts._id}>
                                                 <td>
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center text-white font-bold text-xs shrink-0">
@@ -523,7 +556,12 @@ export default function AdminTimesheetPage() {
                                                     </span>
                                                 </td>
                                                 <td className="text-center">
-                                                    <StatusBadge status={ts.status === 'submitted' ? 'pending' : ts.status} />
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <StatusBadge status={ts.status?.toLowerCase() === 'submitted' ? 'pending' : ts.status?.toLowerCase()} />
+                                                        {ts.approvedBy?.name && (
+                                                            <span className="text-[10px] text-slate-400">by {ts.approvedBy.name.split(' ')[0]}</span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="text-right">
                                                     <div className="flex justify-end items-center gap-1">
@@ -536,7 +574,7 @@ export default function AdminTimesheetPage() {
                                                             <Eye size={16} />
                                                         </button>
                                                         {/* Reject / Approve */}
-                                                        {ts.status === 'submitted' && (
+                                                        {ts.status?.toLowerCase() === 'submitted' && (
                                                             <>
                                                                 <button
                                                                     onClick={() => setRejectTarget(ts)}
@@ -547,7 +585,7 @@ export default function AdminTimesheetPage() {
                                                                     <XCircle size={16} />
                                                                 </button>
                                                                 <button
-                                                                    onClick={() => approve(ts._id)}
+                                                                    onClick={() => approve(ts.id || ts._id)}
                                                                     disabled={isApproving || isRejecting}
                                                                     title="Approve"
                                                                     className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -595,7 +633,7 @@ export default function AdminTimesheetPage() {
             {rejectTarget && (
                 <RejectModal
                     ts={rejectTarget}
-                    onReject={(reason) => reject({ id: rejectTarget._id, reason })}
+                    onReject={(reason) => reject({ id: rejectTarget.id || rejectTarget._id, reason })}
                     onClose={() => setRejectTarget(null)}
                     loading={isRejecting}
                 />

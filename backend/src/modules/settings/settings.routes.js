@@ -4,645 +4,529 @@ const express = require('express');
 const router = express.Router();
 const asyncHandler = require('../../shared/utils/asyncHandler');
 const ApiResponse = require('../../shared/utils/apiResponse');
-const Settings = require('./settings.model');
-const User = require('../users/user.model');
+const { prisma } = require('../../config/database');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize, checkPermission } = require('../../middleware/rbac.middleware');
 const emailService = require('../../shared/services/email.service');
 const { logAction } = require('../audit/audit.routes');
 const upload = require('../../middleware/upload.middleware');
 const net = require('net');
-const PermissionAuditLog = require('./permissionAuditLog.model');
 const policyService = require('../policyEngine/policy.service');
+const { ROLE_PERMISSIONS } = require('../../constants');
 
 router.use(authenticate);
 
-// Write-only operations restricted to admin/manager.
-// GET routes below are accessible to ALL authenticated users (employees included).
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-async function getOrCreateSettings() {
-  let s = await Settings.findOne();
-  if (!s) {
-    s = await Settings.create({});
-  }
-
-  // Heal settings: If new permissions were added to the schema but are missing in the DB
-  const rolesPath = Settings.schema.path('roles');
-  const defaultRoles = (rolesPath && rolesPath.options) ? rolesPath.options.default : [];
-  let needsSync = false;
-
-  if (s.roles && Array.isArray(s.roles) && Array.isArray(defaultRoles)) {
-    s.roles.forEach((role, idx) => {
-      if (role && role.isSystem) {
-        const defaultRole = defaultRoles.find(dr => dr.name === role.name);
-        if (defaultRole && defaultRole.permissions) {
-          // Hierarchical healing: ensure module exists
-          if (!role.permissions) {
-            role.permissions = {};
-            needsSync = true;
-          }
-          
-          Object.keys(defaultRole.permissions).forEach(module => {
-            if (!role.permissions[module]) {
-              role.permissions[module] = defaultRole.permissions[module];
-              needsSync = true;
-            } else {
-              // Module exists, check submodules
-              Object.keys(defaultRole.permissions[module]).forEach(submodule => {
-                if (!role.permissions[module][submodule]) {
-                  role.permissions[module][submodule] = defaultRole.permissions[module][submodule];
-                  needsSync = true;
-                }
-              });
-            }
-          });
-        }
-      }
-    });
-  }
-
-  if (needsSync) {
-    s.markModified('roles');
-    await s.save();
-  }
-
-  return s.toObject();
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function getOrgId(req) {
+  return req.user?.organizationId;
 }
 
 /**
- * Diffs two sets of roles to find permission changes
- * @param {Array} oldRoles 
- * @param {Array} newRoles 
- * @returns {Array} changes
+ * Calculates differences between two role sets for auditing
  */
-function diffRoles(oldRoles, newRoles) {
-  const allChanges = [];
+function diffRoles(oldRoles = [], newRoles = []) {
+  const changes = [];
+  const oldMap = new Map(oldRoles.map(r => [r.name, r]));
+  const newMap = new Map(newRoles.map(r => [r.name, r]));
 
-  // 1. Identify Role updates
-  newRoles.forEach(newR => {
-    const oldR = oldRoles.find(r => r.name === newR.name);
-    if (!oldR) {
-      // New Role created
-      allChanges.push({
-        roleName: newR.name,
-        action: 'CREATE_ROLE',
-        changes: [{ module: 'All', submodule: 'Role', action: 'Create', previous: null, current: 'Created' }]
-      });
-      return;
-    }
+  // Check for deletions and updates
+  oldRoles.forEach(oldRole => {
+    const newRole = newMap.get(oldRole.name);
+    if (!newRole) {
+      changes.push({ action: 'DELETE_ROLE', roleName: oldRole.name, details: { previous: oldRole } });
+    } else {
+      // Check for permission changes
+      const diffs = [];
+      const oldPerms = oldRole.permissions || {};
+      const newPerms = newRole.permissions || {};
 
-    // Role exists, diff permissions
-    const roleChanges = [];
-    const oldP = oldR.permissions || {};
-    const newP = newR.permissions || {};
-
-    // Get all modules from both
-    const modules = new Set([...Object.keys(oldP), ...Object.keys(newP)]);
-
-    modules.forEach(mod => {
-      const oldMod = oldP[mod] || {};
-      const newMod = newP[mod] || {};
-      const submodules = new Set([...Object.keys(oldMod), ...Object.keys(newMod)]);
-
-      submodules.forEach(sub => {
-        const oldActions = oldMod[sub] || [];
-        const newActions = newMod[sub] || [];
+      const allModules = new Set([...Object.keys(oldPerms), ...Object.keys(newPerms)]);
+      allModules.forEach(mod => {
+        const oldMod = oldPerms[mod] || {};
+        const newMod = newPerms[mod] || {};
+        const allSubs = new Set([...Object.keys(oldMod), ...Object.keys(newMod)]);
         
-        // Find added actions
-        newActions.forEach(act => {
-          if (!oldActions.includes(act)) {
-            roleChanges.push({ module: mod, submodule: sub, action: act, previous: false, current: true });
-          }
-        });
-
-        // Find removed actions
-        oldActions.forEach(act => {
-          if (!newActions.includes(act)) {
-            roleChanges.push({ module: mod, submodule: sub, action: act, previous: true, current: false });
-          }
+        allSubs.forEach(sub => {
+          const oldActs = oldMod[sub] || [];
+          const newActs = newMod[sub] || [];
+          const allActs = new Set([...oldActs, ...newActs]);
+          
+          allActs.forEach(act => {
+            const wasGranted = oldActs.includes(act);
+            const isGranted = newActs.includes(act);
+            if (wasGranted !== isGranted) {
+              diffs.push({ module: mod, submodule: sub, action: act, previous: wasGranted, current: isGranted });
+            }
+          });
         });
       });
+
+      if (diffs.length > 0) {
+        changes.push({ action: 'UPDATE_PERMISSION', roleName: oldRole.name, details: { changes: diffs } });
+      }
+    }
+  });
+
+  // Check for creations
+  newRoles.forEach(newRole => {
+    if (!oldMap.has(newRole.name)) {
+      changes.push({ action: 'CREATE_ROLE', roleName: newRole.name, details: { current: newRole } });
+    }
+  });
+
+  return changes;
+}
+
+async function getOrCreateSettings(organizationId) {
+  if (!organizationId) return {};
+
+  const defaultRoles = [
+    { name: 'Admin', isSystem: true, permissions: ROLE_PERMISSIONS.ADMIN },
+    { name: 'HR', isSystem: true, permissions: ROLE_PERMISSIONS.HR },
+    { name: 'Finance', isSystem: true, permissions: { 
+        "Payroll": { "Dashboard": ["view"], "Payroll Engine": ["view", "approve", "disburse"], "Bank Export": ["view", "export"], "Payroll Reports": ["view", "export"] },
+        "Reports": { "Reports Dashboard": ["view", "export"] },
+        "My Payslip": { "Payslip View": ["view", "download"] }
+      } 
+    },
+    { name: 'Manager', isSystem: true, permissions: ROLE_PERMISSIONS.MANAGER },
+    { name: 'Employee', isSystem: true, permissions: ROLE_PERMISSIONS.EMPLOYEE }
+  ];
+
+  let s = await prisma.orgSettings.findUnique({ where: { organizationId } });
+  if (!s) {
+    s = await prisma.orgSettings.create({
+      data: { 
+        organizationId, 
+        data: { 
+          organization: {}, branding: {}, timesheet: {}, leavePolicy: {}, 
+          notifications: {}, report: {}, compliance: {}, integrations: {}, 
+          hardwareGateways: {}, payroll: {}, general: {}, 
+          roles: defaultRoles 
+        } 
+      },
+    });
+  }
+
+  // Ensure system roles exist in the Role table without overwriting customizations
+  for (const role of defaultRoles) {
+    const existingRole = await prisma.role.findFirst({
+      where: { name: role.name, organizationId, isDeleted: false }
     });
 
-    if (roleChanges.length > 0) {
-      allChanges.push({
-        roleId: oldR._id,
-        roleName: oldR.name,
-        action: 'UPDATE_PERMISSION',
-        changes: roleChanges
-      });
+    if (!existingRole) {
+      console.log(`Initial seeding for role: ${role.name}`);
+      const roleId = `sys-${role.name.toLowerCase().replace(/\s+/g, '-')}-${organizationId}`;
+      await prisma.role.create({
+        data: {
+          id: roleId,
+          organization: { connect: { id: organizationId } },
+          name: role.name,
+          permissions: role.permissions,
+          isActive: true,
+          isSystem: true
+        }
+      }).catch(e => console.error(`Failed to seed role ${role.name}:`, e.message));
     }
-  });
+  }
 
-  // 2. Identify Deleted Roles
-  oldRoles.forEach(oldR => {
-    if (!newRoles.find(r => r.name === oldR.name)) {
-      allChanges.push({
-        roleId: oldR._id,
-        roleName: oldR.name,
-        action: 'DELETE_ROLE',
-        changes: [{ module: 'All', submodule: 'Role', action: 'Delete', previous: 'Existing', current: null }]
-      });
-    }
-  });
-
-  return allChanges;
+  // Fetch current roles from Role table to ensure they have IDs and latest data
+  const dbRoles = await prisma.role.findMany({ where: { organizationId, isDeleted: false } });
+  const data = s.data || {};
+  
+  // Re-map dbRoles into settings
+  data.roles = dbRoles.map(r => ({ ...r, id: r.id })); 
+  
+  return data;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FULL SYSTEM SETTINGS (Enterprise Suite)
-// ════════════════════════════════════════════════════════════════════════════
-
 // GET /api/v1/settings
+// ════════════════════════════════════════════════════════════════════════════
 router.get('/', asyncHandler(async (req, res) => {
-  const settings = await getOrCreateSettings();
+  const orgId = getOrgId(req);
+  const settings = await getOrCreateSettings(orgId);
 
-  // Optionally populate recipients
-  if (settings && settings.report && settings.report.recipientIds && settings.report.recipientIds.length) {
-    settings.report.recipients = await User.find(
-      { _id: { $in: settings.report.recipientIds } },
-      'name email employeeId'
-    ).lean();
+  // Populate recipients on report section
+  if (settings?.report?.recipientIds?.length) {
+    settings.report.recipients = await prisma.user.findMany({
+      where: { id: { in: settings.report.recipientIds } },
+      select: { id: true, name: true, email: true },
+    });
   }
 
   ApiResponse.success(res, { data: settings });
 }));
 
 // PUT /api/v1/settings
-router.put('/', checkPermission('Settings', 'Users & Roles', 'edit'), asyncHandler(async (req, res) => {
+router.put('/', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
+  const orgId = getOrgId(req);
   const updates = req.body;
-  const currentSettings = await getOrCreateSettings();
+  const currentSettings = await getOrCreateSettings(orgId);
 
-  // Basic flat-map updater. Real deep merge relies on Mongoose's `set` logic or lodash.merge
-  // Since we construct the form fully on frontend, we can just replace whole sub-documents
-  // if provided, except keeping their `_id`s if necessary.
-
-  // Safe keys to update
-  const safeKeys = [
-    'organization', 'timesheet', 'leavePolicy', 'notifications',
-    'report', 'compliance', 'branding', 'integrations', 'hardwareGateways', 'general', 'roles'
-  ];
-
-  const updateDoc = {};
+  const safeKeys = ['organization', 'timesheet', 'leavePolicy', 'notifications', 'report', 'compliance', 'branding', 'integrations', 'hardwareGateways', 'general', 'roles', 'payroll', 'onboarding'];
+  const merged = { ...currentSettings };
   for (const key of safeKeys) {
-    if (updates[key] !== undefined) {
-      updateDoc[key] = updates[key];
-    }
+    if (updates[key] !== undefined) merged[key] = updates[key];
   }
 
-  // Update
-  const newSettings = await Settings.findOneAndUpdate(
-    {},
-    { $set: updateDoc },
-    { upsert: true, new: true }
-  ).lean();
-
-  // ─── Synchronize Leave Policy to All Users ──────────────────────────────────
-  if (updateDoc.leavePolicy) {
-    const { annualLeaveDays, sickLeaveDays, casualLeaveDays, eligibleLeaveTypes } = updateDoc.leavePolicy;
-    const updatePromises = [];
-
-    // 1. Update standard allowances if they changed
-    const userUpdates = {};
-    if (annualLeaveDays !== undefined) userUpdates['leaveBalance.annual'] = annualLeaveDays;
-    if (sickLeaveDays !== undefined) userUpdates['leaveBalance.sick'] = sickLeaveDays;
-    if (casualLeaveDays !== undefined) userUpdates['leaveBalance.casual'] = casualLeaveDays;
-
-    if (Object.keys(userUpdates).length > 0) {
-      updatePromises.push(User.updateMany({ isActive: true }, { $set: userUpdates }));
-    }
-
-    // 2. Ensure all eligible types exist in user balance maps
-    if (eligibleLeaveTypes && eligibleLeaveTypes.length > 0) {
-      for (const type of eligibleLeaveTypes) {
-        const lowerType = type.toLowerCase();
-        // If the field doesn't exist, set it to 0
-        updatePromises.push(User.updateMany(
-          { isActive: true, [`leaveBalance.${lowerType}`]: { $exists: false } },
-          { $set: { [`leaveBalance.${lowerType}`]: 0 } }
-        ));
-      }
-    }
-
-    if (updatePromises.length > 0) {
-      await Promise.all(updatePromises);
-    }
-  }
-
-  // ─── Permission Audit Log ──────────────────────────────────────────────────
-  if (updateDoc.roles) {
-    const roleChanges = diffRoles(currentSettings.roles || [], updateDoc.roles);
-    
+  // 1. Audit Role Changes
+  if (updates.roles && Array.isArray(updates.roles)) {
+    const roleChanges = diffRoles(currentSettings.roles || [], updates.roles);
     if (roleChanges.length > 0) {
-      const auditEntries = roleChanges.map(change => ({
-        ...change,
-        changedByUserId: req.user._id,
-        changedByName: req.user.name,
-        ipAddress: req.ip || req.connection.remoteAddress,
-        userAgent: req.headers['user-agent'],
-        timestamp: new Date()
-      }));
-
-      await PermissionAuditLog.insertMany(auditEntries);
+      await prisma.permissionAuditLog.createMany({
+        data: roleChanges.map(c => ({
+          organizationId: orgId,
+          changedById: req.user.id,
+          action: c.action,
+          details: c,
+        })),
+      }).catch(e => console.error('Failed to log role changes:', e.message));
     }
+
+    const syncedRoles = [];
+    const incomingRoleIds = updates.roles.map(r => r.id).filter(Boolean);
+
+    // 2. Synchronize Role Table
+    for (const rd of updates.roles) {
+      // Find by ID or Name
+      let existingRole = null;
+      if (rd.id) {
+        existingRole = await prisma.role.findFirst({ where: { id: rd.id, organizationId: orgId } });
+      }
+      
+      if (!existingRole) {
+        existingRole = await prisma.role.findFirst({ where: { name: { equals: rd.name, mode: 'insensitive' }, organizationId: orgId } });
+      }
+
+      const rolePayload = { 
+        organization: { connect: { id: orgId } },
+        name: rd.name, 
+        permissions: rd.permissions || {}, 
+        isSystem: rd.isSystem || false,
+        isActive: true,
+        isDeleted: false
+      };
+      
+      let savedRole;
+      if (existingRole) {
+        savedRole = await prisma.role.update({ where: { id: existingRole.id }, data: rolePayload });
+      } else {
+        savedRole = await prisma.role.create({ data: { ...rolePayload, id: rd.id || undefined } });
+      }
+      syncedRoles.push({ ...rd, id: savedRole.id });
+    }
+
+    // 3. Mark Roles not in the updates as DELETED
+    const finalRoleIds = syncedRoles.map(r => r.id);
+    await prisma.role.updateMany({
+      where: { 
+        organizationId: orgId, 
+        id: { notIn: finalRoleIds },
+        isSystem: false // Never auto-delete system roles
+      },
+      data: { isDeleted: true, isActive: false, deletedAt: new Date() }
+    });
+
+    merged.roles = syncedRoles;
   }
 
-  // ─── Synchronize to Unified Payroll Policy ──────────────────────────────────
-  if (updateDoc.compliance || updateDoc.attendance || updateDoc.overtime || updateDoc.leavePolicy) {
-    const policyUpdates = {};
-    if (updateDoc.compliance) policyUpdates.compliance = updateDoc.compliance;
-    if (updateDoc.attendance) policyUpdates.attendance = updateDoc.attendance;
-    if (updateDoc.overtime) policyUpdates.overtime = updateDoc.overtime;
-    
-    // Note: leavePolicy in Settings maps to 'leave' in PayrollPolicy
-    if (updateDoc.leavePolicy) {
-       policyUpdates.leave = {
-         types: updateDoc.leavePolicy.eligibleLeaveTypes?.map(t => ({ name: t, paid: t.toLowerCase() !== 'lop' })) || []
-       };
-    }
-
-    if (Object.keys(policyUpdates).length > 0) {
-      await policyService.updatePolicy(policyUpdates);
-    }
+  // 4. Save to OrgSettings JSON blob
+  if (updates.timesheet && updates.timesheet.enforceMinHoursOnSubmit === true && !currentSettings.timesheet?.enforceMinHoursOnSubmit) {
+    merged.timesheet.enforceMinHoursEnabledAt = new Date();
   }
 
-  // Audit Log (General Action Log)
-  await logAction({
-    userId: req.user._id,
-    action: 'UPDATE_SETTINGS',
-    entityType: 'Settings',
-    details: { updatedSections: Object.keys(updateDoc) },
-    ipAddress: req.ip || req.connection.remoteAddress
+  const updated = await prisma.orgSettings.upsert({
+    where: { organizationId: orgId },
+    update: { data: merged, updatedAt: new Date() },
+    create: { organizationId: orgId, data: merged },
   });
 
-  ApiResponse.success(res, { message: 'Settings successfully updated', data: newSettings });
+  // 5. Sync leavePolicy to LeaveTypes
+  if (updates.leavePolicy?.config && Array.isArray(updates.leavePolicy.config)) {
+    for (const ltConfig of updates.leavePolicy.config) {
+      const { name, days, category } = ltConfig;
+      const isDeductible = category === 'Paid' || category === 'Medical';
+      
+      await prisma.leaveType.upsert({
+        where: { organizationId_name: { organizationId: orgId, name } },
+        update: { yearlyQuota: parseFloat(days) || 0, isDeductible },
+        create: { organizationId: orgId, name, yearlyQuota: parseFloat(days) || 0, isDeductible },
+      });
+    }
+
+    // Ensure LOP exists as a system default if not already there
+    await prisma.leaveType.upsert({
+      where: { organizationId_name: { organizationId: orgId, name: 'Loss of Pay' } },
+      update: { isDeductible: false, yearlyQuota: 0 },
+      create: { organizationId: orgId, name: 'Loss of Pay', yearlyQuota: 0, isDeductible: false },
+    });
+  }
+
+  if (logAction) {
+    // Build a human-readable before/after diff of what changed
+    const beforeSnap = {};
+    const afterSnap  = {};
+    for (const key of Object.keys(updates)) {
+      if (key === 'roles') continue; // roles have their own granular audit via permissionAuditLog
+      const prev = currentSettings[key];
+      const next = updates[key];
+      // Only include sections that actually changed
+      if (JSON.stringify(prev) !== JSON.stringify(next)) {
+        beforeSnap[key] = prev ?? null;
+        afterSnap[key]  = next ?? null;
+      }
+    }
+    await logAction({
+      userId: req.user.id,
+      action: 'UPDATE_SETTINGS',
+      entityType: 'Settings',
+      details: {
+        updatedSections: Object.keys(updates),
+        message: `Updated settings: ${Object.keys(afterSnap).join(', ') || Object.keys(updates).join(', ')}`,
+        before: Object.keys(beforeSnap).length > 0 ? beforeSnap : undefined,
+        after:  Object.keys(afterSnap).length  > 0 ? afterSnap  : undefined,
+      },
+      organizationId: orgId,
+      ipAddress: req.ip,
+    });
+  }
+
+  // 6. Sync Compliance to PayrollPolicy if updated
+  if (updates.compliance) {
+    const activePolicy = await policyService.getPolicy(orgId);
+    if (activePolicy && activePolicy.id) {
+       await policyService.updatePolicy({
+         compliance: {
+           ...(activePolicy.compliance || {}),
+           ...updates.compliance
+         }
+       }, orgId).catch(e => console.error('Failed to sync compliance to payroll policy:', e.message));
+    }
+  }
+
+  // 7. Sync Payroll section to PayrollPolicy if updated
+  if (updates.payroll) {
+    await policyService.syncLegacyPayrollToPolicy(updates.payroll, orgId)
+      .catch(e => console.error('Failed to sync payroll to policy engine:', e.message));
+  }
+
+  ApiResponse.success(res, { message: 'Settings successfully updated', data: updated.data });
 }));
 
 // POST /api/v1/settings/test-hikvision
 router.post('/test-hikvision', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
   const { ipAddress, port, username, password, host, appKey, appSecret } = req.body;
-  
   const targetHost = host || ipAddress;
-  if (!targetHost) {
-    return ApiResponse.error(res, { message: 'Host/IP Address is required', statusCode: 400 });
-  }
+  if (!targetHost) return ApiResponse.error(res, { message: 'Host/IP Address is required', statusCode: 400 });
 
-  // If host is a full URL, extract hostname
   let hostname = targetHost;
-  try {
-    if (targetHost.startsWith('http')) {
-      const urlObj = new URL(targetHost);
-      hostname = urlObj.hostname;
-    }
-  } catch (e) {}
-
+  try { if (targetHost.startsWith('http')) hostname = new URL(targetHost).hostname; } catch (e) {}
   const targetPort = parseInt(port) || 8000;
-  const timeout = 5000; 
 
-  // Basic TCP socket test
-  const checkConnection = () => {
-    return new Promise((resolve, reject) => {
-      const socket = new net.Socket();
-      socket.setTimeout(timeout);
-
-      socket.connect(targetPort, hostname, () => {
-        socket.destroy();
-        resolve(true);
-      });
-
-      socket.on('error', (err) => {
-        socket.destroy();
-        reject(err);
-      });
-
-      socket.on('timeout', () => {
-        socket.destroy();
-        reject(new Error('Connection timed out'));
-      });
-    });
-  };
+  const checkConnection = () => new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    socket.setTimeout(5000);
+    socket.connect(targetPort, hostname, () => { socket.destroy(); resolve(true); });
+    socket.on('error', err => { socket.destroy(); reject(err); });
+    socket.on('timeout', () => { socket.destroy(); reject(new Error('Connection timed out')); });
+  });
 
   try {
     await checkConnection();
-    ApiResponse.success(res, { message: `Successfully connected to Hikvision/HikCentral at ${hostname}:${targetPort}` });
+    ApiResponse.success(res, { message: `Successfully connected to ${hostname}:${targetPort}` });
   } catch (err) {
-    ApiResponse.error(res, { 
-      message: `Failed to connect at ${hostname}:${targetPort}. Error: ${err.message}`, 
-      statusCode: 200 
-    });
+    ApiResponse.error(res, { message: `Failed to connect to ${hostname}:${targetPort}. Error: ${err.message}`, statusCode: 200 });
   }
 }));
 
 // POST /api/v1/settings/upload-branding
 router.post('/upload-branding', checkPermission('Settings', 'General', 'edit'), upload.single('file'), asyncHandler(async (req, res) => {
-  if (!req.file) {
-    return ApiResponse.error(res, { message: 'No file uploaded', statusCode: 400 });
-  }
-
-  // Construct the URL. In a real app this might be a CDN or S3 bucket.
-  // Here we use the server's own address.
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const fileUrl = `${protocol}://${host}/uploads/branding/${req.file.filename}`;
-
-  ApiResponse.success(res, { 
-    message: 'File uploaded successfully', 
-    data: { url: fileUrl } 
-  });
+  if (!req.file) return ApiResponse.error(res, { message: 'No file uploaded', statusCode: 400 });
+  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/branding/${req.file.filename}`;
+  ApiResponse.success(res, { message: 'File uploaded successfully', data: { url: fileUrl } });
 }));
-
-// ════════════════════════════════════════════════════════════════════════════
-// REPORT SETTINGS (Legacy)
-// ════════════════════════════════════════════════════════════════════════════
 
 // GET /api/v1/settings/report
 router.get('/report', asyncHandler(async (req, res) => {
-  const settings = await getOrCreateSettings();
-
-  // Populate recipient details
+  const settings = await getOrCreateSettings(getOrgId(req));
+  const report = settings.report || {};
   let recipients = [];
-  if (settings && settings.report && settings.report.recipientIds && settings.report.recipientIds.length) {
-    recipients = await User.find(
-      { _id: { $in: settings.report.recipientIds } },
-      'name email employeeId'
-    ).lean();
+  if (report.recipientIds?.length) {
+    recipients = await prisma.user.findMany({ where: { id: { in: report.recipientIds } }, select: { id: true, name: true, email: true } });
   }
-
-  ApiResponse.success(res, {
-    data: { ...settings.report, recipients },
-  });
+  ApiResponse.success(res, { data: { ...report, recipients } });
 }));
 
 // POST /api/v1/settings/report
-router.post('/report', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
-  const { frequency, reportType, recipientIds, isActive, projectIds } = req.body;
-
-  const settings = await Settings.findOneAndUpdate(
-    {},
-    {
-      $set: {
-        'report.frequency': frequency,
-        'report.reportType': reportType,
-        'report.scheduledTime': req.body.scheduledTime || '09:00',
-        'report.recipientIds': recipientIds || [],
-        'report.projectIds': projectIds || [],
-        'report.isActive': isActive ?? false,
-      },
-    },
-    { upsert: true, new: true }
-  ).lean();
-
-  ApiResponse.success(res, { message: 'Report settings saved', data: settings.report });
+router.post('/report', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
+  const orgId = getOrgId(req);
+  const current = await getOrCreateSettings(orgId);
+  const merged = { ...current, report: { ...(current.report || {}), ...req.body } };
+  await prisma.orgSettings.upsert({ where: { organizationId: orgId }, update: { data: merged }, create: { organizationId: orgId, data: merged } });
+  ApiResponse.success(res, { message: 'Report settings saved', data: merged.report });
 }));
 
 // POST /api/v1/settings/report/send-now
-router.post('/report/send-now', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
-  const settings = await getOrCreateSettings();
-  const { reportType: savedType, recipientIds: savedIds, projectIds: savedProjIds } = settings.report || {};
-
+router.post('/report/send-now', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
+  const settings = await getOrCreateSettings(getOrgId(req));
+  const { recipientIds: savedIds, reportType: savedType, projectIds: savedProjIds } = settings.report || {};
   const ids = req.body.recipientIds || savedIds || [];
   const type = req.body.reportType || savedType || 'approved';
   const projectIds = req.body.projectIds || savedProjIds || [];
 
-  if (!ids.length) {
-    return ApiResponse.error(res, { message: 'No recipients configured. Please select at least one recipient.', statusCode: 400 });
-  }
+  if (!ids.length) return ApiResponse.error(res, { message: 'No recipients configured.', statusCode: 400 });
 
-  // Fetch recipient emails
-  const users = await User.find({ _id: { $in: ids } }, 'email name').lean();
+  const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { email: true, name: true } });
   const emails = users.map(u => u.email).filter(Boolean);
+  if (!emails.length) return ApiResponse.error(res, { message: 'No valid email addresses found.', statusCode: 400 });
 
-  if (!emails.length) {
-    return ApiResponse.error(res, { message: 'No valid email addresses found for selected recipients.', statusCode: 400 });
-  }
-
-  // Get company name and format
-  const companyName = settings.general?.companyName || 'TimesheetPro';
+  const companyName = settings.general?.companyName || 'CALTIMS';
   const format = settings.report?.defaultFormat || 'PDF';
 
-  let result;
   try {
-    result = await emailService.sendReportEmail(emails, type, companyName, projectIds, format);
-  } catch (smtpErr) {
-    return ApiResponse.error(res, {
-      message: smtpErr.message.includes('SMTP')
-        ? 'Email not sent: SMTP credentials are not configured. Add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS to the backend .env file.'
-        : `Email failed: ${smtpErr.message}`,
-      statusCode: 400,
-    });
+    const result = await emailService.sendReportEmail(emails, type, companyName, projectIds, format);
+    ApiResponse.success(res, { message: `Report sent to ${result.sent} recipient(s)`, data: result });
+  } catch (err) {
+    ApiResponse.error(res, { message: `Email failed: ${err.message}`, statusCode: 400 });
   }
-
-  // Update lastSentAt
-  await Settings.updateOne({}, { $set: { 'report.lastSentAt': new Date() } });
-
-  ApiResponse.success(res, { message: `Report sent to ${result.sent} recipient(s)`, data: result });
 }));
 
 // POST /api/v1/settings/report/preview
-router.post('/report/preview', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
-  const settings = await getOrCreateSettings();
-  const reportType = req.body.reportType || settings.report?.reportType || 'approved';
-  const projectIds = req.body.projectIds || settings.report?.projectIds || [];
-  const companyName = settings.general?.companyName || 'TimesheetPro';
-
+router.post('/report/preview', checkPermission('Settings', 'General', 'view'), asyncHandler(async (req, res) => {
+  const settings = await getOrCreateSettings(getOrgId(req));
   try {
-    const preview = await emailService.buildPreview(reportType, companyName, projectIds);
+    const preview = await emailService.buildPreview(req.body.reportType || settings.report?.reportType || 'approved', settings.general?.companyName || 'CALTIMS', req.body.projectIds || settings.report?.projectIds || []);
     ApiResponse.success(res, { data: preview });
   } catch (err) {
     ApiResponse.error(res, { message: `Preview failed: ${err.message}`, statusCode: 500 });
   }
 }));
 
-// ════════════════════════════════════════════════════════════════════════════
-// TIMESHEET SETTINGS (Task Categories & Leave Types)
-// ════════════════════════════════════════════════════════════════════════════
-
 // GET /api/v1/settings/timesheet
 router.get('/timesheet', asyncHandler(async (req, res) => {
-  const settings = await getOrCreateSettings();
+  const settings = await getOrCreateSettings(getOrgId(req));
+  const config = settings.leavePolicy?.config || [];
+  const leaveTypes = config.map(c => c.name);
+  const eligibleLeaveTypes = config.filter(c => c.category === 'Paid' || c.category === 'Medical' || c.category === 'General').map(c => c.name);
+  
   ApiResponse.success(res, { 
     data: { 
-      ...settings.timesheet,
-      leaveTypes: settings.leavePolicy?.leaveTypes || [],
-      eligibleLeaveTypes: settings.leavePolicy?.eligibleLeaveTypes || []
+      ...(settings.timesheet || {}), 
+      leaveTypes, 
+      eligibleLeaveTypes 
     } 
   });
 }));
 
 // POST /api/v1/settings/timesheet
-router.post('/timesheet', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
-  const {
-    taskCategories, leaveTypes, eligibleLeaveTypes,
-    maxEntriesPerDay, maxEntriesPerWeek,
-    permissionMaxHoursPerDay, permissionMaxDaysPerWeek, permissionMaxDaysPerMonth
-  } = req.body;
-
-  const settings = await Settings.findOneAndUpdate(
-    {},
-    {
-      $set: {
-        ...(taskCategories && { 'timesheet.taskCategories': taskCategories }),
-        ...(leaveTypes && { 'leavePolicy.leaveTypes': leaveTypes }),
-        ...(eligibleLeaveTypes && { 'leavePolicy.eligibleLeaveTypes': eligibleLeaveTypes }),
-        ...(maxEntriesPerDay !== undefined && { 'timesheet.maxEntriesPerDay': maxEntriesPerDay }),
-        ...(maxEntriesPerWeek !== undefined && { 'timesheet.maxEntriesPerWeek': maxEntriesPerWeek }),
-        ...(permissionMaxHoursPerDay !== undefined && { 'timesheet.permissionMaxHoursPerDay': permissionMaxHoursPerDay }),
-        ...(permissionMaxDaysPerWeek !== undefined && { 'timesheet.permissionMaxDaysPerWeek': permissionMaxDaysPerWeek }),
-        ...(permissionMaxDaysPerMonth !== undefined && { 'timesheet.permissionMaxDaysPerMonth': permissionMaxDaysPerMonth }),
-      },
-    },
-    { upsert: true, new: true }
-  ).lean();
-
-  ApiResponse.success(res, { 
-    message: 'Timesheet settings saved', 
-    data: { 
-      ...settings.timesheet,
-      leaveTypes: settings.leavePolicy?.leaveTypes || [],
-      eligibleLeaveTypes: settings.leavePolicy?.eligibleLeaveTypes || []
-    } 
-  });
+router.post('/timesheet', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
+  const orgId = getOrgId(req);
+  const current = await getOrCreateSettings(orgId);
+  const merged = { ...current, timesheet: { ...(current.timesheet || {}), ...req.body } };
+  await prisma.orgSettings.upsert({ where: { organizationId: orgId }, update: { data: merged }, create: { organizationId: orgId, data: merged } });
+  ApiResponse.success(res, { message: 'Timesheet settings saved', data: merged.timesheet });
 }));
-
-// ════════════════════════════════════════════════════════════════════════════
-// GENERAL SETTINGS
-// ════════════════════════════════════════════════════════════════════════════
 
 // GET /api/v1/settings/general
 router.get('/general', asyncHandler(async (req, res) => {
-  const settings = await getOrCreateSettings();
-  ApiResponse.success(res, { data: settings.general });
+  const settings = await getOrCreateSettings(getOrgId(req));
+  ApiResponse.success(res, { data: settings.general || {} });
 }));
 
 // POST /api/v1/settings/general
-router.post('/general', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
-  const { companyName, timezone, workingHoursPerDay, strictDailyHours, isWeekendWorkable, weekStartDay, dateFormat } = req.body;
-
-  const settings = await Settings.findOneAndUpdate(
-    {},
-    {
-      $set: {
-        ...(companyName !== undefined && { 'general.companyName': companyName }),
-        ...(timezone !== undefined && { 'general.timezone': timezone }),
-        ...(workingHoursPerDay !== undefined && { 'general.workingHoursPerDay': workingHoursPerDay }),
-        ...(strictDailyHours !== undefined && { 'general.strictDailyHours': strictDailyHours }),
-        ...(isWeekendWorkable !== undefined && { 'general.isWeekendWorkable': isWeekendWorkable }),
-        ...(weekStartDay !== undefined && { 'general.weekStartDay': weekStartDay }),
-        ...(dateFormat !== undefined && { 'general.dateFormat': dateFormat }),
-      },
-    },
-    { upsert: true, new: true }
-  ).lean();
-
-  ApiResponse.success(res, { message: 'General settings saved', data: settings.general });
+router.post('/general', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
+  const orgId = getOrgId(req);
+  const current = await getOrCreateSettings(orgId);
+  const merged = { ...current, general: { ...(current.general || {}), ...req.body } };
+  await prisma.orgSettings.upsert({ where: { organizationId: orgId }, update: { data: merged }, create: { organizationId: orgId, data: merged } });
+  ApiResponse.success(res, { message: 'General settings saved', data: merged.general });
 }));
-
-// ════════════════════════════════════════════════════════════════════════════
-// PAYROLL SETTINGS
-// ════════════════════════════════════════════════════════════════════════════
 
 // GET /api/v1/settings/payroll
 router.get('/payroll', asyncHandler(async (req, res) => {
-  const settings = await getOrCreateSettings();
-  ApiResponse.success(res, { data: settings.payroll });
+  const settings = await getOrCreateSettings(getOrgId(req));
+  ApiResponse.success(res, { data: settings.payroll || {} });
 }));
 
 // POST /api/v1/settings/payroll
-router.post('/payroll', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
-  const { 
-    payrollMode, calculationBasis, defaultPaymentType, 
-    payslipHeader, payslipFooter, lopCalculationBasis, 
-    professionalTaxMonths, esiLimit, 
-    payslipTemplateUrl, payslipTemplateType, currencySymbol 
-  } = req.body;
-
-  const settings = await Settings.findOneAndUpdate(
-    {},
-    {
-      $set: {
-        ...(payrollMode !== undefined && { 'payroll.payrollMode': payrollMode }),
-        ...(calculationBasis !== undefined && { 'payroll.calculationBasis': calculationBasis }),
-        ...(defaultPaymentType !== undefined && { 'payroll.defaultPaymentType': defaultPaymentType }),
-        ...(payslipHeader !== undefined && { 'payroll.payslipHeader': payslipHeader }),
-        ...(payslipFooter !== undefined && { 'payroll.payslipFooter': payslipFooter }),
-        ...(lopCalculationBasis !== undefined && { 'payroll.lopCalculationBasis': lopCalculationBasis }),
-        ...(professionalTaxMonths !== undefined && { 'payroll.professionalTaxMonths': professionalTaxMonths }),
-        ...(esiLimit !== undefined && { 'payroll.esiLimit': esiLimit }),
-        ...(payslipTemplateUrl !== undefined && { 'payroll.payslipTemplateUrl': payslipTemplateUrl }),
-        ...(payslipTemplateType !== undefined && { 'payroll.payslipTemplateType': payslipTemplateType }),
-        ...(currencySymbol !== undefined && { 'payroll.currencySymbol': currencySymbol }),
-      },
-    },
-    { upsert: true, new: true }
-  ).lean();
-
-  ApiResponse.success(res, { message: 'Payroll settings saved', data: settings.payroll });
+router.post('/payroll', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
+  const orgId = getOrgId(req);
+  const current = await getOrCreateSettings(orgId);
+  const merged = { ...current, payroll: { ...(current.payroll || {}), ...req.body } };
+  await prisma.orgSettings.upsert({ where: { organizationId: orgId }, update: { data: merged }, create: { organizationId: orgId, data: merged } });
+  ApiResponse.success(res, { message: 'Payroll settings saved', data: merged.payroll });
 }));
 
 // POST /api/v1/settings/upload-payslip-template
 router.post('/upload-payslip-template', checkPermission('Settings', 'General', 'edit'), upload.single('file'), asyncHandler(async (req, res) => {
-  if (!req.file) {
-    return ApiResponse.error(res, { message: 'No file uploaded', statusCode: 400 });
-  }
-
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const fileUrl = `${protocol}://${host}/uploads/branding/${req.file.filename}`;
-  // Using 'branding' folder for simplicity as it exists, but could be 'templates'
-
-  ApiResponse.success(res, { 
-    message: 'Payslip template uploaded successfully', 
-    data: { url: fileUrl, type: req.file.mimetype.includes('pdf') ? 'PDF' : 'HTML' } 
-  });
+  if (!req.file) return ApiResponse.error(res, { message: 'No file uploaded', statusCode: 400 });
+  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/branding/${req.file.filename}`;
+  ApiResponse.success(res, { message: 'Payslip template uploaded successfully', data: { url: fileUrl, type: req.file.mimetype.includes('pdf') ? 'PDF' : 'HTML' } });
 }));
 
-// ── All employees list (for recipient picker) — admin/manager only ──────────
-router.get('/employees', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+// GET /api/v1/settings/employees
+router.get('/employees', checkPermission('Employees', 'Employee List', 'view'), asyncHandler(async (req, res) => {
+  const orgId = getOrgId(req);
   const q = req.query.q || '';
-  const filter = { isActive: true };
-  if (q) {
-    filter.$or = [
-      { name: { $regex: q, $options: 'i' } },
-      { email: { $regex: q, $options: 'i' } },
-    ];
-  }
-  const users = await User.find(filter, 'name email employeeId role designation').sort({ name: 1 }).limit(100).lean();
+  const where = { organizationId: orgId, isActive: true };
+  if (q) where.OR = [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }];
+  const users = await prisma.user.findMany({ where, select: { id: true, name: true, email: true, role: true }, take: 100, orderBy: { name: 'asc' } });
   ApiResponse.success(res, { data: users });
 }));
 
-// ─── Permission Audit Logs API ──────────────────────────────────────────────
-
 // GET /api/v1/settings/permission-audit-logs
 router.get('/permission-audit-logs', checkPermission('Settings', 'Audit Logs', 'view'), asyncHandler(async (req, res) => {
-  const { roleName, changedByName, action, startDate, endDate, search } = req.query;
+  const orgId = getOrgId(req);
+  const { roleName, action, startDate, endDate, search } = req.query;
+  const where = { organizationId: orgId };
+  if (action) where.action = action;
   
-  const query = {};
-  
-  if (roleName) query.roleName = roleName;
-  if (changedByName) query.changedByName = changedByName;
-  if (action) query.action = action;
-  
-  if (startDate || endDate) {
-    query.timestamp = {};
-    if (startDate) query.timestamp.$gte = new Date(startDate);
-    if (endDate) query.timestamp.$lte = new Date(endDate);
+  if (roleName) {
+    where.details = {
+      path: ['roleName'],
+      equals: roleName
+    };
   }
-  
+
   if (search) {
-    query.$or = [
-      { roleName: { $regex: search, $options: 'i' } },
-      { changedByName: { $regex: search, $options: 'i' } },
-      { 'changes.module': { $regex: search, $options: 'i' } },
-      { 'changes.submodule': { $regex: search, $options: 'i' } }
+    where.OR = [
+      { action: { contains: search, mode: 'insensitive' } },
+      { details: { path: ['roleName'], string_contains: search } },
+      { changedBy: { name: { contains: search, mode: 'insensitive' } } }
     ];
   }
 
-  const logs = await PermissionAuditLog.find(query)
-    .sort({ timestamp: -1 })
-    .limit(100); // Pagination could be added but 100 for now
-    
-  ApiResponse.success(res, { data: logs });
+  if (startDate || endDate) {
+    where.createdAt = {};
+    if (startDate) where.createdAt.gte = new Date(startDate);
+    if (endDate) where.createdAt.lte = new Date(endDate);
+  }
+  const logs = await prisma.permissionAuditLog.findMany({ 
+    where, 
+    include: {
+      changedBy: {
+        select: { name: true }
+      }
+    },
+    orderBy: { createdAt: 'desc' }, 
+    take: 100 
+  });
+
+  const formattedLogs = logs.map(log => {
+    const logData = log.details || {};
+    return {
+      ...log,
+      timestamp: log.createdAt,
+      changedByName: log.changedBy?.name || 'System',
+      roleName: logData.roleName || 'N/A',
+      // Flatten the nested details object for the frontend
+      details: logData.details || logData
+    };
+  });
+
+  ApiResponse.success(res, { data: formattedLogs });
 }));
 
 module.exports = router;
+

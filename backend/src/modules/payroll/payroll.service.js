@@ -1,20 +1,10 @@
 'use strict';
 
-const mongoose = require('mongoose');
-const User = require('../users/user.model');
-const PayrollProfile = require('./payrollProfile.model');
-const RoleSalaryStructure = require('./roleSalaryStructure.model');
-const ProcessedPayroll = require('./processedPayroll.model');
-const PayrollBatch = require('./payrollBatch.model');
-const PayrollLedger = require('./payrollLedger.model');
-const Settings = require('../settings/settings.model');
-const Timesheet = require('../timesheets/timesheet.model');
-const Leave = require('../leaves/leave.model');
-const AttendanceLog = require('../attendance/attendance.model');
+const { prisma } = require('../../config/database');
 const { getPolicy } = require('../policyEngine/policy.service');
 const { evaluateFormula, evaluateCondition, buildPayrollContext } = require('../formulaEngine/formula.service');
 const { resolveExecutionOrder } = require('../formulaEngine/dependencyResolver');
-const { startOfMonth, endOfMonth, getDaysInMonth, format } = require('date-fns');
+const { startOfMonth, endOfMonth, getDaysInMonth, format, isWeekend, eachDayOfInterval, isSameDay } = require('date-fns');
 const path = require('path');
 const logger = require('../../shared/utils/logger');
 const auditService = require('../audit/audit.service');
@@ -72,6 +62,61 @@ const resolveComponentValue = (component, context, monthlyCTC) => {
 };
 
 /**
+ * Calculates actual working days in a month/period, excluding weekends and specific holidays.
+ * Adjusted for joining dates.
+ */
+const getWorkingDaysForPeriod = async (month, year, organizationId, employeeId) => {
+  const start = startOfMonth(new Date(year, month - 1));
+  const end = endOfMonth(start);
+
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { joiningDate: true }
+  });
+
+  const joiningDate = employee?.joiningDate ? new Date(employee.joiningDate) : null;
+  const effectiveStart = (joiningDate && joiningDate > start && joiningDate < end) ? joiningDate : start;
+
+  const holidays = await prisma.holiday.findMany({
+    where: {
+      organizationId,
+      date: { gte: start, lte: end }
+    }
+  });
+
+  const holidayDates = new Set(holidays.map(h => format(new Date(h.date), 'yyyy-MM-dd')));
+
+  // 1. Calculate Total Org Working Days (Denominator) - ALWAYS needed
+  let totalOrgWorkingDaysCount = 0;
+  eachDayOfInterval({ start, end }).forEach(day => {
+    if (!isWeekend(day) && !holidayDates.has(format(day, 'yyyy-MM-dd'))) {
+      totalOrgWorkingDaysCount++;
+    }
+  });
+
+  // 2. Calculate Individual Adjusted Working Days
+  let individualAdjustedWorkingDays = 0;
+  
+  // Future Joiner Logic: Only calculate if they joined before/during the period
+  if (joiningDate && joiningDate > end) {
+      individualAdjustedWorkingDays = 0;
+  } else {
+      eachDayOfInterval({ start: effectiveStart, end }).forEach(day => {
+        if (!isWeekend(day) && !holidayDates.has(format(day, 'yyyy-MM-dd'))) {
+          individualAdjustedWorkingDays++;
+        }
+      });
+  }
+
+  return {
+    totalOrgWorkingDays: totalOrgWorkingDaysCount || 1,
+    individualAdjustedWorkingDays: individualAdjustedWorkingDays || 0,
+    joiningDate: employee?.joiningDate
+  };
+};
+
+
+/**
  * Pipeline Step 1: Calculate Attendance
  * Returns totalHours, payableDays, lopDays, etc.
  */
@@ -79,63 +124,74 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
   const startDate = startOfMonth(new Date(year, month - 1));
   const endDate = endOfMonth(startDate);
 
-  const workingDays = policy.attendance?.workingDaysPerMonth || 22;
-  const hoursPerDay = policy.attendance?.workingHoursPerDay || 8;
+  // 1. Get precise working days for this employee (excludes weekends, holidays, and pre-joining days)
+  const workingDaysObj = await getWorkingDaysForPeriod(month, year, organizationId, user.employee?.id || user.id);
+  const workingDays = workingDaysObj.individualAdjustedWorkingDays;
+  const hoursPerDay = policy?.attendance?.workingHoursPerDay || 8;
 
-  // Fetch Leaves & LOP
-  const leaves = await Leave.find({
-    userId: user._id,
-    organizationId,
-    status: 'approved',
-    $or: [{ startDate: { $lte: endDate }, endDate: { $gte: startDate } }]
-  }).lean();
+  // 2. Fetch Approved Leaves
+  const leaves = await prisma.leave.findMany({
+    where: {
+      employeeId: user.employee?.id || user.id,
+      organizationId,
+      status: 'APPROVED',
+      isDeleted: false,
+      OR: [{ startDate: { lte: endDate }, endDate: { gte: startDate } }]
+    },
+    include: { type: true }
+  });
 
   let lopDays = 0;
   let paidLeaveDays = 0;
-  
-  // Use Policy Engine Leave Types
-  const leavePolicyTypes = policy.leave?.types || [];
-  
   leaves.forEach(l => {
-    // Determine paid vs unpaid based on organization policy dynamically
-    const pType = leavePolicyTypes.find(t => t.name.toLowerCase() === (l.leaveType || '').toLowerCase());
-    const isPaid = pType ? pType.paid : (l.leaveType?.toLowerCase() !== 'unpaid' && l.leaveType?.toLowerCase() !== 'lop');
+    // If leave type exists and has isDeductible = true, usually means it's a paid leave that deducts from balance
+    // For LOP, we'll check name or a specific flag if available. 
+    // Defaulting to: If it's not a known paid leave, treat as LOP.
+    const typeName = (l.type?.name || '').toLowerCase();
+    const isPaid = typeName !== 'unpaid' && typeName !== 'lop' && typeName !== 'loss of pay';
     
-    if (isPaid) {
-      paidLeaveDays += l.totalDays || 0;
-    } else {
-      lopDays += l.totalDays || 0;
+    if (isPaid) paidLeaveDays += l.totalDays || 0;
+    else lopDays += l.totalDays || 0;
+  });
+
+  // 3. Present Days (Payable Days)
+  const presentDays = Math.max(0, workingDays - lopDays);
+
+  // 4. Fetch Actual Worked Hours (from Timesheets)
+  const timesheetWeeks = await prisma.timesheetWeek.findMany({
+    where: {
+      userId: user.id,
+      status: 'APPROVED',
+      organizationId,
+      isDeleted: false,
+      weekStartDate: { lte: endDate },
+      weekEndDate: { gte: startDate }
     }
   });
 
-  // Always fetch Hours & Attendance regardless of type
-  const timesheets = await Timesheet.find({
-    userId: user._id, status: 'approved',
-    organizationId,
-    weekStartDate: { $lte: endDate }, weekEndDate: { $gte: startDate }
-  }).lean();
-  
-  let approvedHours = 0;
-  let workedDays = 0;
-  timesheets.forEach(ts => {
-    approvedHours += ts.totalHours || 0;
+  let totalHours = 0;
+  let actualWorkedDays = 0;
+  let totalOvertimeHours = 0;
+  const overtimeEnabled = policy?.overtime?.enabled || false;
+
+  timesheetWeeks.forEach(ts => {
+    // User Request: "It is five hours but showing only three" 
+    // Fix: Attribute the WHOLE week to the month in which it ENDS (weekEndDate).
+    // This is common payroll practice ensuring full weeks are paid together.
+    const weekEndAt = new Date(ts.weekEndDate);
+    const belongsToThisMonth = weekEndAt >= startDate && weekEndAt <= endDate;
     
-    // Calculate worked days from timesheet entries
-    if (ts.rows) {
+    if (belongsToThisMonth && Array.isArray(ts.rows)) {
       ts.rows.forEach(row => {
         if (row.entries) {
           row.entries.forEach(entry => {
-            const entryDate = new Date(entry.date);
-            if (entryDate >= startDate && entryDate <= endDate && entry.hoursWorked > 0 && !entry.isLeave) {
-              workedDays++;
-            }
-            if (entryDate >= startDate && entryDate <= endDate && entry.isLeave && entry.leaveType === 'lop') {
-              const entryHours = entry.hoursWorked || 0;
-              if (entryHours > 0) {
-                lopDays += (entryHours / hoursPerDay);
-              } else {
-                lopDays++;
-              }
+            const h = parseFloat(entry.hoursWorked) || 0;
+            totalHours += h;
+            if (h > 0 && !entry.isLeave) actualWorkedDays++;
+
+            // Weekly/Daily Overtime Calculation
+            if (overtimeEnabled && !entry.isLeave && h > hoursPerDay) {
+              totalOvertimeHours += (h - hoursPerDay);
             }
           });
         }
@@ -143,245 +199,173 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
     }
   });
 
-  let payableWeeks = 0;
-  if (effectivePayrollType === 'Weekly') {
-    payableWeeks = 4; // Simplified
-  }
-
-  // Calculate based on business rules: 
-  // Paid leave -> dynamic hoursPerDay
-  const totalHours = approvedHours + (paidLeaveDays * hoursPerDay);
-  
-  // BANK-GRADE FIX: If no timesheets are recorded, default to full working days minus LOP.
-  // This ensures fixed-salary employees (no timesheets) are still paid correctly.
-  const payableDays = (totalHours > 0 || paidLeaveDays > 0) 
-    ? (totalHours / hoursPerDay) 
-    : (workingDays - lopDays);
-
-  const standardMonthlyHours = workingDays * hoursPerDay;
-  let overtimeHours = 0;
-  if (policy.overtime?.enabled && totalHours > standardMonthlyHours) {
-      overtimeHours = totalHours - standardMonthlyHours;
-  }
-
-  return { totalHours, payableDays, lopDays, workedDays, approvedHours, payableWeeks, overtimeHours, workingDays, hoursPerDay };
+  return {
+    workingDays,
+    totalOrgWorkingDays: workingDaysObj.totalOrgWorkingDays,
+    joiningDate: workingDaysObj.joiningDate,
+    presentDays,
+    lopDays,
+    paidLeaveDays,
+    totalHours,
+    overtimeHours: totalOvertimeHours,
+    hoursPerDay,
+    actualWorkedDays
+  };
 };
 
+
 /**
- * Pipeline Step 2: Calculate Salary
- * Returns earnings, deductions, grossEarnings, totalDeductions, netPay, lopDeduction
+ * UNIVERSAL PAYROLL CALCULATION ENGINE
+ * Rule: Single Source of Truth for all salary computations.
+ * Signature: calculateSalaryBreakdown(profile, attendance, policy)
  */
-const calculateSalary = (policy, profile, attendance, contextData, salaryStructure = null) => {
-  const { userCTC, effectivePayrollType, totalDaysInMonth, startDate } = contextData;
-  const { totalHours, payableDays, lopDays, overtimeHours, workingDays, hoursPerDay } = attendance;
+const calculateSalaryBreakdown = (profile, attendance, policy) => {
+  const { 
+    workingDays = 1, 
+    totalOrgWorkingDays = 1, 
+    presentDays = 0, 
+    lopDays = 0, 
+    overtimeHours = 0, 
+    hoursPerDay = 8 
+  } = attendance;
 
-  let overtimePay = 0;
-  const standardMonthlyHours = workingDays * hoursPerDay;
-  if (policy.overtime?.enabled && overtimeHours > 0) {
-      const hourlyRate = (userCTC / standardMonthlyHours);
-      overtimePay = overtimeHours * (hourlyRate * (policy.overtime.multiplier || 1.5));
-  }
-
-  const breakdown = {
-    earnings: { components: [], grossEarnings: 0 },
-    deductions: { components: [], totalDeductions: 0 },
-    grossEarnings: 0,
-    totalDeductions: 0,
-    netPay: 0,
-    lopDeduction: 0,
-    executionLog: []
-  };
-
-  const context = buildPayrollContext(contextData.user, profile, attendance, policy);
-  context.CTC = contextData.userCTC;
-
-  if (effectivePayrollType === 'Monthly' || effectivePayrollType === 'Yearly') {
-    // 1. Calculate Earnings from Profile (or Structure/Policy if no profile components defined)
-    const earnings = (profile?.earnings?.length > 0)
-        ? profile.earnings
-        : (salaryStructure?.earnings?.length > 0) 
-            ? salaryStructure.earnings 
-            : policy.salaryComponents.filter(c => c.type === 'EARNING');
-    
-    // Add type EARNING to structure components if missing
-    earnings.forEach(e => { if(!e.type) e.type = 'EARNING'; });
-
-    const orderedEarnings = resolveExecutionOrder(earnings);
-
-    orderedEarnings.forEach(comp => {
-      let val = 0;
-      let error = null;
-
-      try {
-        if (comp.condition && !evaluateCondition(comp.condition, context)) return;
-        val = resolveComponentValue(comp, context, userCTC);
-      } catch (err) {
-        logger.error(`Earnings fail: [${comp.name}] - ${err.message}`);
-        val = 0;
-        error = err.message;
-      }
-      
-      let proratedVal = val;
-      if (policy.attendance?.prorateSalary) {
-         proratedVal = (val / workingDays) * payableDays;
-      }
-      
-      breakdown.earnings.components.push({ name: comp.name, value: proratedVal });
-      context[comp.name] = proratedVal;
-      context[comp.name.toUpperCase()] = proratedVal;
-      
-      if (comp.name.toUpperCase().includes('BASIC')) context.BASIC = proratedVal;
-      
-      breakdown.grossEarnings += proratedVal;
-      breakdown.earnings.grossEarnings += proratedVal;
-
-      breakdown.executionLog.push({
-          component: comp.name,
-          type: 'Earning',
-          formula: (comp.formula || comp.value || 'Fixed').toString(),
-          result: proratedVal,
-          error: error
-      });
-    });
-
-    context.gross = breakdown.grossEarnings;
-    context.GROSS = breakdown.grossEarnings;
-
-    // 2. LOP Deduction
-    if (lopDays > 0 && policy.attendance?.lopCalculation) {
-      const basic = context['Basic Salary'] || context['Basic'] || context['basic salary'] || context.BASIC || 0;
-      const hra = context['House Rent Allowance (HRA)'] || context['HRA'] || context['hra'] || 0;
-      const baseForLop = basic + hra; 
-      
-      let lopVal = 0;
-      if (policy.attendance.lopCalculation === 'PER_DAY') {
-         lopVal = (baseForLop / workingDays) * lopDays;
-      } else if (policy.attendance.lopCalculation === 'PER_HOUR') {
-         lopVal = (baseForLop / standardMonthlyHours) * (lopDays * hoursPerDay);
-      } else {
-         lopVal = (baseForLop / totalDaysInMonth) * lopDays;
-      }
-
-      breakdown.lopDeduction = Math.round(lopVal * 100) / 100;
-      breakdown.deductions.totalDeductions += breakdown.lopDeduction;
-      breakdown.totalDeductions += breakdown.lopDeduction;
-    }
-
-    // 3. Dynamic Statutory Logic
-    const statutory = policy.statutory || {};
-
-    // PF Calculation
-    if (statutory.pf?.enabled) {
-        const basic = context.BASIC || context.gross * 0.4;
-        const pfBase = Math.min(basic, statutory.pf.wageLimit || 15000);
-        const pfVal = (pfBase * (statutory.pf.employeeRate || 12)) / 100;
-        breakdown.deductions.components.push({ name: 'PF', value: pfVal });
-        breakdown.totalDeductions += pfVal;
-        breakdown.deductions.totalDeductions += pfVal;
-        context.PF = pfVal;
-    }
-
-    // ESI Calculation
-    if (statutory.esi?.enabled && breakdown.grossEarnings <= (statutory.esi.wageLimit || 21000)) {
-        const esiVal = (breakdown.grossEarnings * (statutory.esi.employeeRate || 0.75)) / 100;
-        breakdown.deductions.components.push({ name: 'ESI', value: esiVal });
-        breakdown.totalDeductions += esiVal;
-        breakdown.deductions.totalDeductions += esiVal;
-        context.ESI = esiVal;
-    }
-
-    // PT Calculation
-    if (statutory.pt?.enabled) {
-        const slab = statutory.pt.slabs.find(s => breakdown.grossEarnings >= s.min && (breakdown.grossEarnings <= s.max || !s.max));
-        const ptVal = slab ? slab.amount : 0;
-        if (ptVal > 0) {
-            breakdown.deductions.components.push({ name: 'Professional Tax', value: ptVal });
-            breakdown.totalDeductions += ptVal;
-            breakdown.deductions.totalDeductions += ptVal;
-            context.PT = ptVal;
-        }
-    }
-
-    // TDS Calculation
-    if (statutory.tds?.enabled && breakdown.grossEarnings * 12 > (statutory.tds.threshold || 0)) {
-        const annualGross = (breakdown.grossEarnings * 12);
-        let tax = 0;
-        statutory.tds.slabs.forEach(slab => {
-            if (annualGross > slab.min) {
-                const taxable = Math.min(annualGross, slab.max || Infinity) - slab.min;
-                tax += (taxable * (slab.rate || 0)) / 100;
-            }
-        });
-        const tdsVal = Math.round(tax / 12);
-        breakdown.deductions.components.push({ name: 'TDS', value: tdsVal });
-        breakdown.totalDeductions += tdsVal;
-        breakdown.deductions.totalDeductions += tdsVal;
-        context.TDS = tdsVal;
-    }
-
-    // 4. Other Deductions from Profile/Policy/Structure
-    const structuralDeductions = (profile?.deductions?.length > 0)
-        ? profile.deductions
-        : (salaryStructure?.deductions?.length > 0)
-            ? salaryStructure.deductions
-            : policy.salaryComponents.filter(c => c.type === 'DEDUCTION' && !c.isStatutory);
-    
-    structuralDeductions.forEach(comp => {
-        if (!comp.type) comp.type = 'DEDUCTION';
-        let val = 0;
-        try {
-            if (comp.condition && !evaluateCondition(comp.condition, context)) return;
-            val = resolveComponentValue(comp, context, userCTC);
-        } catch (err) {
-            logger.error(`Deduction fail: [${comp.name}] - ${err.message}`);
-        }
-        breakdown.deductions.components.push({ name: comp.name, value: val });
-        breakdown.totalDeductions += val;
-        breakdown.deductions.totalDeductions += val;
-        context[comp.name] = val;
-    });
-
-    // 5. Add Overtime Earnings 
-    if (overtimePay > 0) {
-        breakdown.earnings.components.push({ name: 'Overtime Pay', value: Math.round(overtimePay) });
-        breakdown.grossEarnings += Math.round(overtimePay);
-    }
-
-  } else {
-    // Rates for non-monthly types
-    let rate = 0;
-    if (effectivePayrollType === 'Hourly') rate = profile?.hourlyRate || 0;
-    if (effectivePayrollType === 'Daily') rate = profile?.dailyRate || 0;
-    if (effectivePayrollType === 'Weekly') rate = profile?.weeklyRate || 0;
-
-    let basePay = 0;
-    if (effectivePayrollType === 'Hourly') basePay = totalHours * rate;
-    if (effectivePayrollType === 'Daily') basePay = payableDays * rate;
-    if (effectivePayrollType === 'Weekly') basePay = payableWeeks * rate;
-
-    breakdown.earnings.components.push({ name: 'Base Salary', value: basePay });
-    breakdown.grossEarnings = basePay;
-    breakdown.earnings.grossEarnings = basePay;
-  }
-
-  // Rounding
-  const rounding = policy.rounding || { decimals: 2, rule: 'ROUND_OFF' };
+  // 1. Engine Configuration (Rounding & Precision)
+  const roundingConfig = policy?.rounding || { decimals: 2, rule: 'ROUND_OFF' };
   const applyRounding = (val) => {
-      if (rounding.rule === 'ROUND_UP') return Math.ceil(val);
-      if (rounding.rule === 'ROUND_DOWN') return Math.floor(val);
-      return Math.round(val * Math.pow(10, rounding.decimals)) / Math.pow(10, rounding.decimals);
+    const p = Math.pow(10, roundingConfig.decimals || 2);
+      if (roundingConfig.rule === 'ROUND_UP') return Math.ceil(val * p) / p;
+    if (roundingConfig.rule === 'ROUND_DOWN') return Math.floor(val * p) / p;
+    return Math.round(val * p) / p;
   };
 
-  breakdown.grossEarnings = applyRounding(breakdown.grossEarnings);
-  breakdown.totalDeductions = applyRounding(breakdown.totalDeductions);
-  breakdown.netPay = Math.max(0, breakdown.grossEarnings - breakdown.totalDeductions);
+  // 2. Proration Logic (Formula: adjustedSalary = perDaySalary × payableDays)
+  // payableDays = presentDays
+  // baseSalary / workingDays (standardMonthlyDays)
+  const standardMonthlyDays = policy?.attendance?.workingDaysPerMonth || totalOrgWorkingDays;
+  // ratio = payableDays / workingDays
+  const prorationRatio = standardMonthlyDays > 0 ? (presentDays / standardMonthlyDays) : 0;
+
+  const resolveRawVal = (comp, base) => {
+    let val = parseFloat(comp.value) || 0;
+    if (comp.calculationType?.toLowerCase() === 'percentage') {
+       val = (base * val) / 100;
+    }
+    return val; 
+  };
+
+  const earningsList = profile.earnings || [];
+  const deductionsList = profile.deductions || [];
+
+  // Stage 1: Base Calculation (Full Month)
+  let baseGross = 0;
+  const baseBreakdown = {};
+  const monthlySalary = (parseFloat(profile.annualCTC) || (parseFloat(profile.monthlyCTC) * 12) || 0) / 12;
+
+  // Pass 1: Independent Earnings
+  earningsList.filter(e => !e.basedOn || ['CTC', 'Monthly CTC', 'Annual CTC'].includes(e.basedOn)).forEach(e => {
+    const val = resolveRawVal(e, monthlySalary);
+    baseBreakdown[e.name] = val;
+    baseGross += val;
+  });
+
+  // Pass 2: Dependent Earnings
+  earningsList.filter(e => e.basedOn && !['CTC', 'Monthly CTC', 'Annual CTC'].includes(e.basedOn)).forEach(e => {
+    const base = baseBreakdown[e.basedOn] || 0;
+    const val = resolveRawVal(e, base);
+    baseBreakdown[e.name] = val;
+    baseGross += val;
+  });
+
+  // Stage 2: Statutory Logic
+  const statutoryDeductions = [];
+  const basicSalary = baseBreakdown['Basic Salary'] || baseBreakdown['Basic'] || baseBreakdown['basic salary'] || (baseGross * 0.5);
+
+  if (policy?.statutory?.pf?.enabled) {
+    const pf = policy.statutory.pf;
+    const pfWageBase = Math.min(basicSalary, pf.wageLimit || 15000);
+    const pfAmount = (pfWageBase * (pf.employeeRate || 12)) / 100;
+    statutoryDeductions.push({ name: 'Provident Fund (PF)', baseVal: pfAmount, isStatutory: true });
+  }
+
+  if (policy?.statutory?.esi?.enabled) {
+      const esi = policy.statutory.esi;
+      if (baseGross <= (esi.wageLimit || 21000)) {
+          const esiAmount = (baseGross * (esi.employeeRate || 0.75)) / 100;
+          statutoryDeductions.push({ name: 'ESI', baseVal: esiAmount, isStatutory: true });
+      }
+  }
+
+  if (policy?.statutory?.pt?.enabled) {
+      const pt = policy.statutory.pt;
+      const slabs = pt.slabs || [];
+      const slab = slabs.find(s => baseGross >= s.min && baseGross <= (s.max || 99999999));
+      if (slab && slab.amount > 0) {
+          statutoryDeductions.push({ name: 'Professional Tax (PT)', baseVal: slab.amount, isStatutory: true });
+      }
+  }
+
+  // Pass 3: Resolved Base Deductions
+  const profileDeductions = deductionsList.filter(d => {
+    const name = d.name.toLowerCase();
+    const isStatutoryPF = name.includes('provident fund') || name === 'pf';
+    const isStatutoryESI = name.includes('esi') || name.includes('state insurance');
+    if (isStatutoryPF && policy?.statutory?.pf?.enabled) return false;
+    if (isStatutoryESI && policy?.statutory?.esi?.enabled) return false;
+    return true;
+  }).map(d => {
+    let base = 0;
+    if (d.basedOn === 'Gross') base = baseGross;
+    else if (['CTC', 'Monthly CTC'].includes(d.basedOn)) base = monthlySalary;
+    else base = baseBreakdown[d.basedOn] || 0;
+    return { name: d.name, baseVal: resolveRawVal(d, base) };
+  });
+
+  const allDeductionsRaw = [...profileDeductions, ...statutoryDeductions];
+  let baseDeductions = 0;
+  allDeductionsRaw.forEach(d => baseDeductions += d.baseVal);
+
+  // Stage 3: Attendance-Based Adjustment (Single Source of Truth)
+  // Apply proration to EACH component
+  const finalEarnings = earningsList.map(e => ({
+    name: e.name,
+    value: applyRounding((baseBreakdown[e.name] || 0) * prorationRatio)
+  }));
+
+  const finalDeductions = allDeductionsRaw.map(d => ({
+    name: d.name,
+    value: applyRounding(d.baseVal * prorationRatio)
+  }));
+
+  // Overtime
+  let overtimePay = 0;
+  if (overtimeHours > 0 && policy?.overtime?.enabled) {
+    const denominator = policy?.attendance?.workingDaysPerMonth || totalOrgWorkingDays || 30;
+    const hourlyRate = (monthlySalary / denominator) / hoursPerDay;
+    const multiplier = policy.overtime.multiplier || 1.5;
+    overtimePay = applyRounding(overtimeHours * hourlyRate * multiplier);
+    finalEarnings.push({ name: 'Overtime Pay', value: overtimePay, meta: { hours: overtimeHours } });
+  }
+
+  const grossPay = applyRounding(baseGross * prorationRatio);
+  const totalDeductions = applyRounding(baseDeductions * prorationRatio);
+  const netPay = applyRounding(grossPay - totalDeductions + overtimePay);
 
   return {
-    ...breakdown,
-    summary: {
-      gross: breakdown.grossEarnings,
-      deductions: breakdown.totalDeductions,
-      net: breakdown.netPay
+    workingDays,
+    totalOrgWorkingDays,
+    presentDays,
+    lopDays,
+    overtimeHours,
+    overtimePay,
+    grossPay,
+    totalDeductions,
+    netPay,
+    netSalary: netPay, // for compatibility
+    earnings: finalEarnings,
+    deductions: finalDeductions,
+    lopDeduction: (lopDays > 0 && standardMonthlyDays > 0) ? applyRounding((baseGross / standardMonthlyDays) * lopDays) : 0,
+    performanceMetrics: {
+        attendancePercentage: standardMonthlyDays > 0 ? (presentDays / standardMonthlyDays) * 100 : 0
     }
   };
 };
@@ -389,79 +373,55 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
 /**
  * Aggregates all necessary data for a specific user and month/year to simulate payroll.
  */
-const simulateUserPayroll = async (userId, month, year, organizationId) => {
-  const user = await User.findOne({ _id: userId, organizationId }).lean();
-  if (!user) throw new Error('User not found');
+const simulateUserPayroll = async (userId, month, year, organizationId, options = {}) => {
+  const user = await prisma.user.findUnique({
+    where: { id_organizationId: { id: userId, organizationId } },
+    include: { employee: { include: { payrollProfile: true, department: true, designation: true } } }
+  });
+  if (!user || user.isDeleted) throw new AppError('User not found', 404);
 
   const policy = await getPolicy(organizationId);
+  const employee = user.employee;
+  const profile = employee?.payrollProfile;
+  if (!profile) throw new AppError('Payroll profile not configured', 400);
 
-  const payrollDate = new Date(year, month - 1, 1);
-  let profile = await PayrollProfile.findOne({ user: userId, organizationId }).lean();
-  
-  // Bank-Grade: Resolve Effective-Dated Salary Structure (Fallback if Profile is not yet migrated)
-  let salaryStructure = null;
-  if (!profile?.earnings?.length && !profile?.deductions?.length) {
-    if (profile?.salaryStructureId) {
-        const baseStructure = await RoleSalaryStructure.findById(profile.salaryStructureId).lean();
-        if (baseStructure) {
-            salaryStructure = await RoleSalaryStructure.findOne({
-                organizationId,
-                name: baseStructure.name,
-                isDeleted: false,
-                effectiveFrom: { $lte: payrollDate },
-                $or: [{ effectiveTo: null }, { effectiveTo: { $gte: payrollDate } }]
-            }).sort({ effectiveFrom: -1 }).lean();
-        }
-    } else if (profile?.salaryMode === 'Role-Based' && user.role) {
-        // Fallback: Resolve by Role Name if no direct ID is linked
-        salaryStructure = await RoleSalaryStructure.findOne({
-            organizationId,
-            name: user.role, 
-            type: 'Role-Based',
-            isDeleted: false,
-            isActive: true,
-            effectiveFrom: { $lte: payrollDate },
-            $or: [{ effectiveTo: null }, { effectiveTo: { $gte: payrollDate } }]
-        }).sort({ effectiveFrom: -1 }).lean();
-    }
+  // Apply runtime overrides (e.g. from UI wizard toggles)
+  const effectivePolicy = { ...policy };
+  if (options.overtimeEnabled !== undefined) {
+      if (!effectivePolicy.overtime) effectivePolicy.overtime = {};
+      effectivePolicy.overtime.enabled = !!options.overtimeEnabled;
   }
 
-  const effectivePayrollType = policy.attendance?.calculationBasis || profile?.payrollType || 'Monthly';
-  
-  let calcMonthlyCTC = profile?.monthlyCTC || 0;
-  if (effectivePayrollType === 'Yearly') {
-    calcMonthlyCTC = (profile?.monthlyCTC || 0) / 12;
-  }
+  // 1. Calculate Attendance using standard logic
+  const attendance = await calculateAttendance(user, month, year, effectivePolicy, profile.payrollType || 'Monthly', organizationId);
 
-  logger.info(`[PAYROLL SIM] User: ${user.name}, Type: ${effectivePayrollType}, CTC: ${calcMonthlyCTC}`);
+  // 2. Use Centralized Calculation Engine
+  const calculation = calculateSalaryBreakdown(profile, attendance, effectivePolicy);
 
-  const startDate = startOfMonth(new Date(year, month - 1));
-  const totalDaysInMonth = getDaysInMonth(startDate);
-
-  // 1. Calculate Attendance
-  const attendance = await calculateAttendance(user, month, year, policy, effectivePayrollType);
-
-  // 2. Calculate Salary
-  const contextData = {
-    userCTC: calcMonthlyCTC,
-    effectivePayrollType,
-    totalDaysInMonth,
-    startDate,
-    user
-  };
-  const breakdown = calculateSalary(policy, profile, attendance, contextData, salaryStructure);
-  const { lopDays, approvedHours, workedDays, payableWeeks, overtimeHours } = attendance;
 
   return {
     user: {
-      id: user._id,
+      id: user.id,
       name: user.name,
-      employeeId: user.employeeId,
+      employeeId: user.employee?.employeeCode || '-',
       email: user.email,
-      department: user.department,
-      designation: user.designation,
-      branch: user.branch || 'Head Office',
-      role: user.role,
+      department: user.employee?.department?.name || '-',
+      designation: user.employee?.designation?.name || '-',
+    },
+    month,
+    year,
+    currencySymbol: policy.currencySymbol || '₹',
+    attendance,
+    ...calculation,
+    employeeInfo: {
+      name: user.name,
+      email: user.email,
+      employeeId: user.employee?.employeeCode || '-',
+      department: user.employee?.department?.name || '-',
+      designation: user.employee?.designation?.name || '-',
+      branch: user.employee?.branch || 'Head Office'
+    },
+    bankDetails: {
       bankName: user.bankName,
       accountNumber: user.accountNumber,
       ifscCode: user.ifscCode,
@@ -469,21 +429,11 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
       pan: user.pan,
       aadhaar: user.aadhaar
     },
-    profileVersion: profile?.profileVersion || 1,
-    month,
-    year,
-    currencySymbol: policy.currencySymbol || '₹',
-    paymentType: effectivePayrollType,
-    attendance: { 
-      lopDays: attendance.lopDays, 
-      approvedHours: attendance.approvedHours, 
-      workedDays: attendance.workedDays, 
-      payableWeeks: attendance.payableWeeks, 
-      overtimeHours: attendance.overtimeHours, 
-      totalHours: attendance.totalHours, 
-      payableDays: attendance.payableDays 
-    },
-    breakdown
+    summary: { // Legacy field mapping for existing frontend expectations
+       gross: calculation.grossPay,
+       deductions: calculation.totalDeductions,
+       net: calculation.netSalary
+    }
   };
 };
 
@@ -492,17 +442,19 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
  * Default status is 'Completed'.
  */
 const ensureBatchExists = async (month, year, organizationId) => {
-    let batch = await PayrollBatch.findOne({ month, year, organizationId });
-    if (!batch) {
-        batch = await PayrollBatch.create({
+    return await prisma.payrollBatch.upsert({
+        where: {
+            organizationId_month_year: { organizationId, month, year }
+        },
+        update: {}, // No update needed if exists
+        create: {
             month,
             year,
             organizationId,
-            status: 'Completed',
+            status: 'COMPLETED',
             executionSummary: `Cycle initialized for ${month}/${year}`
-        });
-    }
-    return batch;
+        }
+    });
 };
 
 
@@ -510,240 +462,274 @@ const ensureBatchExists = async (month, year, organizationId) => {
  * Central Payroll Execution Pipeline
  * Processes payroll for all active employees for a given month and year.
  * ENHANCED: Transaction-safe, Lifecycle-aware.
- */
-const runPayroll = async ({ month, year, organizationId, processedBy, payslipTemplateId }) => {
-  const session = await mongoose.startSession();
-  const isReplicaSet = !!(await mongoose.connection.db.admin().command({ isMaster: 1 })).setName;
-  
-  if (isReplicaSet) session.startTransaction();
-
+ */const runPayroll = async ({ month, year, organizationId, processedBy, payslipTemplateId, overtimeEnabled }) => {
   try {
     logger.info(`Enterprise Payroll Execution Started - ${month}/${year}`);
-    // 1. Lifecycle Check & Batch Update to PROCESSING
+
+    // Standardize batch
     let batch = await ensureBatchExists(month, year, organizationId);
-    batch = await PayrollBatch.findOne({ _id: batch._id }).session(isReplicaSet ? session : null);
 
-    batch.status = 'Processing';
-    batch.processedBy = processedBy;
-    await batch.save({ session });
+    // Fetch dependencies
+    const activeEmployees = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        organizationId,
+        isDeleted: false
+      },
+      include: {
+        employee: {
+          include: {
+            payrollProfile: true,
+            department: true,
+            designation: true
+          }
+        }
+      }
+    });
 
-    // 2. Fetch dependencies
-    const query = { isActive: true, organizationId };
-    
-    const activeEmployees = await User.find(query).lean();
     if (!activeEmployees || activeEmployees.length === 0) {
-        throw new Error('No active employees found for processing.');
+      throw new AppError('No active employees found for processing.', 404);
     }
 
     // Safety: Find already paid records to skip
-    const paidRecords = await ProcessedPayroll.find({ 
-        month, 
-        year, 
-        organizationId, 
-        isPaid: true 
-    }).select('user').lean();
-    const paidUserIds = new Set(paidRecords.map(r => r.user.toString()));
+    const paidRecords = await prisma.processedPayroll.findMany({
+      where: { month, year, organizationId, isPaid: true },
+      select: { employeeId: true }
+    });
+    const paidEmployeeIds = new Set(paidRecords.map(r => r.employeeId));
 
-    const employeesToProcess = activeEmployees.filter(u => !paidUserIds.has(u._id.toString()));
+    const employeesToProcess = activeEmployees.filter(u => 
+      u.employee?.payrollProfile && 
+      !paidEmployeeIds.has(u.employee.id)
+    );
 
     if (employeesToProcess.length === 0) {
-        batch.status = 'Completed';
-        await batch.save({ session });
-        if (isReplicaSet) await session.commitTransaction();
-        return { success: true, message: 'All active employees for this period are already paid.', details: [] };
+      await prisma.payrollBatch.update({
+        where: { id: batch.id },
+        data: { status: 'COMPLETED' }
+      });
+      return { success: true, message: 'All active employees for this period are already paid.', details: [] };
     }
 
-    const settings = await Settings.findOne({ organizationId }).lean();
-    const payrollConfig = settings?.payroll || {};
-
-    // 3. Pre-run Structure Validation
-    const allStructures = await RoleSalaryStructure.find({ isActive: true, organizationId }).lean();
-    for (const struct of allStructures) {
-        resolveExecutionOrder(struct.earnings || []);
-        resolveExecutionOrder(struct.deductions || []);
-    }
+    const orgSettings = await prisma.orgSettings.findUnique({ where: { organizationId } });
+    const payrollConfig = orgSettings?.data?.payroll || {};
 
     const payrollResults = [];
     const summaryStats = { totalGross: 0, totalDeductions: 0, totalNetPay: 0 };
     const batchErrors = [];
     let anomalyCount = 0;
 
-    // 4. Parallel Simulation
+    // Parallel Simulation
     const results = await Promise.all(employeesToProcess.map(async (user) => {
-        try {
-            const payrollData = await simulateUserPayroll(user._id, month, year, organizationId);
-            const hasAnomalies = payrollData.breakdown.executionLog.some(log => log.error);
-            
-            return { success: true, user, data: payrollData, hasAnomalies };
-        } catch (error) {
-            return { success: false, user, error: error.message };
-        }
+      try {
+        const payrollData = await simulateUserPayroll(user.id, month, year, organizationId, { overtimeEnabled });
+        return { success: true, user, data: payrollData };
+      } catch (error) {
+        return { success: false, user, error: error.message };
+      }
     }));
 
-    // 5. Post-Simulation Aggregation & Formatting
+    // Post-Simulation Aggregation
     results.forEach(res => {
-        if (res.success) {
-            const { data: payrollData, user, hasAnomalies } = res;
-            if (hasAnomalies) anomalyCount++;
+      if (res.success) {
+        const { data: payrollData, user } = res;
 
-            const formatted = {
-                organizationId,
-                user: user._id,
-                month,
-                year,
-                paymentType: payrollData.paymentType,
-                currencySymbol: payrollConfig.currencySymbol || '₹',
-                attendance: payrollData.attendance,
-                breakdown: payrollData.breakdown,
-                grossYield: Math.round((payrollData.breakdown.summary.gross || 0) * 100) / 100,
-                liability: Math.round((payrollData.breakdown.summary.deductions || 0) * 100) / 100,
-                netPay: Math.round((payrollData.breakdown.summary.net || 0) * 100) / 100,
-                profileVersion: payrollData.profileVersion || 1,
-                isPaid: false,
-                processedAt: new Date(),
-                payslipTemplateId: payslipTemplateId || null,
-                employeeInfo: {
-                    name: user.name,
-                    employeeId: user.employeeId,
-                    department: user.department || 'General',
-                    designation: user.designation || 'Staff',
-                    branch: user.branch || 'Head Office'
-                },
-                bankDetails: {
-                    bankName: user.bankName,
-                    accountNumber: user.accountNumber,
-                    ifscCode: user.ifscCode,
-                    uan: user.uan,
-                    pan: user.pan,
-                    aadhaar: user.aadhaar
-                }
-            };
+        const formatted = {
+          organizationId,
+          employeeId: user.employee.id,
+          payrollBatchId: batch.id,
+          month,
+          year,
+          paymentType: payrollData.paymentType || 'Bank Transfer',
+          currencySymbol: payrollData.currencySymbol || '₹',
+          attendance: payrollData.attendance,
+          breakdown: payrollData, 
+          earnings: payrollData.earnings || [],
+          deductions: payrollData.deductions || [],
+          grossYield: parseFloat(payrollData.grossPay) || 0,
+          liability: parseFloat(payrollData.totalDeductions) || 0,
+          netPay: parseFloat(payrollData.netSalary) || 0,
+          profileVersion: payrollData.profileVersion || 1,
+          isPaid: false,
+          processedAt: new Date(),
+          payslipTemplateId: payslipTemplateId || null,
+          employeeInfo: {
+            name: user.name,
+            email: user.email,
+            employeeId: user.employee?.employeeCode || '-',
+            department: user.employee?.department?.name || '-',
+            designation: user.employee?.designation?.name || '-',
+            joiningDate: user.employee?.joiningDate,
+            branch: user.employee?.branch || 'Head Office'
+          },
+          bankDetails: {
+            bankName: user.bankName,
+            accountNumber: user.accountNumber,
+            ifscCode: user.ifscCode,
+            uan: user.uan,
+            pan: user.pan,
+            aadhaar: user.aadhaar
+          }
+        };
 
-            payrollResults.push(formatted);
-            summaryStats.totalGross += formatted.grossYield;
-            summaryStats.totalDeductions += formatted.liability;
-            summaryStats.totalNetPay += formatted.netPay;
-
-            if (hasAnomalies) {
-               batchErrors.push({ userId: user._id, error: `Telemetry issues detected for ${user.name}. Check execution log.` });
-            }
-        } else {
-            batchErrors.push({ userId: res.user._id, error: res.error });
-        }
+        payrollResults.push(formatted);
+        summaryStats.totalGross += formatted.grossYield;
+        summaryStats.totalDeductions += formatted.liability;
+        summaryStats.totalNetPay += formatted.netPay;
+      } else {
+        batchErrors.push({ userId: res.user.id, error: res.error });
+      }
     });
+
 
     if (payrollResults.length === 0) {
-        throw new Error(`Zero-record execution: ${batchErrors.length} critical failures prevented processing.`);
+      throw new AppError(`Zero-record execution: ${batchErrors.length} critical failures prevented processing.`, 400);
     }
 
-    // 6. Persistence within Transaction - Only delete non-paid records
-    await ProcessedPayroll.deleteMany({ month, year, organizationId, isPaid: false }, { session });
-    const saved = await ProcessedPayroll.insertMany(payrollResults, { session });
-    
-    // 7. Update Batch Final State
-    const finalBatchStatus = (batchErrors.length > 0) ? 'Error' : 'Completed';
+    // Transaction Persistence
+    const transaction = await prisma.$transaction(async (tx) => {
+      // 1. Delete non-paid records for this cycle
+      await tx.processedPayroll.deleteMany({
+        where: { month, year, organizationId, isPaid: false }
+      });
 
-    const departmentTotals = {};
-    payrollResults.forEach(pr => {
+      // 2. Create new records (Bulk)
+      await tx.processedPayroll.createMany({
+        data: payrollResults
+      });
+
+      // 3. Update Batch
+      const departmentTotals = {};
+      payrollResults.forEach(pr => {
         const dept = pr.employeeInfo.department;
         departmentTotals[dept] = (departmentTotals[dept] || 0) + pr.netPay;
-    });
+      });
 
-    batch.totalEmployees = saved.length + paidUserIds.size;
-    batch.totalGross = Math.round(summaryStats.totalGross * 100) / 100;
-    batch.totalNet = Math.round(summaryStats.totalNetPay * 100) / 100;
-    batch.totalDeductions = Math.round(summaryStats.totalDeductions * 100) / 100;
-    batch.failedCount = batchErrors.length;
-    batch.status = finalBatchStatus;
-    batch.processedAt = new Date();
-    batch.processedBy = processedBy;
-    batch.errors = batchErrors;
-    batch.departmentDistribution = departmentTotals;
-    batch.executionSummary = `Enterprise run complete. ${saved.length} successful, ${anomalyCount} warnings, ${batchErrors.length} failures. ${paidUserIds.size} skipped (already paid).`;
-    batch.organizationId = organizationId;
-    
-    await batch.save({ session });
+      const updatedBatch = await tx.payrollBatch.update({
+        where: { id: batch.id },
+        data: {
+          totalEmployees: payrollResults.length + paidEmployeeIds.size,
+          totalGross: Math.round(summaryStats.totalGross * 100) / 100,
+          totalNet: Math.round(summaryStats.totalNetPay * 100) / 100,
+          totalDeductions: Math.round(summaryStats.totalDeductions * 100) / 100,
+          failedCount: batchErrors.length,
+          status: batchErrors.length > 0 ? 'ERROR' : 'COMPLETED',
+          processedAt: new Date(),
+          processedBy,
+          errors: batchErrors,
+          departmentDistribution: departmentTotals,
+          executionSummary: `Enterprise run complete. ${payrollResults.length} successful, ${anomalyCount} warnings. ${paidEmployeeIds.size} skipped.`,
+          organizationId
+        }
+      });
 
-    // Bank-Grade: Immutable Audit Ledger
-    await PayrollLedger.create([{
-        organizationId,
-        action: 'PAYROLL_RUN',
-        batchId: batch._id,
-        performedBy: processedBy,
-        metadata: {
-            employees: saved.length,
+      // 4. Immutable Audit Ledger
+      await tx.payrollLedger.create({
+        data: {
+          organizationId,
+          action: 'PAYROLL_RUN',
+          batchId: batch.id,
+          performedBy: processedBy,
+          metadata: {
+            employees: payrollResults.length,
             totalNet: summaryStats.totalNetPay,
             errors: batchErrors.length
+          }
         }
-    }], { session });
+      });
 
-    if (isReplicaSet) await session.commitTransaction();
-    logger.info(`[PAYROLL PIPELINE] Committed ${finalBatchStatus} for cycle ${month}/${year}`);
+      return updatedBatch;
+    });
+
+    logger.info(`[PAYROLL PIPELINE] Committed for cycle ${month}/${year}`);
 
     return {
-        success: batchErrors.length === 0,
-        batchStatus: finalBatchStatus,
-        totalEmployeesProcessed: saved.length,
-        summaryStats,
-        errors: batchErrors,
-        details: payrollResults
+      success: batchErrors.length === 0,
+      batchStatus: transaction.status,
+      successCount: payrollResults.length,
+      failedCount: batchErrors.length,
+      totalEmployeesProcessed: payrollResults.length,
+      summaryStats,
+      errors: batchErrors,
+      details: payrollResults
     };
 
   } catch (err) {
-    if (isReplicaSet) {
-        await session.abortTransaction();
-    }
     logger.error(`[PAYROLL PIPELINE CRITICAL FAULT] ${err.message}`, { stack: err.stack });
     throw err;
-  } finally {
-    session.endSession();
   }
 };
 
 const saveProcessedPayroll = async (payrollData, organizationId) => {
-  const { user: userData, ...updateContent } = payrollData;
+  const { user: userData, attendance, breakdown, month, year, paymentType, currencySymbol, profileVersion, payslipTemplateId } = payrollData;
   const userId = userData.id;
 
-  const settings = await Settings.findOne({ organizationId }).lean();
-  const payrollConfig = settings?.payroll || {};
+  // Resolve employeeId from userId if not provided correctly
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { employee: true }
+  });
+  if (!user || !user.employee) throw new AppError('Employee profile not found.', 404);
 
-  const existingPayroll = await ProcessedPayroll.findOne({ user: userId, month: payrollData.month, year: payrollData.year, organizationId });
+  const existingPayroll = await prisma.processedPayroll.findFirst({
+    where: { 
+      employeeId: user.employee.id, 
+      month, 
+      year, 
+      organizationId 
+    }
+  });
   
   if (existingPayroll && existingPayroll.isPaid) {
-      throw new Error(`Execution halted: Payroll for ${userData.name} is ALREADY PAID. Modifications prohibited.`);
+      throw new AppError(`Execution halted: Payroll for ${userData.name} is ALREADY PAID. Modifications prohibited.`, 400);
   }
 
-  // Update or Create
-  return await ProcessedPayroll.findOneAndUpdate(
-    { user: userId, month: payrollData.month, year: payrollData.year, organizationId },
-    { 
-      ...updateContent, 
-      user: userId, 
-      organizationId,
-      grossYield: payrollData.breakdown.summary ? payrollData.breakdown.summary.gross : (payrollData.breakdown.grossYield || 0),
-      liability: payrollData.breakdown.summary ? payrollData.breakdown.summary.deductions : (payrollData.breakdown.liability || 0),
-      netPay: payrollData.breakdown.summary ? payrollData.breakdown.summary.net : (payrollData.breakdown.netPay || 0),
-      isPaid: false, 
-      processedAt: new Date(),
-      currencySymbol: payrollConfig.currencySymbol || '₹',
-      employeeInfo: {
-        name: userData.name,
-        employeeId: userData.employeeId,
-        department: userData.department,
-        designation: userData.designation,
-        branch: userData.branch
-      },
-      bankDetails: {
-        bankName: userData.bankName,
-        accountNumber: userData.accountNumber,
-        ifscCode: userData.ifscCode,
-        uan: userData.uan,
-        pan: userData.pan,
-        aadhaar: userData.aadhaar
+  // Standardized fields for Prisma
+  const processedData = {
+    organizationId,
+    employeeId: user.employee.id,
+    payrollBatchId: payrollData.payrollBatchId || (await ensureBatchExists(month, year, organizationId)).id,
+    month,
+    year,
+    paymentType: paymentType || 'Monthly',
+    currencySymbol: currencySymbol || '₹',
+    attendance: attendance || {},
+    breakdown: payrollData, 
+    earnings: Array.isArray(payrollData.earnings) ? payrollData.earnings : [],
+    deductions: Array.isArray(payrollData.deductions) ? payrollData.deductions : [],
+    grossYield: parseFloat(payrollData.grossPay) || 0,
+    liability: parseFloat(payrollData.totalDeductions) || 0,
+    netPay: parseFloat(payrollData.netSalary) || 0,
+    isPaid: false,
+    profileVersion: profileVersion || 1,
+    payslipTemplateId: payslipTemplateId || null,
+    employeeInfo: {
+      name: userData.name,
+      employeeId: user.employee.employeeCode,
+      department: userData.department,
+      designation: userData.designation,
+      branch: userData.branch
+    },
+    bankDetails: {
+      bankName: userData.bankName,
+      accountNumber: userData.accountNumber,
+      ifscCode: userData.ifscCode,
+      uan: userData.uan,
+      pan: userData.pan,
+      aadhaar: userData.aadhaar
+    }
+  };
+
+  return await prisma.processedPayroll.upsert({
+    where: {
+      payrollBatchId_employeeId: {
+        payrollBatchId: processedData.payrollBatchId,
+        employeeId: processedData.employeeId
       }
     },
-    { upsert: true, new: true }
-  );
+    update: processedData,
+    create: processedData
+  });
 };
 
 
@@ -751,7 +737,9 @@ const saveProcessedPayroll = async (payrollData, organizationId) => {
  * Generates a summary of processed payrolls for a given month and year.
  */
 const getPayrollSummary = async (month, year, organizationId) => {
-  const data = await ProcessedPayroll.find({ month, year, organizationId });
+  const data = await prisma.processedPayroll.findMany({
+    where: { month, year, organizationId }
+  });
   
   const summary = {
     totalEmployees: data.length,
@@ -763,13 +751,13 @@ const getPayrollSummary = async (month, year, organizationId) => {
   };
 
   data.forEach(p => {
-    // Use top-level fields (always populated by saveProcessedPayroll)
-    summary.totalGross += p.grossYield || p.breakdown?.earnings?.grossEarnings || 0;
-    summary.totalDeductions += p.liability || p.breakdown?.deductions?.totalDeductions || 0;
-    summary.totalNetPay += p.netPay || p.breakdown?.netPay || 0;
+    summary.totalGross += p.grossYield || 0;
+    summary.totalDeductions += p.liability || 0;
+    summary.totalNetPay += p.netPay || 0;
     summary.totalLopDays += p.attendance?.lopDays || 0;
     
-    summary.statusBreakdown[p.status] = (summary.statusBreakdown[p.status] || 0) + 1;
+    const status = p.isPaid ? 'PAID' : 'PENDING';
+    summary.statusBreakdown[status] = (summary.statusBreakdown[status] || 0) + 1;
   });
 
   return summary;
@@ -779,12 +767,15 @@ const getPayrollSummary = async (month, year, organizationId) => {
  * Generates cost analysis grouped by department for a given month and year.
  */
 const getDepartmentCostAnalysis = async (month, year, organizationId) => {
-  const data = await ProcessedPayroll.find({ month, year, organizationId });
+  const data = await prisma.processedPayroll.findMany({
+    where: { month: parseInt(month), year: parseInt(year), organizationId }
+  });
   
   const deptMap = {};
 
   data.forEach(p => {
-    const dept = p.employeeInfo?.department || 'Unassigned';
+    const info = p.employeeInfo;
+    const dept = info?.department || 'Unassigned';
     if (!deptMap[dept]) {
       deptMap[dept] = {
         department: dept,
@@ -797,9 +788,9 @@ const getDepartmentCostAnalysis = async (month, year, organizationId) => {
     
     const d = deptMap[dept];
     d.employeeCount += 1;
-    d.totalGross += p.breakdown.grossEarnings || 0;
-    d.totalNet += p.breakdown.netPay || 0;
-    d.totalDeductions += p.breakdown.totalDeductions || 0;
+    d.totalGross += p.grossYield || 0;
+    d.totalNet += p.netPay || 0;
+    d.totalDeductions += p.liability || 0;
   });
 
   return Object.values(deptMap);
@@ -816,103 +807,103 @@ const getPayrollDashboard = async (month, year, organizationId) => {
   let prevYear = year;
   if (prevMonth === 0) { prevMonth = 12; prevYear -= 1; }
 
-  // 1. Optimized Pipeline for Payroll Stats (Current & Previous)
-  // NOTE: Uses top-level `grossYield`, `liability`, `netPay` fields which are always
-  // written by saveProcessedPayroll(). breakdown.* nested paths had mismatched keys.
-  const payrollStats = await ProcessedPayroll.aggregate([
-    { $match: { 
-        organizationId: new mongoose.Types.ObjectId(organizationId),
-        $or: [
-            { month, year },
-            { month: prevMonth, year: prevYear }
-        ] 
-    }},
-    { $group: {
-        _id: { month: "$month", year: "$year" },
-        totalPayroll: { $sum: "$netPay" },
-        totalEarnings: { $sum: "$grossYield" },
-        totalDeductions: { $sum: "$liability" },
-        processedEmployees: { $sum: 1 },
-        paidPayments: { $sum: { $cond: ["$isPaid", 1, 0] } },
+  // 1. Fetch current and previous month records for Comparison
+  const payrolls = await prisma.processedPayroll.findMany({
+    where: {
+      organizationId,
+      OR: [
+        { month, year },
+        { month: prevMonth, year: prevYear }
+      ]
+    }
+  });
 
-        tds: { $sum: { 
-            $reduce: {
-                input: "$breakdown.deductions.components",
-                initialValue: 0,
-                in: { $add: ["$$value", { $cond: [{ $regexMatch: { input: "$$this.name", regex: /TDS|Income Tax/i } }, "$$this.value", 0] }] }
-            }
-        }},
-        pf: { $sum: { 
-            $reduce: {
-                input: "$breakdown.deductions.components",
-                initialValue: 0,
-                in: { $add: ["$$value", { $cond: [{ $regexMatch: { input: "$$this.name", regex: /PF|Provident Fund|Employee PF/i } }, "$$this.value", 0] }] }
-            }
-        }},
-        esi: { $sum: { 
-            $reduce: {
-                input: "$breakdown.deductions.components",
-                initialValue: 0,
-                in: { $add: ["$$value", { $cond: [{ $regexMatch: { input: "$$this.name", regex: /ESI/i } }, "$$this.value", 0] }] }
-            }
-        }},
-        lopDays: { $sum: "$attendance.lopDays" },
-        lopDeductions: { $sum: "$breakdown.lopDeduction" }
-    }}
-  ]);
+  const getStats = (m, y) => {
+    const filtered = payrolls.filter(p => p.month === m && p.year === y);
+    const stats = {
+      totalPayroll: 0, totalEarnings: 0, totalDeductions: 0, 
+      processedEmployees: filtered.length, paidPayments: 0, 
+      tds: 0, pf: 0, esi: 0, lopDays: 0, lopDeductions: 0
+    };
 
-  const currentStats = payrollStats.find(s => s._id.month === month && s._id.year === year) || 
-    { totalPayroll: 0, totalEarnings: 0, totalDeductions: 0, processedEmployees: 0, paidPayments: 0, tds: 0, pf: 0, esi: 0, lopDays: 0, lopDeductions: 0 };
-  const prevStats = payrollStats.find(s => s._id.month === prevMonth && s._id.year === prevYear) || { totalPayroll: 0 };
+    filtered.forEach(p => {
+      stats.totalPayroll += p.netPay;
+      stats.totalEarnings += p.grossYield;
+      stats.totalDeductions += p.liability;
+      if (p.isPaid) stats.paidPayments++;
+      
+      const att = p.attendance;
+      stats.lopDays += att?.lopDays || 0;
+
+      const bd = p.breakdown;
+      stats.lopDeductions += bd?.lopDeduction || 0;
+
+      // Extract statutory values from components
+      const deds = bd?.deductions?.components || [];
+      deds.forEach(d => {
+        if (/TDS|Income Tax/i.test(d.name)) stats.tds += d.value;
+        if (/PF|Provident Fund|Employee PF/i.test(d.name)) stats.pf += d.value;
+        if (/ESI/i.test(d.name)) stats.esi += d.value;
+      });
+    });
+    return stats;
+  };
+
+  const currentStats = getStats(month, year);
+  const prevStats = getStats(prevMonth, prevYear);
 
   const growthPercentage = prevStats.totalPayroll === 0 ? 0 : ((currentStats.totalPayroll - prevStats.totalPayroll) / prevStats.totalPayroll) * 100;
 
-  // 2. Optimized lookup for Counts & Compliance
-  const activeEmployeesCount = await User.countDocuments({ isActive: true, organizationId });
-  const usersWithMissingBank = await User.countDocuments({ isActive: true, organizationId, $or: [{ accountNumber: { $exists: false } }, { accountNumber: "" }, { bankName: { $exists: false } }, { bankName: "" }] });
-  
-  // Efficiently find users who have active profiles with structures
-  const validProfileUserIds = await PayrollProfile.distinct("user", { 
-    organizationId,
-    salaryStructureId: { $ne: null } 
+  // 2. Optimized lookup for Counts
+  const activeEmployeesCount = await prisma.user.count({ where: { isActive: true, organizationId, isDeleted: false } });
+  const usersWithMissingBank = await prisma.user.count({ 
+    where: { 
+      isActive: true, organizationId, isDeleted: false,
+      OR: [
+        { accountNumber: null }, { accountNumber: "" },
+        { bankName: null }, { bankName: "" }
+      ]
+    } 
   });
-  const usersWithMissingStructure = activeEmployeesCount - validProfileUserIds.length;
+  
+  const usersWithStructure = await prisma.payrollProfile.count({
+    where: { 
+      organizationId, 
+      OR: [
+        { NOT: { salaryStructureId: null } },
+        { annualCTC: { gt: 0 } }
+      ]
+    }
+  });
+  const usersWithMissingStructure = activeEmployeesCount - usersWithStructure;
 
   // 3. Leave Aggregation
-  const leaveStats = await Leave.aggregate([
-    { $match: { 
-        organizationId: new mongoose.Types.ObjectId(organizationId),
-        status: 'approved',
-        $or: [{ startDate: { $lte: endDate }, endDate: { $gte: startDate } }]
-    }},
-    { $group: {
-        _id: null,
-        unpaidLeaves: { 
-          $sum: { 
-            $cond: [{ 
-              $regexMatch: { input: { $ifNull: ["$leaveType", ""] }, regex: /unpaid|lop/i } 
-            }, { $ifNull: ["$totalDays", 0] }, 0] 
-          }
-        },
-        paidLeaves: { 
-          $sum: { 
-            $cond: [{ 
-              $not: [{ $regexMatch: { input: { $ifNull: ["$leaveType", ""] }, regex: /unpaid|lop/i } }]
-            }, { $ifNull: ["$totalDays", 0] }, 0] 
-          }
-        }
-    }}
-  ]);
-  const leaves = leaveStats[0] || { paidLeaves: 0, unpaidLeaves: 0 };
+  const leavesInMonth = await prisma.leave.findMany({
+    where: {
+      organizationId,
+      status: 'APPROVED',
+      OR: [{ startDate: { lte: endDate }, endDate: { gte: startDate } }]
+    }
+  });
+
+  let paidLeaves = 0;
+  let unpaidLeaves = 0;
+  leavesInMonth.forEach(l => {
+    const isUnpaid = /unpaid|lop/i.test(l.reason || ''); // fallback check
+    if (isUnpaid) unpaidLeaves += l.totalDays || 0;
+    else paidLeaves += l.totalDays || 0;
+  });
 
   // 4. Trends
   const trends = await getDashboardTrends(organizationId);
 
-  // Settings for standard days
-  const settings = await Settings.findOne({ organizationId }).lean();
-  const standardDays = settings?.payroll?.workingDaysPerMonth || 22;
+  const settings = await prisma.orgSettings.findUnique({ where: { organizationId } });
+  const standardDays = settings?.data?.payroll?.workingDaysPerMonth || 22;
 
-  const batch = await PayrollBatch.findOne({ month, year, organizationId }).sort({ createdAt: -1 }).lean();
+  const batch = await prisma.payrollBatch.findFirst({
+    where: { month, year, organizationId },
+    orderBy: { createdAt: 'desc' }
+  });
 
   return {
     batch,
@@ -936,8 +927,8 @@ const getPayrollDashboard = async (month, year, organizationId) => {
       compliancePercentage: activeEmployeesCount === 0 ? 0 : Math.round(((currentStats.processedEmployees * standardDays - currentStats.lopDays) / (activeEmployeesCount * standardDays)) * 100)
     },
     leave: {
-      paidLeaves: leaves.paidLeaves,
-      unpaidLeaves: leaves.unpaidLeaves,
+      paidLeaves,
+      unpaidLeaves,
       leaveDeductions: currentStats.lopDeductions
     },
     payroll: {
@@ -969,44 +960,44 @@ const getPayrollDashboard = async (month, year, organizationId) => {
  * Trend Visualization Data
  */
 const getDashboardTrends = async (organizationId) => {
-    // Last 6 months trend — uses top-level fields for accuracy
-    const trends = await ProcessedPayroll.aggregate([
-        { $match: { organizationId: new mongoose.Types.ObjectId(organizationId) } },
-        {
-            $group: {
-                _id: { month: "$month", year: "$year" },
-                totalCost: { $sum: "$netPay" },
-                totalGross: { $sum: "$grossYield" },
-                totalDeductions: { $sum: "$liability" }
-            }
-        },
-        { $sort: { "_id.year": -1, "_id.month": -1 } },
-        { $limit: 6 }
-    ]);
+   const payrolls = await prisma.processedPayroll.findMany({
+       where: { organizationId },
+       orderBy: [{ year: 'desc' }, { month: 'desc' }],
+       take: 12
+   });
 
-    // Dept wise distribution (latest month)
-    const latestMonth = trends[0]?._id || { month: new Date().getMonth() + 1, year: new Date().getFullYear() };
-    const deptDistribution = await ProcessedPayroll.aggregate([
-        { $match: { month: latestMonth.month, year: latestMonth.year, organizationId: new mongoose.Types.ObjectId(organizationId) } },
-        { 
-            $group: { 
-                _id: "$employeeInfo.department", 
-                value: { $sum: "$breakdown.netPay" } 
-            } 
-        },
-        { $project: { name: { $ifNull: ["$_id", "Unassigned"] }, value: 1, _id: 0 } }
-    ]);
+   const trendMap = {};
+   payrolls.forEach(p => {
+       const key = `${p.month}/${p.year}`;
+       if (!trendMap[key]) {
+           trendMap[key] = { name: key, netPay: 0, grossPay: 0, deductions: 0, sortKey: p.year * 100 + p.month };
+       }
+       trendMap[key].netPay += p.netPay;
+       trendMap[key].grossPay += p.grossYield;
+       trendMap[key].deductions += p.liability;
+   });
 
-    return {
-        monthlyTrend: trends.map(t => ({
-            name: `${t._id.month}/${t._id.year}`,
-            netPay: t.totalCost,
-            grossPay: t.totalGross,
-            deductions: t.totalDeductions
-        })).reverse(),
+   const monthlyTrend = Object.values(trendMap)
+       .sort((a, b) => a.sortKey - b.sortKey)
+       .slice(-6);
 
-        deptDistribution
-    };
+   // Dept wise distribution (latest month)
+   const latest = payrolls[0];
+   const deptDistribution = [];
+   if (latest) {
+       const latestMonthPayrolls = payrolls.filter(p => p.month === latest.month && p.year === latest.year);
+       const depts = {};
+       latestMonthPayrolls.forEach(p => {
+           const info = p.employeeInfo;
+           const d = info?.department || 'Unassigned';
+           depts[d] = (depts[d] || 0) + p.netPay;
+       });
+       Object.keys(depts).forEach(name => {
+           deptDistribution.push({ name, value: depts[name] });
+       });
+   }
+
+   return { monthlyTrend, deptDistribution };
 };
 
 /**
@@ -1015,88 +1006,75 @@ const getDashboardTrends = async (organizationId) => {
  */
 const getPayrollAnalytics = async (filters) => {
     const { month, year, department, organizationId } = filters;
-    
-    const match = { organizationId: new mongoose.Types.ObjectId(organizationId) };
-    if (month) match.month = parseInt(month);
-    if (year) match.year = parseInt(year);
-    if (department && department !== 'All') match['employeeInfo.department'] = department;
+    const m = month ? parseInt(month) : null;
+    const y = year ? parseInt(year) : null;
 
-    // 1. Summary Metrics — use top-level fields stored by saveProcessedPayroll
-    const summary = await ProcessedPayroll.aggregate([
-        { $match: match },
-        { $group: {
-            _id: null,
-            totalCost: { $sum: "$grossYield" },
-            totalNetPay: { $sum: "$netPay" },
-            totalDeductions: { $sum: "$liability" },
-            employeeCount: { $sum: 1 }
-        }}
-    ]);
+    const where = { organizationId };
+    if (m) where.month = m;
+    if (y) where.year = y;
+
+    const records = await prisma.processedPayroll.findMany({ where });
+    const filtered = department && department !== 'All' 
+        ? records.filter(p => p.employeeInfo?.department === department)
+        : records;
+
+    const summary = {
+        totalCost: 0, totalNetPay: 0, totalDeductions: 0, employeeCount: filtered.length
+    };
+    filtered.forEach(p => {
+        summary.totalCost += p.grossYield;
+        summary.totalNetPay += p.netPay;
+        summary.totalDeductions += p.liability;
+    });
 
     // 2. Monthly Trend (Last 12 months)
-    // If department filter is active, we trend only for that department
-    const trendMatch = { organizationId: new mongoose.Types.ObjectId(organizationId) };
-    if (department && department !== 'All') trendMatch['employeeInfo.department'] = department;
-    const trend = await ProcessedPayroll.aggregate([
-        { $match: trendMatch },
-        { $group: {
-            _id: { month: "$month", year: "$year" },
-            gross: { $sum: "$grossYield" },
-            net: { $sum: "$netPay" }
-        }},
-        { $sort: { "_id.year": -1, "_id.month": -1 } },
-        { $limit: 12 }
-    ]);
+    const allRecords = await prisma.processedPayroll.findMany({ 
+        where: { organizationId },
+        orderBy: [{ year: 'desc' }, { month: 'desc' }],
+        take: 1000 // reasonable limit
+    });
+    const trendFiltered = department && department !== 'All' 
+        ? allRecords.filter(p => p.employeeInfo?.department === department)
+        : allRecords;
+    
+    const trendMap = {};
+    trendFiltered.forEach(p => {
+        const key = `${p.month}/${p.year}`;
+        if (!trendMap[key]) trendMap[key] = { name: key, grossPay: 0, netPay: 0, sortKey: p.year * 100 + p.month };
+        trendMap[key].grossPay += p.grossYield;
+        trendMap[key].netPay += p.netPay;
+    });
+    const trend = Object.values(trendMap)
+        .sort((a, b) => a.sortKey - b.sortKey)
+        .slice(-12);
 
-    // 3. Department Distribution (for selected month/year)
-    const deptDist = await ProcessedPayroll.aggregate([
-        { $match: { month: parseInt(month), year: parseInt(year), organizationId: new mongoose.Types.ObjectId(organizationId) } },
-        { 
-            $group: { 
-                _id: "$employeeInfo.department", 
-                value: { $sum: "$grossYield" } 
-            } 
-        },
-        { $project: { name: { $ifNull: ["$_id", "Unassigned"] }, value: 1, _id: 0 } }
-    ]);
+    // 3. Dept Distribution (current selection)
+    const deptMap = {};
+    filtered.forEach(p => {
+        const d = p.employeeInfo?.department || 'Unassigned';
+        deptMap[d] = (deptMap[d] || 0) + p.grossYield;
+    });
+    const departmentDistribution = Object.keys(deptMap).map(name => ({ name, value: deptMap[name] }));
 
-    // 4. Detailed Earnings vs Deductions Breakdown (selected month/year)
-    const earningComponents = await ProcessedPayroll.aggregate([
-        { $match: match },
-        { $unwind: "$breakdown.earnings.components" },
-        { 
-            $group: { 
-                _id: "$breakdown.earnings.components.name", 
-                value: { $sum: "$breakdown.earnings.components.value" } 
-            } 
-        }
-    ]);
+    // 4. Detailed Breakdown
+    const earningsMap = {};
+    const deductionsMap = {};
+    filtered.forEach(p => {
+        const bd = p.breakdown;
+        (Array.isArray(bd?.earnings) ? bd.earnings : bd?.earnings?.components || []).forEach(c => {
+            earningsMap[c.name] = (earningsMap[c.name] || 0) + (parseFloat(c.value) || 0);
+        });
+        (Array.isArray(bd?.deductions) ? bd.deductions : bd?.deductions?.components || []).forEach(c => {
+            deductionsMap[c.name] = (deductionsMap[c.name] || 0) + (parseFloat(c.value) || 0);
+        });
+    });
 
-    const deductionComponents = await ProcessedPayroll.aggregate([
-        { $match: match },
-        { $unwind: "$breakdown.deductions.components" },
-        { 
-            $group: { 
-                _id: "$breakdown.deductions.components.name", 
-                value: { $sum: "$breakdown.deductions.components.value" } 
-            } 
-        }
-    ]);
+    const breakdown = [
+        ...Object.keys(earningsMap).map(name => ({ name, value: Math.round(earningsMap[name]), type: 'Earning' })),
+        ...Object.keys(deductionsMap).map(name => ({ name, value: Math.round(deductionsMap[name]), type: 'Deduction' }))
+    ];
 
-    return {
-        summary: summary[0] || { totalCost: 0, totalNetPay: 0, totalDeductions: 0, employeeCount: 0 },
-        trend: trend.map(t => ({
-            name: `${t._id.month}/${t._id.year}`,
-            grossPay: t.gross,
-            netPay: t.net
-        })).reverse(),
-
-        departmentDistribution: deptDist,
-        breakdown: [
-            ...earningComponents.map(e => ({ name: e._id, value: Math.round(e.value), type: 'Earning' })),
-            ...deductionComponents.map(d => ({ name: d._id, value: Math.round(d.value), type: 'Deduction' }))
-        ]
-    };
+    return { summary, trend, departmentDistribution, breakdown };
 };
 
 /**
@@ -1104,71 +1082,498 @@ const getPayrollAnalytics = async (filters) => {
  * Used by the History / Run Archive page instead of raw ProcessedPayroll.
  */
 const getPayrollBatches = async (organizationId) => {
-  return await PayrollBatch.find({ organizationId })
-    .sort({ year: -1, month: -1 })
-    .lean();
+  return await prisma.payrollBatch.findMany({
+    where: { organizationId },
+    orderBy: [{ year: 'desc' }, { month: 'desc' }]
+  });
 };
 
 /**
  * Marks a payroll batch as PAID.
  */
-const markAsPaid = async ({ month, year, organizationId, processedBy, version }) => {
-    let checkBatch = await PayrollBatch.findOne({ month, year, organizationId });
-    if (!checkBatch) throw new Error('Payroll batch not found');
-    if (checkBatch.isPaid) throw new Error('Payroll batch is already paid');
+const markAsPaid = async ({ month, year, organizationId, processedBy }) => {
+    const batch = await prisma.payrollBatch.findFirst({
+        where: { month, year, organizationId, isDeleted: false }
+    });
+    if (!batch) throw new AppError('Payroll batch not found', 404);
+    if (batch.isPaid) throw new AppError('Payroll batch is already paid', 400);
 
-    // Bank-Grade: Optimistic Concurrency Control (OCC)
-    // If version is provided, we ensure we are updating the document the user saw.
-    const query = { month, year, organizationId, isPaid: false };
-    if (typeof version !== 'undefined') {
-        query.__v = version;
-    }
-
-    const batch = await PayrollBatch.findOneAndUpdate(
-        query,
-        { 
-            $set: { 
+    // Update using atomic transaction
+    const updatedBatch = await prisma.$transaction(async (tx) => {
+        const uBatch = await tx.payrollBatch.update({
+            where: { id_organizationId: { id: batch.id, organizationId } },
+            data: { 
                 isPaid: true,
                 paidAt: new Date(),
-                paidBy: processedBy
-            } 
-        },
-        { new: true }
-    );
+                paidBy: processedBy,
+                status: 'PAID'
+            }
+        });
 
-    if (!batch) {
-        throw new Error('Transaction Conflict: Payroll batch was modified by another process. Please refresh and try again.');
-    }
-
-    await ProcessedPayroll.updateMany(
-        { month, year, organizationId, isPaid: false },
-        { 
-            $set: { 
+        await tx.processedPayroll.updateMany({
+            where: { month, year, organizationId, isPaid: false },
+            data: { 
                 isPaid: true, 
                 paidAt: new Date(),
                 paidBy: processedBy
-            } 
-        }
-    );
+            }
+        });
 
-    // Bank-Grade: Immutable Audit Ledger
-    await PayrollLedger.create({
-        organizationId,
-        action: 'PAYROLL_MARK_PAID',
-        batchId: batch._id,
-        performedBy: processedBy,
-        metadata: { month, year, totalNet: batch.totalNet }
+        // Also update any generated payslips in the new lifecycle
+        await tx.payslip.updateMany({
+            where: { month, year, organizationId, status: { in: ['GENERATED', 'SENT'] } },
+            data: {
+                status: 'PAID',
+                paidAt: new Date(),
+                paidBy: processedBy
+            }
+        });
+
+        await tx.payrollLedger.create({
+            data: {
+                organizationId,
+                action: 'PAYROLL_MARK_PAID',
+                batchId: batch.id,
+                performedBy: processedBy,
+                metadata: { month, year, totalNet: batch.totalNet }
+            }
+        });
+
+        return uBatch;
     });
 
-    await auditService.log(processedBy, 'MARK_PAYROLL_PAID', 'PayrollBatch', batch._id, { month, year }, 'SUCCESS', null, organizationId);
+    await auditService.logAction({ 
+        userId: processedBy, 
+        action: 'MARK_PAYROLL_PAID', 
+        entityType: 'PayrollBatch', 
+        entityId: batch.id, 
+        details: { month, year },
+        organizationId 
+    }).catch(() => {});
 
-    return batch;
+    return updatedBatch;
+};
+
+/**
+ * Upserts a full payroll profile including earnings, deductions, ctc, and bank details.
+ * Implements locking if payroll is already processed for the month.
+ */
+const upsertFullPayrollProfile = async (data, organizationId, performerId) => {
+    const { employeeId, annualCTC, earnings, deductions, bankDetails } = data;
+
+    // 1. Check for Active Payroll Lock
+    // If a payroll run exists for the CURRENT month/year and is PROCESSING it's locked.
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    const activeBatch = await prisma.payrollBatch.findFirst({
+        where: { organizationId, month, year, status: 'PROCESSING' }
+    });
+
+    if (activeBatch) {
+        throw new AppError('Payroll profile is currently locked as a payroll run is in progress for this month.', 400);
+    }
+
+    return await prisma.$transaction(async (tx) => {
+        // 2. Upsert Payroll Profile
+        const profile = await tx.payrollProfile.upsert({
+            where: { employeeId },
+            update: {
+                annualCTC: parseFloat(annualCTC),
+                monthlyCTC: parseFloat(annualCTC) / 12,
+                earnings: earnings || [],
+                deductions: deductions || [],
+                profileVersion: { increment: 1 },
+                organizationId
+            },
+            create: {
+                employeeId,
+                organizationId,
+                annualCTC: parseFloat(annualCTC),
+                monthlyCTC: parseFloat(annualCTC) / 12,
+                earnings: earnings || [],
+                deductions: deductions || [],
+                profileVersion: 1
+            }
+        });
+
+        // 3. Fetch employee to link bank updates & return data
+        const employee = await tx.employee.findUnique({
+            where: { id: employeeId },
+            select: { id: true, userId: true }
+        });
+
+        if (!employee) throw new AppError('Employee record not found', 404);
+
+        if (bankDetails) {
+            if (employee.userId) {
+                const bankUpdate = {};
+                if (bankDetails.bankName) bankUpdate.bankName = bankDetails.bankName;
+                if (bankDetails.accountNumber) bankUpdate.accountNumber = bankDetails.accountNumber;
+                if (bankDetails.ifscCode) bankUpdate.ifscCode = bankDetails.ifscCode;
+                if (bankDetails.pan) bankUpdate.pan = bankDetails.pan;
+                if (bankDetails.uan) bankUpdate.uan = bankDetails.uan;
+
+                if (Object.keys(bankUpdate).length > 0) {
+                    await tx.user.update({
+                        where: { id: employee.userId },
+                        data: bankUpdate
+                    });
+                }
+            }
+        }
+
+        await auditService.log(performerId, 'PAYROLL_PROFILE_SETUP', 'PayrollProfile', profile.id, data, 'SUCCESS', null, organizationId);
+        
+        // Fetch updated user to return
+        const updatedUser = await tx.user.findUnique({
+            where: { id: employee.userId },
+            include: { employee: { include: { payrollProfile: true } } }
+        });
+
+        return { profile, user: updatedUser };
+    });
+};
+
+/**
+ * Checks system readiness for a month/year payroll cycle.
+ * Returns counts of ready, missing bank, and missing profile employees.
+ */
+const getReadinessCheck = async (organizationId, month, year) => {
+    const activeEmployees = await prisma.user.findMany({
+        where: { organizationId, isActive: true, isDeleted: false },
+        include: { employee: { include: { payrollProfile: true } } }
+    });
+
+    const summary = {
+        totalEmployees: activeEmployees.length,
+        readyCount: 0,
+        missingProfileCount: 0,
+        missingBankCount: 0,
+        readyEmployees: []
+    };
+
+    activeEmployees.forEach(u => {
+        const hasProfile = !!u.employee?.payrollProfile;
+        const hasBank = !!(u.bankName && u.accountNumber);
+
+        if (!hasProfile) summary.missingProfileCount++;
+        else if (!hasBank) summary.missingBankCount++;
+        else {
+            summary.readyCount++;
+            summary.readyEmployees.push({
+                id: u.id,
+                name: u.name,
+                employeeId: u.employee.employeeCode,
+                department: u.employee.department?.name || 'Unassigned'
+            });
+        }
+    });
+
+    return { summary };
+};
+
+/**
+ * Generates a full payroll simulation preview for all "ready" employees.
+ */
+const getPayrollPreview = async (organizationId, month, year, overtimeEnabled) => {
+    const readiness = await getReadinessCheck(organizationId, month, year);
+    const readyEmployees = readiness.summary.readyEmployees;
+
+    const simulations = await Promise.all(readyEmployees.map(async (emp) => {
+        try {
+            const sim = await simulateUserPayroll(emp.id, parseInt(month), parseInt(year), organizationId, { overtimeEnabled });
+            return {
+                id: emp.id,
+                name: emp.name,
+                employeeId: emp.employeeId || '-',
+                joiningDate: sim.joiningDate,
+                totalOrgWorkingDays: sim.totalOrgWorkingDays,
+                baseGross: sim.baseGross,
+                adjustedGross: sim.adjustedGross,
+                adjustedDeductions: sim.adjustedDeductions,
+                gross: sim.grossPay,
+                deductions: sim.totalDeductions,
+                net: sim.netSalary,
+                working: sim.workingDays,
+                present: sim.presentDays,
+                lop: sim.lopDays,
+                overtimeHours: sim.overtimeHours,
+                overtimePay: sim.overtimePay,
+                status: 'READY'
+            };
+        } catch (err) {
+            return {
+                id: emp.id,
+                name: emp.name,
+                employeeId: emp.employeeId,
+                error: err.message,
+                status: 'ERROR'
+            };
+        }
+    }));
+
+    const summary = {
+        totalEmployees: simulations.length,
+        totalGross: simulations.reduce((acc, s) => acc + (s.gross || 0), 0),
+        totalDeductions: simulations.reduce((acc, s) => acc + (s.deductions || 0), 0),
+        totalNetPay: simulations.reduce((acc, s) => acc + (s.net || 0), 0),
+        errorCount: simulations.filter(s => s.status === 'ERROR').length
+    };
+
+    return { summary, breakdown: simulations };
+};
+
+/**
+ * Generates immutable Payslip records from ProcessedPayroll calculations.
+ */
+const generatePayslips = async (month, year, organizationId, generatedBy) => {
+    const processedPayrolls = await prisma.processedPayroll.findMany({
+        where: { month: parseInt(month), year: parseInt(year), organizationId, isDeleted: false }
+    });
+
+    if (!processedPayrolls.length) {
+        throw new AppError('No finalized payroll calculations found for the selected period. Please "Run Payroll" first.', 404);
+    }
+
+    const results = [];
+    for (const record of processedPayrolls) {
+        const breakdown = record.breakdown || {};
+        
+        const payslipData = {
+            netSalary: record.netPay, // legacy
+            netPay: record.netPay,
+            gross: record.grossYield,
+            totalDeductions: record.liability,
+            earnings: Array.isArray(breakdown.earnings) ? breakdown.earnings : (breakdown.earnings?.components || []),
+            deductions: Array.isArray(breakdown.deductions) ? breakdown.deductions : (breakdown.deductions?.components || []),
+            breakdown: record.breakdown,
+            employeeInfo: record.employeeInfo,
+            bankDetails: record.bankDetails,
+            updatedAt: new Date(),
+            generatedBy
+        };
+
+        const payslip = await prisma.payslip.upsert({
+            where: {
+                organizationId_month_year_employeeId: {
+                    organizationId,
+                    month: parseInt(month),
+                    year: parseInt(year),
+                    employeeId: record.employeeId
+                }
+            },
+            update: payslipData,
+            create: {
+                ...payslipData,
+                organizationId,
+                employeeId: record.employeeId,
+                processedPayrollId: record.id,
+                month: parseInt(month),
+                year: parseInt(year),
+                status: 'GENERATED'
+            }
+        });
+        results.push(payslip);
+    }
+
+    const batchId = processedPayrolls[0].payrollBatchId;
+
+    await prisma.payrollLedger.create({
+        data: {
+            organizationId,
+            action: 'PAYSLIP_GENERATION',
+            batchId,
+            performedBy: generatedBy,
+            metadata: { month, year, count: results.length }
+        }
+    });
+
+    return results;
+};
+
+/**
+ * Marks a single Payslip record as PAID.
+ * Guards: throws if not found, or already PAID/SENT.
+ */
+const markPayslipAsPaid = async (id, organizationId, paidBy) => {
+    const payslip = await prisma.payslip.findFirst({
+        where: { id, organizationId, isDeleted: false }
+    });
+    if (!payslip) throw new AppError('Payslip not found.', 404);
+
+    const updated = await prisma.payslip.update({
+        where: { id },
+        data: {
+            status: 'PAID',
+            paidAt: payslip.paidAt || new Date(),
+            paidBy: payslip.paidBy || paidBy
+        }
+    });
+
+    // CRITICAL: Always sync with ProcessedPayroll to ensure Dashboard reflects payment
+    // This also fixes records that were marked as paid before the sync logic was added.
+    await prisma.processedPayroll.updateMany({
+        where: { 
+            employeeId: payslip.employeeId, 
+            month: payslip.month, 
+            year: payslip.year,
+            organizationId 
+        },
+        data: {
+            isPaid: true,
+            paidAt: payslip.paidAt || new Date(),
+            paidBy: payslip.paidBy || paidBy
+        }
+    });
+
+    await prisma.payrollLedger.create({
+        data: {
+            organizationId,
+            action: 'PAYSLIP_MARKED_PAID',
+            performedBy: paidBy,
+            metadata: { payslipId: id, employeeId: payslip.employeeId, month: payslip.month, year: payslip.year }
+        }
+    }).catch(() => {});
+
+    // SYNC: Auto-calculate if entire Batch is now complete
+    const currentProcessed = await prisma.processedPayroll.findUnique({
+        where: { id: payslip.processedPayrollId }
+    });
+
+    if (currentProcessed?.payrollBatchId) {
+        const unpaidCount = await prisma.processedPayroll.count({
+            where: { 
+                payrollBatchId: currentProcessed.payrollBatchId, 
+                isPaid: false,
+                isDeleted: false 
+            }
+        });
+
+        if (unpaidCount === 0) {
+            await prisma.payrollBatch.update({
+                where: { id: currentProcessed.payrollBatchId },
+                data: { 
+                    isPaid: true, 
+                    status: 'PAID', 
+                    paidAt: payslip.paidAt || new Date(), 
+                    paidBy 
+                }
+            }).catch(() => {});
+        }
+    }
+
+    return updated;
+};
+
+/**
+ * Marks multiple Payslip records as PAID in bulk.
+ */
+const bulkMarkPayslipsAsPaid = async (ids, organizationId, paidBy) => {
+    const results = { success: 0, failed: 0, errors: [] };
+
+    for (const id of ids) {
+        try {
+            await markPayslipAsPaid(id, organizationId, paidBy);
+            results.success++;
+        } catch (err) {
+            results.failed++;
+            results.errors.push({ id, error: err.message });
+        }
+    }
+
+    await auditService.log(
+        paidBy, 'BULK_MARK_PAYSLIPS_PAID', 'Payslip', null,
+        { count: ids.length, success: results.success, failed: results.failed },
+        results.failed > 0 ? 'WARNING' : 'SUCCESS', null, organizationId
+    ).catch(() => {});
+
+    return results;
+};
+
+/**
+ * Unified View: Fetches all processed payroll records and merges with payslip status.
+ * This ensures that if a payroll is processed but payslip is not generated, it still shows up.
+ */
+const getGeneratedPayslips = async (filters) => {
+    const { month, year, employeeId, organizationId } = filters;
+    const where = { organizationId, isDeleted: false };
+    if (month) where.month = parseInt(month);
+    if (year) where.year = parseInt(year);
+    if (employeeId) where.employeeId = employeeId;
+
+    const history = await prisma.processedPayroll.findMany({
+        where,
+        include: { payslip: true },
+        orderBy: { createdAt: 'desc' }
+    });
+
+    // Map to a unified format that the frontend expects (compatible with Payslip model)
+    return history.map(record => {
+        const payslip = record.payslip;
+        return {
+            id: payslip?.id || `pp-${record.id}`, // fallback ID if not generated
+            processedPayrollId: record.id,
+            status: record.isPaid ? 'PAID' : (payslip?.status || 'PENDING'), // PENDING means processed but no payslip yet
+            isEmailSent: payslip?.isEmailSent || false,
+            lastEmailSentAt: payslip?.lastEmailSentAt,
+            month: record.month,
+            year: record.year,
+            
+            // Standardized Fields (Single Source of Truth)
+            netPay: record.netPay,
+            netSalary: record.netPay, // legacy
+            gross: payslip?.gross || record.grossYield,
+            totalDeductions: payslip?.totalDeductions || record.liability,
+            earnings: payslip?.earnings || record.earnings || [],
+            deductions: payslip?.deductions || record.deductions || [],
+            
+            grossYield: record.grossYield,
+            liability: record.liability,
+            breakdown: record.breakdown,
+            employeeInfo: record.employeeInfo,
+            bankDetails: record.bankDetails,
+            paidAt: record.isPaid ? record.paidAt : payslip?.paidAt,
+            paidBy: record.isPaid ? record.paidBy : payslip?.paidBy,
+            generatedAt: payslip?.generatedAt,
+            isGenerated: !!payslip,
+            employeeId: record.employeeId
+        };
+    });
+};
+
+
+/**
+ * Fetches personal payslips for an employee.
+ */
+const getEmployeePayslips = async (userId, organizationId, month, year) => {
+    const where = { 
+        employee: { userId }, 
+        organizationId,
+        isDeleted: false 
+    };
+    if (month) where.month = parseInt(month);
+    if (year) where.year = parseInt(year);
+
+    const payslips = await prisma.payslip.findMany({
+        where,
+        include: { processedPayroll: true },
+        orderBy: [{ year: 'desc' }, { month: 'desc' }]
+    });
+
+    return payslips.map(p => ({
+        ...p,
+        isPaid: p.processedPayroll?.isPaid || p.status === 'PAID'
+    }));
 };
 
 module.exports = {
   simulateUserPayroll,
   saveProcessedPayroll,
   markAsPaid,
+  markPayslipAsPaid,
+  bulkMarkPayslipsAsPaid,
   ensureBatchExists,
   getPayrollSummary,
   getDepartmentCostAnalysis,
@@ -1176,7 +1581,13 @@ module.exports = {
   getPayrollDashboard,
   getPayrollAnalytics,
   runPayroll,
+  generatePayslips,
+  getGeneratedPayslips,
+  getEmployeePayslips,
   getPayrollBatches,
   calculateAttendance,
-  calculateSalary
+  calculateSalaryBreakdown,
+  upsertFullPayrollProfile,
+  getReadinessCheck,
+  getPayrollPreview
 };

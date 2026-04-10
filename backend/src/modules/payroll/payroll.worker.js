@@ -1,80 +1,111 @@
 'use strict';
 
-const PayrollJob = require('./payrollJob.model');
-const ProcessedPayroll = require('./processedPayroll.model');
+const { prisma } = require('../../config/database');
 const emailService = require('../../shared/services/email.service');
-const pdfGeneratorService = require('../reports/pdfGenerator.service');
-const Settings = require('../settings/settings.model');
 const logger = require('../../shared/utils/logger');
 
 /**
  * PayrollWorker - Simplified Internal Background Processor
- * In a real Bank-Grade system, this would be BullMQ / SQS
+ * Refactored to Prisma Client
  */
 const processJobs = async () => {
-    const jobs = await PayrollJob.find({ 
-        status: { $in: ['Pending', 'Failed'] },
-        attempts: { $lt: 3 }
-    }).limit(10).sort({ priority: -1, createdAt: 1 });
+    try {
+        const jobs = await prisma.payrollJob.findMany({ 
+            where: {
+                status: { in: ['Pending', 'Failed'] },
+                attempts: { lt: 3 },
+                isDeleted: false
+            },
+            take: 10,
+            orderBy: [
+                { priority: 'desc' },
+                { createdAt: 'asc' }
+            ]
+        });
 
-    for (const job of jobs) {
-        job.status = 'Processing';
-        job.attempts += 1;
-        await job.save();
+        for (const job of jobs) {
+            // Mark as processing
+            await prisma.payrollJob.update({
+                where: { id: job.id },
+                data: { status: 'Processing', attempts: job.attempts + 1 }
+            });
 
-        try {
-            if (job.type === 'SEND_PAYSLIP_EMAILS') {
-                const { ids, organizationId } = job.payload;
-                const payrolls = await ProcessedPayroll.find({ _id: { $in: ids }, organizationId }).populate('user');
-                const settings = await Settings.findOne({ organizationId });
-                
-                // Reuse existing bulk email logic but in background
-                const bulkData = payrolls.map(p => ({
-                    email: p.user?.email || p.employeeInfo?.email,
-                    data: {
-                        user: p.user,
-                        month: p.month,
-                        year: p.year,
-                        breakdown: p.breakdown,
-                        attendance: p.attendance,
-                        currencySymbol: settings?.payroll?.currencySymbol || '₹',
-                        employeeInfo: p.employeeInfo,
-                        bankDetails: p.bankDetails
+            try {
+                if (job.type === 'SEND_PAYSLIP_EMAILS') {
+                    const { ids, organizationId } = job.payload;
+                    
+                    const payslips = await prisma.payslip.findMany({
+                        where: { id: { in: ids }, organizationId },
+                        include: { 
+                            employee: { include: { user: true } },
+                            processedPayroll: true 
+                        }
+                    });
+
+                    const orgSettings = await prisma.orgSettings.findUnique({ where: { organizationId } });
+                    const settings = orgSettings?.data || {};
+                    
+                    const bulkData = payslips.map(p => {
+                        const user = p.employee?.user;
+                        return {
+                            email: user?.email || p.employeeInfo?.email,
+                            data: {
+                                ...p.processedPayroll, // Use the actual payroll data snapshot
+                                companyId: organizationId,
+                                user: user,
+                                currencySymbol: settings?.payroll?.currencySymbol || '₹',
+                                // Ensure standard fields are exposed if template expects them
+                                employeeInfo: p.employeeInfo,
+                                bankDetails: p.bankDetails,
+                                breakdown: p.breakdown,
+                                attendance: p.attendance,
+                                month: p.month,
+                                year: p.year
+                            }
+                        };
+                    }).filter(x => x.email);
+
+                    if (bulkData.length > 0) {
+                        const results = await emailService.sendPayslipsBulk(bulkData);
+                        
+                        // Update records
+                        if (results.sent > 0) {
+                           const failedEmails = new Set(results.errors.map(e => e.email));
+                           const successfulPayslipIds = payslips
+                               .filter(p => !failedEmails.has(p.employee?.user?.email || p.employeeInfo?.email))
+                               .map(p => p.id);
+                           
+                           if (successfulPayslipIds.length > 0) {
+                               await prisma.payslip.updateMany({
+                                   where: { id: { in: successfulPayslipIds } },
+                                   data: { isEmailSent: true, status: 'SENT', lastEmailSentAt: new Date() }
+                               });
+                           }
+                        }
                     }
-                })).filter(x => x.email);
-
-                const results = await emailService.sendPayslipsBulk(bulkData);
-                
-                // Update records
-                if (results.sent > 0) {
-                   const failedEmails = new Set(results.errors.map(e => e.email));
-                   const successfulIds = payrolls
-                       .filter(p => !failedEmails.has(p.user?.email || p.employeeInfo?.email))
-                       .map(p => p._id);
-                   
-                   await ProcessedPayroll.updateMany(
-                       { _id: { $in: successfulIds } },
-                       { $set: { isEmailSent: true, lastEmailSentAt: new Date() } }
-                   );
                 }
+
+                // Mark as completed
+                await prisma.payrollJob.update({
+                    where: { id: job.id },
+                    data: { status: 'Completed', processedAt: new Date() }
+                });
+
+            } catch (err) {
+                logger.error(`[PayrollWorker] Job ${job.id} failed: ${err.message}`);
+                await prisma.payrollJob.update({
+                    where: { id: job.id },
+                    data: { status: 'Failed', lastError: err.message }
+                });
             }
-
-            job.status = 'Completed';
-            job.processedAt = new Date();
-            await job.save();
-
-        } catch (err) {
-            logger.error(`[PayrollWorker] Job ${job._id} failed: ${err.message}`);
-            job.status = 'Failed';
-            job.lastError = err.message;
-            await job.save();
         }
+    } catch (err) {
+        logger.error(`[PayrollWorker] Global Error: ${err.message}`);
     }
 };
 
-// Start simple polling interval
 const startWorker = () => {
-    logger.info('🏦 Bank-Grade Payroll Worker Started');
+    logger.info('🏦 Bank-Grade Payroll Worker Started (Prisma Mode)');
     setInterval(processJobs, 30000); // Check every 30 seconds
 };
 

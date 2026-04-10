@@ -39,11 +39,11 @@ const authController = {
   }),
 
   completeOnboarding: asyncHandler(async (req, res) => {
-    const user = await authService.completeOnboarding(req.user._id, { ...req.body, req });
+    const user = await authService.completeOnboarding(req.user.id, { ...req.body, req });
     
     ApiResponse.success(res, {
       message: 'Onboarding completed successfully',
-      data: { user: user.toPublicJSON() },
+      data: { user },
     });
   }),
 
@@ -70,24 +70,24 @@ const authController = {
 
   logout: asyncHandler(async (req, res) => {
     // Audit: track logout events
-    if (req.user?._id) {
+    if (req.user?.id) {
       auditService.log(
-        req.user._id,
+        req.user.id,
         'LOGOUT',
         'Auth',
-        req.user._id,
+        req.user.id,
         {},
         'SUCCESS',
         req.ip
       ).catch(() => {});
     }
-    await authService.logout(req.user._id);
+    await authService.logout(req.user.id);
     ApiResponse.success(res, { message: 'Logged out successfully' });
   }),
 
   changePassword: asyncHandler(async (req, res) => {
-    await authService.changePassword(req.user._id, req.body);
-    auditService.log(req.user._id, 'CHANGE_PASSWORD', 'Auth', req.user._id, {}, 'SUCCESS', req.ip).catch(() => {});
+    await authService.changePassword(req.user.id, req.body);
+    auditService.log(req.user.id, 'CHANGE_PASSWORD', 'Auth', req.user.id, {}, 'SUCCESS', req.ip).catch(() => {});
     ApiResponse.success(res, { message: 'Password changed successfully. Please log in again.' });
   }),
 

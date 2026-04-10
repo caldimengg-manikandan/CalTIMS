@@ -14,34 +14,34 @@ router.use(checkSubscription);
 router.use(requireFeature('leave_management'));
 
 router.post('/', asyncHandler(async (req, res) => {
-  const leave = await leaveService.apply(req.body, req.user._id, req.organizationId);
+  const leave = await leaveService.apply(req.body, req.context);
   ApiResponse.created(res, { message: 'Leave application submitted', data: leave });
 }));
 
 router.get('/', asyncHandler(async (req, res) => {
-  const { leaves, pagination } = await leaveService.getAll(req.query, req.user, req.organizationId);
-  ApiResponse.success(res, { data: leaves, pagination });
+  const result = await leaveService.getAll(req.query, req.context);
+  ApiResponse.success(res, result);
 }));
 
 // ── GET all approved leaves for calendar display (visible to all users) ────────
 router.get('/calendar', asyncHandler(async (req, res) => {
-  const Leave = require('./leave.model');
-  const filter = { status: 'approved', organizationId: req.organizationId };
+  const { prisma } = require('../../config/database');
+  const { from, to } = req.query;
+  const where = { status: 'APPROVED', organizationId: req.organizationId, isDeleted: false };
 
-  // Filter: leave overlaps with the requested date range
-  if (req.query.from || req.query.to) {
-    const from = req.query.from ? new Date(req.query.from) : new Date('2000-01-01');
-    const to   = req.query.to   ? new Date(req.query.to)   : new Date('9999-12-31');
-    filter.startDate = { $lte: to };
-    filter.endDate   = { $gte: from };
+  if (from || to) {
+    const fromDate = from ? new Date(from) : new Date('2000-01-01');
+    const toDate   = to   ? new Date(to)   : new Date('9999-12-31');
+    where.startDate = { lte: toDate };
+    where.endDate   = { gte: fromDate };
   }
 
-  const leaves = await Leave.find(filter)
-    .populate('userId', 'name employeeId')
-    .sort({ startDate: 1 })
-    .lean();
+  const leaves = await prisma.leave.findMany({
+    where,
+    include: { employee: { include: { user: { select: { id: true, name: true } } } }, type: true },
+    orderBy: { startDate: 'asc' }
+  });
 
-  // Map leaves to calendar-event shape
   const leaveTypeColors = {
     annual:    '#f59e0b',
     sick:      '#ef4444',
@@ -52,25 +52,25 @@ router.get('/calendar', asyncHandler(async (req, res) => {
   };
 
   const events = leaves.map(leave => ({
-    _id:       leave._id,
-    title:     `${leave.userId?.name || 'Employee'}`,
+    id:        leave.id,
+    title:     `${leave.employee?.user?.name || 'Employee'}`,
     startDate: leave.startDate,
     endDate:   leave.endDate,
     isAllDay:  true,
     isPublic:  true,
     isLeave:   true,
-    color:     leaveTypeColors[leave.leaveType] || '#f59e0b',
-    leaveType: leave.leaveType,
-    employee:  leave.userId,
+    color:     leave.type?.color || leaveTypeColors[leave.type?.name?.toLowerCase()] || '#f59e0b',
+    leaveType: leave.type?.name,
+    employee:  leave.employee?.user,
     totalDays: leave.totalDays,
-    createdBy: leave.userId,     // so the calendar knows who owns it
+    createdBy: leave.employee?.userId,
   }));
 
   ApiResponse.success(res, { data: events });
 }));
 
 // ── Backfill route MUST be before /:id routes to avoid param conflict ──────────
-router.post('/backfill-timesheets', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
+router.post('/backfill-timesheets', checkPermission('Leave Management', 'Leave Requests', 'approve'), asyncHandler(async (req, res) => {
   const result = await leaveService.backfillTimesheets(req.user._id, req.organizationId);
   ApiResponse.success(res, {
     message: `Synced ${result.synced}/${result.total} approved leaves to timesheets`,
@@ -78,8 +78,8 @@ router.post('/backfill-timesheets', checkPermission('manageLeaves'), asyncHandle
   });
 }));
 
-router.get('/filter-options', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
-  const options = await leaveService.getFilterOptions(req.organizationId);
+router.get('/filter-options', checkPermission('Leave Management', 'Leave Tracker', 'view'), asyncHandler(async (req, res) => {
+  const options = await leaveService.getFilterOptions(req.context.organizationId);
   ApiResponse.success(res, { data: options });
 }));
 
@@ -93,18 +93,18 @@ router.get('/:id', asyncHandler(async (req, res) => {
   ApiResponse.success(res, { data: leave });
 }));
 
-router.patch('/:id/approve', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
+router.patch('/:id/approve', checkPermission('Leave Management', 'Leave Requests', 'approve'), asyncHandler(async (req, res) => {
   const leave = await leaveService.approve(req.params.id, req.user._id, req.organizationId);
   ApiResponse.success(res, { message: 'Leave approved', data: leave });
 }));
 
-router.patch('/:id/reject', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
+router.patch('/:id/reject', checkPermission('Leave Management', 'Leave Requests', 'reject'), asyncHandler(async (req, res) => {
   const leave = await leaveService.reject(req.params.id, req.user._id, req.body.reason, req.organizationId);
   ApiResponse.success(res, { message: 'Leave rejected', data: leave });
 }));
 
 // Sync timesheets for a single already-approved leave
-router.patch('/:id/sync-timesheet', checkPermission('manageLeaves'), asyncHandler(async (req, res) => {
+router.patch('/:id/sync-timesheet', checkPermission('Leave Management', 'Leave Requests', 'approve'), asyncHandler(async (req, res) => {
   const result = await leaveService.syncTimesheet(req.params.id, req.user._id, req.organizationId);
   ApiResponse.success(res, { message: result.message });
 }));

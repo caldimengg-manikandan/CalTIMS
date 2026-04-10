@@ -12,7 +12,7 @@ const ROUTE_LABELS = {
     compliance: 'Compliance & Locks',
     // People
     employees: 'Employees',
-    leaves: 'Leave Tracker',
+    leaves: 'Leaves',
     announcements: 'Announcements',
     incidents: 'Help & Support',
     // Work

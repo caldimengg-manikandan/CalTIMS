@@ -20,10 +20,13 @@ export const exportToPdf = async (element, options = {}) => {
             pixelRatio: pixelRatio,
             backgroundColor: '#ffffff',
             style: {
-                borderRadius: '0' // Ensure no rounded corners on the overall image if not wanted
+                borderRadius: '0'
             },
-            // Ensure all fonts are loaded
+            // Prevent SecurityError: Failed to read 'cssRules'
+            // by skipping external stylesheets that don't support CORS
             cacheBust: true,
+            skipFonts: true, // Only if fonts are the issue, but usually it's the CSS rules
+            // includeQueryParams: true
         });
 
         // 2. Create jsPDF instance (A4 size)

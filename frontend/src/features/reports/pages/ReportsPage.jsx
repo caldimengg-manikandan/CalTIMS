@@ -17,7 +17,18 @@ import {
     Filter, RefreshCw, AlertCircle, CheckCircle2, Award, Zap, ShieldAlert,
     ChevronDown, FileSpreadsheet
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { 
+    format, 
+    startOfYear, 
+    endOfYear, 
+    startOfMonth, 
+    endOfMonth, 
+    startOfWeek, 
+    endOfWeek, 
+    setWeek, 
+    getYear,
+    addDays
+} from 'date-fns'
 import toast from 'react-hot-toast'
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
@@ -123,22 +134,66 @@ const ProgressBar = ({ label, value, max, color, isBudget = false }) => {
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function ReportsPage() {
     const { isPro } = useAuthStore()
-    const [range, setRange] = useState({ from: '', to: '' })
-    const [selectedProjectId, setSelectedProjectId] = useState('all')
-    const [selectedUserId, setSelectedUserId] = useState('all')
-    const [selectedDepartment, setSelectedDepartment] = useState('all')
-    const [period, setPeriod] = useState('monthly')
+    const currentYear = new Date().getFullYear()
+    const [selectedYear, setSelectedYear] = useState(currentYear)
+    const [selectedMonth, setSelectedMonth] = useState('all')
+    const [selectedWeek, setSelectedWeek] = useState('all')
     const [detailParams, setDetailParams] = useState(null)
     const [exportLoading, setExportLoading] = useState(null) // 'pdf' or 'csv'
     const [exportMenuOpen, setExportMenuOpen] = useState(false)
+    const [range, setRange] = useState({ from: '', to: '' })
+    const [selectedUserId, setSelectedUserId] = useState('all')
+    const [selectedProjectId, setSelectedProjectId] = useState('all')
+    const [selectedDepartment, setSelectedDepartment] = useState('all')
 
-    const filterParams = {
-        ...(range.from && { from: range.from }),
-        ...(range.to && { to: range.to }),
-        ...(!range.from && !range.to && period && { period }),
-        ...(selectedUserId !== 'all' && { userId: selectedUserId }),
-        ...(selectedProjectId !== 'all' && { projectId: selectedProjectId }),
-    }
+    // ─── Filter Data ──────────────────────────────────────────────────────────
+    const { data: filterOptions } = useQuery({
+        queryKey: ['report-filter-options'],
+        queryFn: () => reportAPI.getFilterOptions().then(r => r.data.data),
+    })
+
+    const availableYears = useMemo(() => filterOptions?.years || [currentYear], [filterOptions, currentYear])
+
+    const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ]
+
+    const filterParams = useMemo(() => {
+        let from = range.from;
+        let to = range.to;
+
+        // If no manual range, derive from Year/Month/Week
+        if (!from && !to) {
+            if (selectedWeek !== 'all') {
+                // Find the specific week in that year
+                // ISO weeks are standard for business
+                const firstDayOfYear = new Date(selectedYear, 0, 1);
+                const targetDay = setWeek(firstDayOfYear, parseInt(selectedWeek), { weekStartsOn: 1 });
+                const start = startOfWeek(targetDay, { weekStartsOn: 1 });
+                const end = endOfWeek(targetDay, { weekStartsOn: 1 });
+                from = format(start, 'yyyy-MM-dd');
+                to = format(end, 'yyyy-MM-dd');
+            } else if (selectedMonth !== 'all') {
+                const start = new Date(selectedYear, parseInt(selectedMonth), 1);
+                const end = endOfMonth(start);
+                from = format(start, 'yyyy-MM-dd');
+                to = format(end, 'yyyy-MM-dd');
+            } else {
+                const start = startOfYear(new Date(selectedYear, 0, 1));
+                const end = endOfYear(start);
+                from = format(start, 'yyyy-MM-dd');
+                to = format(end, 'yyyy-MM-dd');
+            }
+        }
+
+        return {
+            ...(from && { from }),
+            ...(to && { to }),
+            ...(selectedUserId !== 'all' && { userId: selectedUserId }),
+            ...(selectedProjectId !== 'all' && { projectId: selectedProjectId }),
+        }
+    }, [range, selectedYear, selectedMonth, selectedWeek, selectedUserId, selectedProjectId]);
 
     // ─── Data Queries ──────────────────────────────────────────────────────────
     const { data: projects } = useQuery({
@@ -260,8 +315,8 @@ export default function ReportsPage() {
         setExportMenuOpen(false)
         try {
             const params = {
-                ...(range.from && { from: range.from }),
-                ...(range.to && { to: range.to }),
+                ...(filterParams.from && { from: filterParams.from }),
+                ...(filterParams.to && { to: filterParams.to }),
                 ...(selectedUserId !== 'all' && { userId: selectedUserId }),
                 ...(selectedProjectId !== 'all' && { projectId: selectedProjectId }),
             }
@@ -294,6 +349,9 @@ export default function ReportsPage() {
         setSelectedProjectId('all')
         setSelectedUserId('all')
         setSelectedDepartment('all')
+        setSelectedYear(new Date().getFullYear())
+        setSelectedMonth('all')
+        setSelectedWeek('all')
     }
 
     return (
@@ -385,12 +443,47 @@ export default function ReportsPage() {
                             {employees?.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
                         </select>
 
-                        <select className="input py-2 text-sm w-44 bg-slate-50 dark:bg-slate-800 font-medium border-primary-200 dark:border-primary-500/20"
-                            value={period} onChange={e => { setPeriod(e.target.value); setRange({ from: '', to: '' }) }}>
-                            <option value="weekly">This Week</option>
-                            <option value="monthly">This Month</option>
-                            <option value="yearly">This Year</option>
-                        </select>
+                        <div className="flex items-center gap-2">
+                             <div className="relative">
+                                <select 
+                                    className="input py-2 text-sm w-28 bg-slate-50 dark:bg-slate-800 font-bold border-indigo-200 dark:border-indigo-500/20"
+                                    value={selectedYear} 
+                                    onChange={e => {
+                                        setSelectedYear(parseInt(e.target.value));
+                                        setRange({ from: '', to: '' });
+                                    }}
+                                >
+                                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                             </div>
+
+                             <select 
+                                className="input py-2 text-sm w-36 bg-slate-50 dark:bg-slate-800 font-medium"
+                                value={selectedMonth} 
+                                onChange={e => {
+                                    setSelectedMonth(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
+                                    setSelectedWeek('all');
+                                    setRange({ from: '', to: '' });
+                                }}
+                            >
+                                <option value="all">All Months</option>
+                                {monthNames.map((name, i) => <option key={i} value={i}>{name}</option>)}
+                            </select>
+
+                            <select 
+                                className="input py-2 text-sm w-32 bg-slate-50 dark:bg-slate-800 font-medium"
+                                value={selectedWeek} 
+                                onChange={e => {
+                                    setSelectedWeek(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
+                                    setRange({ from: '', to: '' });
+                                }}
+                            >
+                                <option value="all">All Weeks</option>
+                                {Array.from({ length: 52 }, (_, i) => (
+                                    <option key={i+1} value={i+1}>Week {i+1}</option>
+                                ))}
+                            </select>
+                        </div>
 
                         <select className="input py-2 text-sm w-44 bg-slate-50 dark:bg-slate-800 font-medium"
                             value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>

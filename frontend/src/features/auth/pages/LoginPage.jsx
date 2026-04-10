@@ -49,10 +49,17 @@ export default function LoginPage() {
             navigate(target, { replace: true })
         },
         onError: (err) => {
-            const message = err.response?.data?.message || 'Invalid email or password'
-            toast.error(message, { id: message })
-            setError('email', { type: 'manual', message: 'Incorrect email' })
-            setError('password', { type: 'manual', message: 'Incorrect password' })
+            const status = err.response?.status
+            const message = err.response?.data?.message || 'Connection failed. Please check your network or try again later.'
+            
+            toast.error(message, { id: 'login-error' })
+            
+            if (status === 401 || status === 400) {
+                setError('email', { type: 'manual', message: 'Incorrect email' })
+                setError('password', { type: 'manual', message: 'Incorrect password' })
+            } else if (status === 500) {
+                toast.error('System error. Please contact administrator.', { id: 'system-error' })
+            }
         }
     })
 

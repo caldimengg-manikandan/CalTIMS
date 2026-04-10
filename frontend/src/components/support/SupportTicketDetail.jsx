@@ -10,12 +10,12 @@ export default function SupportTicketDetail({ ticket, onBack }) {
     const qc = useQueryClient()
 
     const addMessageMutation = useMutation({
-        mutationFn: (message) => supportService.addTicketMessage(ticket._id, message, 'admin'),
+        mutationFn: (message) => supportService.addTicketMessage(ticket.id, message, 'admin'),
         onSuccess: () => {
             toast.success('Reply submitted')
             setReplyMessage('')
             qc.invalidateQueries(['support-tickets'])
-            qc.invalidateQueries(['support-ticket', ticket._id])
+            qc.invalidateQueries(['support-ticket', ticket.id])
         },
         onError: (err) => toast.error(err.message)
     })

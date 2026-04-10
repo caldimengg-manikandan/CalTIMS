@@ -1,37 +1,21 @@
 'use strict';
 
-/**
- * Scheduler Service
- * Runs a cron job every minute, checks active ReportSchedules,
- * and fires emails when the schedule is due.
- */
-
 const cron = require('node-cron');
-const ReportSchedule = require('../../modules/reportSchedules/reportSchedule.model');
-const User = require('../../modules/users/user.model');
+const { prisma } = require('../../config/database');
 const emailService = require('./email.service');
-const Settings = require('../../modules/settings/settings.model');
 const subscriptionReminderService = require('./subscriptionReminder.service');
 
 let _job = null;
 let _reminderJob = null;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Determine if a schedule is due to fire right now.
- * Called once per minute; "due" means today + this HH:mm + within the window.
- */
 function isDue(schedule, now) {
   const [hh, mm] = (schedule.scheduledTime || '09:00').split(':').map(Number);
   if (now.getHours() !== hh || now.getMinutes() !== mm) return false;
 
   const last = schedule.lastSentAt ? new Date(schedule.lastSentAt) : null;
-  if (!last) return true; // Never sent — fire immediately
+  if (!last) return true;
 
-  const diffMs = now - last;
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
+  const diffDays = (now - last) / (1000 * 60 * 60 * 24);
   switch (schedule.frequency) {
     case 'daily':       return diffDays >= 1;
     case 'weekly':      return diffDays >= 7;
@@ -41,13 +25,12 @@ function isDue(schedule, now) {
   }
 }
 
-// ── Runner ───────────────────────────────────────────────────────────────────
 async function runScheduler() {
   const now = new Date();
 
   let schedules;
   try {
-    schedules = await ReportSchedule.find({ isActive: true }).lean();
+    schedules = await prisma.reportSchedule.findMany({ where: { isActive: true } });
   } catch (err) {
     console.error('[Scheduler] DB error fetching schedules:', err.message);
     return;
@@ -56,20 +39,25 @@ async function runScheduler() {
   for (const schedule of schedules) {
     if (!isDue(schedule, now)) continue;
 
-    // Fetch company name and format
+    // Fetch org settings for company name and format
     let companyName = 'CALTIMS';
     let format = 'PDF';
     try {
-      const settings = await Settings.findOne().lean();
-      companyName = settings?.general?.companyName || companyName;
-      format = settings?.report?.defaultFormat || format;
+      if (schedule.organizationId) {
+        const s = await prisma.orgSettings.findUnique({ where: { organizationId: schedule.organizationId } });
+        companyName = s?.data?.general?.companyName || companyName;
+        format = s?.data?.report?.defaultFormat || format;
+      }
     } catch (_) {}
 
     // Fetch recipient emails
     let emails = [];
     try {
       if (schedule.recipientIds?.length) {
-        const users = await User.find({ _id: { $in: schedule.recipientIds } }, 'email').lean();
+        const users = await prisma.user.findMany({
+          where: { id: { in: schedule.recipientIds } },
+          select: { email: true },
+        });
         emails = users.map(u => u.email).filter(Boolean);
       }
     } catch (err) {
@@ -81,46 +69,32 @@ async function runScheduler() {
       continue;
     }
 
-    // Send email
     let historyEntry;
     try {
-      const result = await emailService.sendReportEmail(
-        emails,
-        schedule.reportType,
-        companyName,
-        schedule.projectIds || [],
-        format
-      );
-      historyEntry = {
-        sentAt: now,
-        status: 'success',
-        recipientCount: result.sent,
-        reportTitle: result.reportTitle,
-        error: null,
-      };
+      const result = await emailService.sendReportEmail(emails, schedule.reportType, companyName, schedule.projectIds || [], format);
+      historyEntry = { sentAt: now, status: 'success', recipientCount: result.sent, reportTitle: result.reportTitle, error: null };
       console.log(`[Scheduler] ✅ Sent "${schedule.name}" → ${result.sent} recipient(s)`);
     } catch (err) {
-      historyEntry = {
-        sentAt: now,
-        status: 'failed',
-        recipientCount: 0,
-        reportTitle: schedule.reportType,
-        error: err.message,
-      };
+      historyEntry = { sentAt: now, status: 'failed', recipientCount: 0, reportTitle: schedule.reportType, error: err.message };
       console.error(`[Scheduler] ❌ Failed "${schedule.name}":`, err.message);
     }
 
     // Persist history + lastSentAt
     try {
-      const doc = await ReportSchedule.findById(schedule._id);
-      if (doc) await doc.addHistory(historyEntry);
+      const existing = await prisma.reportSchedule.findUnique({ where: { id: schedule.id } });
+      if (existing) {
+        const history = [historyEntry, ...(existing.history || [])].slice(0, 50);
+        await prisma.reportSchedule.update({
+          where: { id: schedule.id },
+          data: { lastSentAt: now, history },
+        });
+      }
     } catch (err) {
       console.error(`[Scheduler] Error saving history for "${schedule.name}":`, err.message);
     }
   }
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
 const schedulerService = {
   start() {
     if (_job) return;
@@ -128,7 +102,6 @@ const schedulerService = {
       runScheduler().catch(err => console.error('[Scheduler] Unhandled error:', err.message));
     });
 
-    // Run trial reminders every hour on the hour
     _reminderJob = cron.schedule('0 * * * *', () => {
       subscriptionReminderService.checkTrialReminders().catch(err => console.error('[SubscriptionReminder] Unhandled error:', err.message));
     });

@@ -82,7 +82,7 @@ export default function IncidentDetails() {
                                 <StatusBadge status={ticket.status.toLowerCase()} />
                             </div>
                             <div className="flex items-center gap-4 text-sm text-slate-500 mb-6">
-                                <span className="flex items-center gap-1"><User size={16} /> {ticket.employee.name}</span>
+                                <span className="flex items-center gap-1"><User size={16} /> {ticket.employee?.user?.name}</span>
                                 <span className="flex items-center gap-1"><Calendar size={16} /> {format(new Date(ticket.createdAt), 'MMM d, yyyy h:mm a')}</span>
                             </div>
                             <div className="prose max-w-none text-slate-700 whitespace-pre-wrap bg-slate-50 p-4 rounded-xl">
@@ -102,13 +102,13 @@ export default function IncidentDetails() {
                                     <p className="text-slate-500 italic text-center py-4">No replies yet.</p>
                                 ) : (
                                     ticket.responses.map((res, idx) => {
-                                        const isMe = res.user._id === user.id;
-                                        const isAdminResponse = res.user.role === 'admin';
+                                        const isMe = res.user?.id === user.id;
+                                        const isAdminResponse = res.user?.role === 'admin';
 
                                         return (
                                             <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                                                 <div className="flex items-baseline gap-2 mb-1">
-                                                    <span className="text-sm font-semibold text-slate-700">{res.user.name}</span>
+                                                    <span className="text-sm font-semibold text-slate-700">{res.user?.name}</span>
                                                     {isAdminResponse && <span className="text-[10px] bg-indigo-100 text-primary-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Admin</span>}
                                                     <span className="text-xs text-slate-400">{format(new Date(res.createdAt), 'MMM d, h:mm a')}</span>
                                                 </div>
@@ -188,7 +188,7 @@ export default function IncidentDetails() {
                                 )}
 
                                 {/* Employee Controls: Withdraw & Reopen */}
-                                {!isAdmin && (ticket.employee._id === user.id || ticket.employee === user.id) && (
+                                {!isAdmin && (ticket.employee?.user?.id === user.id || ticket.employee?.userId === user.id) && (
                                     <div className="pt-4 mt-4 border-t border-slate-100 space-y-3">
                                         {['Open', 'In Progress'].includes(ticket.status) && (
                                             <button

@@ -276,7 +276,7 @@ export default function IncidentList() {
                                             </tr>
                                         ) : (
                                             listItems.map((item) => (
-                                                <tr key={item._id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all group">
+                                                <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all group">
                                                     <td className="px-6 py-5">
                                                         <span className="text-xs font-black text-primary bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-lg">
                                                             {activeTab === 'incidents' ? item.incidentId : item.ticketId}
@@ -303,7 +303,7 @@ export default function IncidentList() {
                                                                 <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold">
                                                                     {item.employee?.name?.charAt(0)}
                                                                 </div>
-                                                                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{item.employee?.name}</span>
+                                                                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{item.employee?.user?.name}</span>
                                                             </div>
                                                         </td>
                                                     )}
@@ -322,20 +322,20 @@ export default function IncidentList() {
                                                     </td>
                                                     <td className="px-6 py-5 text-center">
                                                         {activeTab === 'incidents' ? (
-                                                            <button onClick={() => navigate(`/incidents/${item._id}`)} className="p-2 text-slate-400 hover:text-primary hover:bg-white rounded-xl transition-all shadow-sm">
+                                                            <button onClick={() => navigate(`/incidents/${item.id}`)} className="p-2 text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl transition-all shadow-sm">
                                                                 <Eye size={18} />
                                                             </button>
                                                         ) : (
                                                             <div className="flex items-center justify-center gap-1">
                                                                 <button
                                                                     onClick={() => setSelectedTicket(item)}
-                                                                    className="p-2 text-primary hover:bg-white rounded-xl transition-all shadow-sm"
+                                                                    className="p-2 text-primary hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl transition-all shadow-sm"
                                                                     title="Review Ticket"
                                                                 >
                                                                     <Eye size={18} />
                                                                 </button>
                                                                 <div className="relative group/menu">
-                                                                    <button className="p-2 text-slate-400 hover:text-primary hover:bg-white rounded-xl transition-all">
+                                                                    <button className="p-2 text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl transition-all">
                                                                         <MoreVertical size={18} />
                                                                     </button>
                                                                     <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-900 border border-slate-100 dark:border-white/10 rounded-2xl shadow-2xl opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all z-50 p-2 space-y-1">
@@ -343,7 +343,7 @@ export default function IncidentList() {
                                                                         {SUPPORT_STATUSES.map(s => (
                                                                             <button
                                                                                 key={s}
-                                                                                onClick={() => updateSupportStatus.mutate({ id: item._id, status: s })}
+                                                                                onClick={() => updateSupportStatus.mutate({ id: item.id, status: s })}
                                                                                 className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${item.status === s ? 'bg-indigo-50 dark:bg-indigo-900/30 text-primary' : 'hover:bg-slate-50 dark:hover:bg-white/5'}`}
                                                                             >
                                                                                 <div className={`w-1.5 h-1.5 rounded-full ${s === 'Resolved' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
@@ -351,7 +351,7 @@ export default function IncidentList() {
                                                                             </button>
                                                                         ))}
                                                                         <button
-                                                                            onClick={() => { if (confirm('Purge support record?')) deleteSupportTicket.mutate(item._id) }}
+                                                                            onClick={() => { if (confirm('Purge support record?')) deleteSupportTicket.mutate(item.id) }}
                                                                             className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all flex items-center gap-2 border-t border-slate-100 dark:border-white/5 mt-1"
                                                                         >
                                                                             <Trash2 size={14} /> Purge Ticket

@@ -16,9 +16,9 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText 
           {title}
         </h3>
         
-        <p className="text-slate-500 dark:text-slate-400 text-sm mb-10 leading-relaxed font-medium">
+        <div className="text-slate-500 dark:text-slate-400 text-sm mb-10 leading-relaxed font-medium">
           {message}
-        </p>
+        </div>
         
         <div className="grid grid-cols-2 gap-4 w-full">
           <button

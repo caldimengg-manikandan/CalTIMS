@@ -1,144 +1,359 @@
-'use strict';
-
-const Project = require('./project.model');
+const { prisma } = require('../../config/database');
 const AppError = require('../../shared/utils/AppError');
-const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
+const { parsePagination, buildPaginationMeta } = require('../../shared/utils/pagination');
 const { ROLES } = require('../../constants');
-const { logAction } = require('../audit/audit.routes');
+const { enforceOrg } = require('../../shared/utils/prismaHelper');
+const notificationService = require('../notifications/notification.service');
+const { hasPermission } = require('../../shared/utils/rbac');
 
 const projectService = {
-  async getAll(query, requestor, organizationId) {
+  async getAll(query, context) {
+    const { organizationId } = context;
     const { page, limit, skip } = parsePagination(query);
-    const sort = buildSort(query);
-    const filter = { organizationId };
+    
+    // Base scoping using helper
+    const baseQuery = enforceOrg({}, organizationId);
+    const where = baseQuery.where;
 
-    if (query.status) filter.status = query.status;
-    if (query.search) filter.name = new RegExp(query.search, 'i');
-    if (query.code) filter.code = query.code.toUpperCase();
-    if (query.managerId) filter.managerId = query.managerId;
+    if (query.status) {
+      where.status = { equals: query.status, mode: 'insensitive' };
+    }
+    if (query.search) where.name = { contains: query.search, mode: 'insensitive' };
+    if (query.code) where.code = query.code.toUpperCase();
+    if (query.managerId) where.managerId = query.managerId;
     
     // Always exclude the system 'Leave' project from general lists
-    filter.code = { ... (query.code && { $eq: query.code.toUpperCase() }), $ne: 'LEAVE-SYS' };
+    where.code = { not: 'LEAVE-SYS', ...(query.code && { equals: query.code.toUpperCase() }) };
 
-    // Restrict visibility for non-admins, or if assignedOnly is requested
+    // Restrict visibility for employees/managers if assignedOnly is requested
     const assignedOnly = query.assignedOnly === 'true';
-    const isEmployee = requestor.role === ROLES.EMPLOYEE;
-    const isManager = requestor.role === ROLES.MANAGER;
 
-    if (assignedOnly || isEmployee || isManager) {
-      filter.$or = [
-        { managerId: requestor._id },
-        { 'allocatedEmployees.userId': requestor._id }
+    // Resolve the target user to an Employee ID for member-based filtering.
+    // The ProjectMember table stores `employeeId` (Employee record ID), not the User ID.
+    let targetEmployeeId = query.employeeId || context.employeeId;
+    const targetUserId = query.userId || context.userId;
+
+    // If only a userId was given (e.g. from admin compliance page), resolve it to employeeId
+    if (!targetEmployeeId && targetUserId) {
+      const emp = await prisma.employee.findFirst({
+        where: { userId: targetUserId, organizationId },
+        select: { id: true }
+      });
+      if (emp) targetEmployeeId = emp.id;
+    }
+
+    const canViewAllProjects = hasPermission(context.permissions, 'Projects', 'Project List', 'view');
+
+    if (assignedOnly || !canViewAllProjects && !context.isSuperAdmin && !context.isOwner) {
+      where.OR = [
+        { managerId: targetEmployeeId },
+        { members: { some: { employeeId: targetEmployeeId } } }
       ];
     }
 
     const [projects, total] = await Promise.all([
-      Project.find(filter)
-        .populate('managerId', 'name email employeeId')
-        .populate('allocatedEmployees.userId', 'name email employeeId')
-        .skip(skip).limit(limit).sort(sort).lean(),
-      Project.countDocuments(filter),
+      prisma.project.findMany({
+        where,
+        include: {
+          manager: { include: { user: { select: { id: true, name: true, email: true } } } },
+          members: { include: { employee: { include: { user: { select: { id: true, name: true, email: true } } } } } }
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.project.count({ where }),
     ]);
 
-    return { projects, pagination: buildPaginationMeta(total, page, limit) };
+    const formatted = projects.map(p => ({
+      ...p,
+      _id: p.id,
+      managerId: p.manager ? { ...p.manager.user, id: p.manager.id, _id: p.manager.user.id } : null,
+      allocatedEmployees: p.members.map(m => ({ 
+        userId: { ...m.employee.user, id: m.employee.id, _id: m.employee.user.id },
+        role: m.role,
+        allocationPercent: m.allocationPercent,
+        budgetHours: m.budgetHours
+      }))
+    }));
+
+    return { projects: formatted, pagination: buildPaginationMeta(total, page, limit) };
   },
 
   async getById(id, organizationId) {
-    const project = await Project.findOne({ _id: id, organizationId })
-      .populate('managerId', 'name email employeeId')
-      .populate('allocatedEmployees.userId', 'name email employeeId department');
-    if (!project) throw new AppError('Project not found', 404);
-    return project;
-  },
-
-  async create(data, requestorId, organizationId) {
-    const existing = await Project.findOne({ code: data.code.toUpperCase(), organizationId });
-    if (existing) throw new AppError(`Project with code '${data.code}' already exists`, 409);
-    
-    const project = await Project.create({ ...data, organizationId });
-
-    logAction({
-        userId: requestorId,
-        action: 'CREATE_PROJECT',
-        entityType: 'Project',
-        entityId: project._id,
-        details: { name: project.name, code: project.code },
-        organizationId
+    // Leverage the new composite unique constraint for maximum isolation
+    const project = await prisma.project.findUnique({
+      where: { 
+        id_organizationId: { id, organizationId }
+      },
+      include: {
+        manager: { include: { user: { select: { id: true, name: true, email: true } } } },
+        members: { include: { employee: { include: { user: { select: { id: true, name: true, email: true, avatar: true } } } } } }
+      }
     });
 
-    return project;
+    if (!project || project.isDeleted) throw new AppError('Project not found', 404);
+    
+    return {
+      ...project,
+      _id: project.id,
+      managerId: project.manager ? { ...project.manager.user, id: project.manager.id, _id: project.manager.user.id } : null,
+      allocatedEmployees: project.members.map(m => ({
+        userId: { ...m.employee.user, id: m.employee.id, _id: m.employee.user.id },
+        role: m.role,
+        allocationPercent: m.allocationPercent,
+        budgetHours: m.budgetHours
+      }))
+    };
   },
 
-  async update(id, data, requestor, organizationId) {
-    const project = await Project.findOne({ _id: id, organizationId });
-    if (!project) throw new AppError('Project not found', 404);
-    if (requestor.role === ROLES.MANAGER && project.managerId.toString() !== requestor._id.toString()) {
-      throw new AppError('Managers can only update their own projects', 403);
+  async create(data, organizationId) {
+    if (!data.code) throw new AppError('Project code is required', 400);
+
+    // Check uniqueness within the organization
+    const existing = await prisma.project.findFirst({ 
+      where: { 
+        code: data.code.toUpperCase(), 
+        organizationId, 
+        isDeleted: false 
+      } 
+    });
+    if (existing) throw new AppError(`Project with code '${data.code}' already exists`, 409);
+    
+    let { managerId, allocatedEmployees, startDate, endDate, ...rest } = data;
+
+    // Resolve managerId if it's a User ID
+    if (managerId) {
+      const emp = await prisma.employee.findFirst({ 
+        where: { OR: [{ id: managerId }, { userId: managerId }], organizationId } 
+      });
+      if (emp) managerId = emp.id;
+    }
+
+    const project = await prisma.project.create({
+      data: {
+        ...rest,
+        code: data.code.toUpperCase(),
+        organizationId,
+        managerId: managerId || null,
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : null,
+        members: allocatedEmployees && allocatedEmployees.length > 0 ? {
+          create: await Promise.all(allocatedEmployees.map(async (alloc) => {
+            const emp = await prisma.employee.findFirst({ 
+              where: { OR: [{ id: alloc.userId }, { userId: alloc.userId }], organizationId } 
+            });
+            if (!emp) throw new AppError(`Employee not found for user ID ${alloc.userId}`, 404);
+            return {
+              employeeId: emp.id,
+              role: alloc.role || 'MEMBER',
+              allocationPercent: Number(alloc.allocationPercent) || 100,
+              budgetHours: Number(alloc.budgetHours) || 0
+            };
+          }))
+        } : undefined
+      },
+      include: {
+        manager: { include: { user: { select: { id: true, name: true, email: true } } } },
+        members: { include: { employee: { include: { user: { select: { id: true, name: true, email: true } } } } } }
+      }
+    });
+
+    const result = await this.getById(project.id, organizationId);
+
+    // Notify Manager
+    if (project.managerId) {
+        const mgr = await prisma.employee.findUnique({ where: { id: project.managerId }, select: { userId: true } });
+        if (mgr?.userId) {
+            await notificationService.create({
+                userId: mgr.userId, organizationId,
+                title: 'Assigned as Project Manager',
+                message: `You have been assigned as Project Manager for ${project.name} (${project.code}).`,
+                type: 'PROJECT_ALLOCATED', refId: project.id, refModel: 'Project'
+            }).catch(e => console.error(e));
+        }
+    }
+
+    // Notify Members
+    if (project.members) {
+        for (const m of project.members) {
+            const emp = await prisma.employee.findUnique({ where: { id: m.employeeId }, select: { userId: true } });
+            if (emp?.userId) {
+                await notificationService.create({
+                    userId: emp.userId, organizationId,
+                    title: 'Allocated to Project',
+                    message: `You have been allocated to the project: ${project.name} (${project.code}).`,
+                    type: 'PROJECT_ALLOCATED', refId: project.id, refModel: 'Project'
+                }).catch(e => console.error(e));
+            }
+        }
+    }
+
+    return result;
+  },
+
+  async update(id, data, context) {
+    const { organizationId } = context;
+    
+    // Verify existence and ownership
+    const project = await prisma.project.findUnique({ 
+      where: { id_organizationId: { id, organizationId } } 
+    });
+    
+    if (!project || project.isDeleted) throw new AppError('Project not found', 404);
+    
+    const canEditProjects = hasPermission(context.permissions, 'Projects', 'Project List', 'edit');
+
+    if (!canEditProjects && !context.isSuperAdmin && !context.isOwner) {
+       // If not admin/authorized, check if they are the manager of this project
+       if (project.managerId !== context.employeeId) {
+          throw new AppError('You do not have permission to update this project', 403);
+       }
     }
 
     if (data.code && data.code.toUpperCase() !== project.code) {
-      const existing = await Project.findOne({ code: data.code.toUpperCase(), organizationId, _id: { $ne: id } });
+      const existing = await prisma.project.findFirst({ 
+        where: { 
+          code: data.code.toUpperCase(), 
+          organizationId, 
+          id: { not: id }, 
+          isDeleted: false 
+        } 
+      });
       if (existing) throw new AppError(`Project with code '${data.code}' already exists`, 409);
     }
-    Object.assign(project, data);
-    await project.save();
 
-    logAction({
-        userId: requestor._id || requestor,
-        action: 'UPDATE_PROJECT',
-        entityType: 'Project',
-        entityId: id,
-        details: { name: project.name, code: project.code }
-    });
+    let { managerId, allocatedEmployees, startDate, endDate, ...updateData } = data;
 
-    return project;
-  },
+    // Resolve managerId if it's a User ID
+    if (managerId) {
+      const emp = await prisma.employee.findFirst({ 
+        where: { OR: [{ id: managerId }, { userId: managerId }], organizationId } 
+      });
+      if (emp) managerId = emp.id;
+    }
 
-  async allocate(id, allocations, requestor, organizationId) {
-    const project = await Project.findOne({ _id: id, organizationId });
-    if (!project) throw new AppError('Project not found', 404);
-
-    for (const alloc of allocations) {
-      const existing = project.allocatedEmployees.findIndex(
-        (a) => a.userId.toString() === alloc.userId
-      );
-      if (existing >= 0) {
-        Object.assign(project.allocatedEmployees[existing], alloc);
-      } else {
-        project.allocatedEmployees.push(alloc);
+    // Handle members update separately to be safe or via nested update
+    if (allocatedEmployees) {
+      await prisma.projectMember.deleteMany({ where: { projectId: id } });
+      if (allocatedEmployees.length > 0) {
+        await prisma.projectMember.createMany({
+          data: await Promise.all(allocatedEmployees.map(async (alloc) => {
+            const emp = await prisma.employee.findFirst({ 
+              where: { OR: [{ id: alloc.userId }, { userId: alloc.userId }], organizationId } 
+            });
+            if (!emp) throw new AppError(`Employee not found for user ID ${alloc.userId}`, 404);
+            return {
+              projectId: id,
+              employeeId: emp.id,
+              role: alloc.role || 'MEMBER',
+              allocationPercent: Number(alloc.allocationPercent) || 100,
+              budgetHours: Number(alloc.budgetHours) || 0
+            };
+          }))
+        });
       }
     }
-    await project.save();
-    return project.populate('allocatedEmployees.userId', 'name email employeeId');
-  },
 
-  async deallocate(projectId, userId, organizationId) {
-    const project = await Project.findOne({ _id: projectId, organizationId });
-    if (!project) throw new AppError('Project not found', 404);
-    project.allocatedEmployees = project.allocatedEmployees.filter(
-      (a) => a.userId.toString() !== userId
-    );
-    await project.save();
-    return project;
-  },
+    const updated = await prisma.project.update({
+      where: { 
+        id_organizationId: { id, organizationId }
+      },
+      data: {
+        ...updateData,
+        code: data.code ? data.code.toUpperCase() : project.code,
+        managerId: managerId !== undefined ? managerId : undefined,
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate !== undefined ? (endDate ? new Date(endDate) : null) : undefined
+      }
+    });
 
-  async delete(id, requestor, organizationId) {
-    const project = await Project.findOne({ _id: id, organizationId });
-    if (!project) throw new AppError('Project not found', 404);
-    
-    // Only admins can delete projects
-    if (requestor.role !== ROLES.ADMIN) {
-      throw new AppError('Only admins can delete projects', 403);
+    const result = await this.getById(id, organizationId);
+
+    // If manager changed, notify new manager
+    if (managerId && managerId !== project.managerId) {
+        const mgr = await prisma.employee.findUnique({ where: { id: managerId }, select: { userId: true } });
+        if (mgr?.userId) {
+            await notificationService.create({
+                userId: mgr.userId, organizationId,
+                title: 'Assigned as Project Manager',
+                message: `You have been assigned as Project Manager for ${updated.name} (${updated.code}).`,
+                type: 'PROJECT_ALLOCATED', refId: id, refModel: 'Project'
+            }).catch(e => console.error(e));
+        }
     }
 
-    await Project.findOneAndDelete({ _id: id, organizationId });
+    return result;
+  },
 
-    logAction({
-        userId: requestor._id || requestor,
-        action: 'DELETE_PROJECT',
-        entityType: 'Project',
-        entityId: id,
-        details: { name: project.name, code: project.code }
+  async allocate(id, allocations, organizationId) {
+    // Ensure project exists in this org
+    const project = await prisma.project.findUnique({ 
+      where: { id_organizationId: { id, organizationId } } 
+    });
+    if (!project || project.isDeleted) throw new AppError('Project not found', 404);
+
+    const operations = allocations.map(alloc => {
+      return prisma.projectMember.upsert({
+        where: { projectId_employeeId: { projectId: id, employeeId: alloc.employeeId } },
+        create: { projectId: id, employeeId: alloc.employeeId, role: alloc.role || 'MEMBER' },
+        update: { role: alloc.role || 'MEMBER' }
+      });
+    });
+
+    await prisma.$transaction(operations);
+    
+    // Notify employees
+    for (const alloc of allocations) {
+        const emp = await prisma.employee.findUnique({
+            where: { id: alloc.employeeId },
+            select: { userId: true }
+        });
+        if (emp?.userId) {
+            await notificationService.create({
+                userId: emp.userId,
+                organizationId,
+                title: 'Project Allocated',
+                message: `You have been allocated to the project: ${project.name} (${project.code}).`,
+                type: 'PROJECT_ALLOCATED',
+                refId: id,
+                refModel: 'Project'
+            }).catch(err => console.error('Failed to send notification:', err));
+        }
+    }
+
+    return this.getById(id, organizationId);
+  },
+
+  async deallocate(projectId, employeeId, organizationId) {
+    const project = await prisma.project.findUnique({ 
+      where: { id_organizationId: { id: projectId, organizationId } } 
+    });
+    if (!project || project.isDeleted) throw new AppError('Project not found', 404);
+
+    await prisma.projectMember.deleteMany({
+      where: { projectId, employeeId }
+    });
+    return this.getById(projectId, organizationId);
+  },
+
+  async delete(id, context) {
+    const { organizationId } = context;
+    
+    const project = await prisma.project.findUnique({ 
+      where: { id_organizationId: { id, organizationId } } 
+    });
+    if (!project || project.isDeleted) throw new AppError('Project not found', 404);
+    
+    const canDeleteProjects = hasPermission(context.permissions, 'Projects', 'Project List', 'delete');
+    
+    if (!canDeleteProjects && !context.isSuperAdmin && !context.isOwner) {
+      throw new AppError('Only authorized users can delete projects', 403);
+    }
+
+    await prisma.project.update({
+      where: { id_organizationId: { id, organizationId } },
+      data: { isDeleted: true, deletedAt: new Date() }
     });
 
     return true;

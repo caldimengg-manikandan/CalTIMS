@@ -251,7 +251,7 @@ export default function AdminCalendarPage() {
     })
 
     const handleSave = (form) => {
-        if (editingEvent) updateMutation.mutate({ id: editingEvent._id, data: form })
+        if (editingEvent) updateMutation.mutate({ id: editingEvent.id || editingEvent._id, data: form })
         else createMutation.mutate(form)
     }
 
@@ -388,8 +388,9 @@ export default function AdminCalendarPage() {
                             </div>
                         ) : filteredEvents.map(e => {
                             const c = getColor(e.eventType)
+                            const eventId = e.id || e._id
                             return (
-                                <div key={e._id}
+                                <div key={eventId}
                                     className={`bg-white dark:bg-slate-900 rounded-2xl border ${c.border} shadow-sm overflow-hidden transition-all hover:shadow-md group`}>
                                     <div className={`h-1 ${c.dot}`} />
                                     <div className="p-4">
@@ -419,7 +420,7 @@ export default function AdminCalendarPage() {
                                                     <Edit2 size={14} />
                                                 </button>
                                                 <button onClick={() => {
-                                                    if (confirm(`Delete "${e.title}"?`)) deleteMutation.mutate(e._id)
+                                                    if (confirm(`Delete "${e.title}"?`)) deleteMutation.mutate(e.id || e._id)
                                                 }}
                                                     className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors">
                                                     <Trash2 size={14} />

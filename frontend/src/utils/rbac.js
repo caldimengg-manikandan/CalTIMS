@@ -6,18 +6,45 @@
  * @param {string} action - (Optional) The specific action (e.g., 'run')
  * @returns {boolean} - True if permitted, false otherwise
  */
+
+const PRIVILEGED_ROLES = ['admin', 'super_admin', 'owner'];
+
+export const isSuperAdmin = (user) => {
+  if (!user) return false;
+  return PRIVILEGED_ROLES.includes((user.role || '').toLowerCase()) || user.isOwner;
+};
+
+export const hasFullAccess = (user) => {
+  if (!user) return false;
+  return isSuperAdmin(user) || user.permissions?.__full_access__ || user.permissions?.all;
+};
+
+export const canAccessModule = (user, module) => {
+  if (!user) return false;
+  if (hasFullAccess(user)) return true;
+  
+  const rawPermissions = user.permissions || {};
+  const moduleKey = Object.keys(rawPermissions).find(k => k.toLowerCase() === module.toLowerCase()) || 
+                    Object.keys(rawPermissions).find(k => k.toLowerCase() === 'all');
+  
+  return !!moduleKey;
+};
+
 export const hasPermission = (user, module, submodule, action) => {
   if (!user) return false;
 
-  // 1. Admin bypass: Safe check for roles
+  // 1. Privileged role bypass — these roles see everything
   const userRole = (user.role || '').toLowerCase();
-  if (userRole === 'admin' || userRole === 'super_admin') {
+  if (PRIVILEGED_ROLES.includes(userRole) || user.isOwner) {
     return true;
   }
 
   // 2. Normalize permissions object
   const rawPermissions = user.permissions || {};
-  
+
+  // Full-access marker from backend (for privileged roles without granular RBAC rows)
+  if (rawPermissions.__full_access__) return true;
+
   // Case-insensitive module lookup
   const moduleKey = Object.keys(rawPermissions).find(k => k.toLowerCase() === module.toLowerCase()) || 
                     Object.keys(rawPermissions).find(k => k.toLowerCase() === 'all');

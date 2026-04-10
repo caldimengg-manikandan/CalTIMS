@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSocket } from '../../../hooks/useSocket';
 import { Activity, Bell, Info, AlertTriangle, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -7,11 +7,12 @@ const ActivityFeed = () => {
   const [activities, setActivities] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
 
-  // Use the handleActivity callback directly to avoid stale state issues,
-  // or use the functional update pattern in setActivities.
-  useSocket('activity', (newActivity) => {
+  // Use useCallback to stabilize the callback and prevent useSocket from reconnecting
+  const handleActivity = useCallback((newActivity) => {
     setActivities((prev) => [newActivity, ...prev].slice(0, 50));
-  });
+  }, []);
+
+  useSocket('activity', handleActivity);
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -60,7 +61,7 @@ const ActivityFeed = () => {
               ) : (
                 activities.map((activity, index) => (
                   <div 
-                    key={activity._id || index}
+                    key={activity.id || activity._id || index}
                     className="p-4 border-b border-slate-50 hover:bg-indigo-50/30 transition-colors last:border-0"
                   >
                     <div className="flex gap-3">

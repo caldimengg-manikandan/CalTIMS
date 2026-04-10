@@ -1,26 +1,17 @@
 'use strict';
 
-const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const User = require('../users/user.model');
-const Organization = require('../organizations/organization.model');
-const Subscription = require('../subscriptions/subscription.model');
-const TrialTracking = require('../subscriptions/trialTracking.model');
+const { prisma } = require('../../config/database');
 const AppError = require('../../shared/utils/AppError');
 const { logActivity } = require('../../shared/utils/activityLogger');
-const Role = require('../users/role.model');
-const Settings = require('../settings/settings.model');
 const logger = require('../../shared/utils/logger');
 const { ROLES } = require('../../constants');
 
-/**
- * Generate JWT tokens
- */
 const generateTokens = (userId, role) => {
   const accessToken = jwt.sign({ sub: userId, role }, process.env.JWT_ACCESS_SECRET, {
-    expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
+    expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '30m',
   });
   const refreshToken = jwt.sign({ sub: userId, role }, process.env.JWT_REFRESH_SECRET, {
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
@@ -28,386 +19,256 @@ const generateTokens = (userId, role) => {
   return { accessToken, refreshToken };
 };
 
-/**
- * Hash a string (for refresh token storage)
- */
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
+const saltRounds = () => parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12;
 
 const authService = {
-  async login({ email, password, macAddress, req }) {
-    const user = await User.findOne({ email }).select('+password').populate('roleId');
-    if (!user || !(await user.comparePassword(password))) {
-      throw new AppError('Invalid email or password', 401);
-    }
+  /**
+   * Email/password login
+   */
+  async login({ email, password }) {
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      include: { roleRef: true },
+    });
 
-    if (!user.isActive) {
-      throw new AppError('Your account has been deactivated. Please contact your administrator.', 403);
-    }
+    if (!user || !user.password) throw new AppError('Invalid email or password', 401);
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) throw new AppError('Invalid email or password', 401);
 
-    const subscription = await Subscription.findOne({ organizationId: user.organizationId });
+    if (!user.isActive) throw new AppError('Your account has been deactivated. Contact your administrator.', 403);
+
+    const subscription = user.organizationId
+      ? await prisma.subscription.findFirst({ where: { organizationId: user.organizationId } })
+      : null;
 
     return { user, subscription };
   },
 
   /**
-   * Social Login (Google/Microsoft) with account linking
+   * Social Login (Google/Microsoft)
    */
-  async socialLogin({ email, name, provider, req }) {
-    let user = await User.findOne({ email }).populate('roleId');
+  async socialLogin({ email, name, provider }) {
+    let user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      include: { roleRef: true },
+    });
 
     if (user) {
-      // Account linking: record provider if not already present in array
       if (!user.providers.includes(provider)) {
-        user.providers.push(provider);
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { providers: { push: provider } },
+          include: { roleRef: true },
+        });
       }
     } else {
-      // Create new user with provider initialization
-      user = await User.create({
-        email,
-        name,
-        provider,
-        providers: [provider],
-        isOnboardingComplete: false,
-        isActive: true
+      user = await prisma.user.create({
+        data: {
+          email: email.toLowerCase().trim(),
+          name,
+          provider,
+          providers: [provider],
+          isOnboardingComplete: false,
+          isActive: true,
+          role: 'employee',
+        },
+        include: { roleRef: true },
       });
     }
 
-    if (user && !user.isActive) {
-      throw new AppError('Your account has been deactivated. Please contact your administrator.', 403);
-    }
-
+    if (!user.isActive) throw new AppError('Your account has been deactivated.', 403);
     return user;
   },
 
   /**
-   * Complete onboarding: Create Organization, Roles, Settings and link User
+   * Complete onboarding — create org, roles, settings
    */
   async completeOnboarding(userId, { organizationName, phoneNumber, req }) {
-    const session = await mongoose.startSession();
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new AppError('User not found', 404);
+    if (user.isOnboardingComplete) throw new AppError('Onboarding already completed', 400);
 
-    try {
-      let result;
-      
-            let isReplicaSet = false;
-      try {
-        const adminDb = mongoose.connection.db.admin();
-        const status = await adminDb.command({ isMaster: 1 });
-        isReplicaSet = !!status.setName;
-      } catch (e) {
-        logger.warn('Could not determine replica set status, defaulting to non-replica set mode');
-        isReplicaSet = false;
+    const errors = {};
+    const existingOrg = await prisma.organization.findFirst({
+      where: { name: { equals: organizationName, mode: 'insensitive' } },
+    });
+    if (existingOrg) errors.organizationName = 'An organization with this name already exists.';
+
+    if (phoneNumber) {
+      const existingPhone = await prisma.user.findFirst({ where: { phoneNumber } });
+      if (existingPhone && existingPhone.id !== userId) {
+        errors.phoneNumber = `${phoneNumber} ALREADY TAKEN`;
       }
-
-      
-      const executeOnboarding = async () => {
-        // 0. Pre-checks inside transaction for consistency
-        const user = await User.findById(userId).session(isReplicaSet ? session : null);
-        if (!user) throw new AppError('User not found', 404);
-        if (user.isOnboardingComplete) throw new AppError('Onboarding already completed', 400);
-
-        // Check for duplicate organization name
-        const existingOrg = await Organization.findOne({ name: organizationName }).session(isReplicaSet ? session : null);
-        if (existingOrg) {
-          throw new AppError('An organization with this name already exists. Please choose another name.', 409);
-        }
-
-        // 1. Create Organization
-        const organization = (await Organization.create([{ name: organizationName }], { session: isReplicaSet ? session : null }))[0];
-
-        // 2. Create Default Roles
-        const defaultRoles = [
-          {
-            name: 'Admin',
-            permissions: { all: { all: ['all'] } },
-            isSystemRole: true,
-          },
-          {
-            name: 'Employee',
-            permissions: { 
-              timesheets: { 
-                dashboard: ['view'],
-                entry: ['view', 'create', 'edit'],
-                history: ['view']
-              } 
-            },
-            isSystemRole: false,
-          },
-          {
-            name: 'Finance',
-            permissions: { payroll: { all: ['view', 'approve'] } },
-            isSystemRole: false,
-          }
-        ];
-
-        let adminRole;
-        for (const roleDef of defaultRoles) {
-          // Check if role already exists for this organization (shouldn't happen for new org)
-          const existingRole = await Role.findOne({ 
-            name: roleDef.name, 
-            organizationId: organization._id 
-          }).session(isReplicaSet ? session : null);
-
-          if (existingRole) {
-            if (roleDef.name === 'Admin') adminRole = existingRole;
-            continue;
-          }
-
-          const r = (await Role.create([{ ...roleDef, organizationId: organization._id }], { session: isReplicaSet ? session : null }))[0];
-          if (roleDef.name === 'Admin') adminRole = r;
-        }
-
-        // 3. Create Default Settings
-        await Settings.create([{
-          organizationId: organization._id,
-          organization: { companyName: organizationName },
-          branding: { organizationName: organizationName }
-        }], { session: isReplicaSet ? session : null });
-
-        // 4. Update User
-        user.organizationId = organization._id;
-        user.role = ROLES.ADMIN;
-        user.roleId = adminRole._id;
-        user.phoneNumber = phoneNumber;
-        user.isOwner = true;
-        user.isOnboardingComplete = true;
-        await user.save({ session: isReplicaSet ? session : null, validateBeforeSave: false });
-
-        // 5. Create Trial Subscription
-        await Subscription.create([{
-          organizationId: organization._id,
-          planType: 'TRIAL',
-          status: 'ACTIVE'
-        }], { session: isReplicaSet ? session : null });
-
-        // Carry result out of transaction
-        result = { userId: user._id, organizationId: organization._id, organizationName };
-      };
-
-      if (isReplicaSet) {
-        await session.withTransaction(executeOnboarding);
-      } else {
-        await executeOnboarding();
-      }
-
-      // Log onboarding activity AFTER successful commit
-      await logActivity({
-        userId: result.userId,
-        organizationId: result.organizationId,
-        action: 'ONBOARDING_COMPLETE',
-        details: { organizationName: result.organizationName },
-        req
-      });
-
-      return await User.findById(result.userId).populate('roleId');
-    } catch (err) {
-      logger.error('Onboarding Transaction Failed:', err);
-      throw err;
-    } finally {
-      session.endSession();
     }
+
+    if (Object.keys(errors).length > 0) {
+      throw new AppError('Validation failed', 409, errors);
+    }
+
+    // Create org
+    const slug = organizationName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
+    const org = await prisma.organization.create({
+      data: { name: organizationName, slug },
+    });
+
+    // Create default roles
+    const roleData = [
+      { name: 'Admin', permissions: { all: { all: ['all'] } } },
+      { name: 'Employee', permissions: { timesheets: { entry: ['view', 'create', 'edit'] } } },
+      { name: 'Finance', permissions: { payroll: { all: ['view', 'approve'] } } },
+    ];
+
+    let adminRole = null;
+    for (const rd of roleData) {
+      const r = await prisma.role.create({ data: { ...rd, organizationId: org.id } });
+      if (rd.name === 'Admin') adminRole = r;
+    }
+
+    // Create settings
+    await prisma.orgSettings.create({
+      data: {
+        organizationId: org.id,
+        data: {
+          organization: { companyName: organizationName },
+          branding: { organizationName },
+        },
+      },
+    });
+
+    // Update user
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        organizationId: org.id,
+        role: ROLES.ADMIN,
+        roleId: adminRole?.id || null,
+        phone: phoneNumber || null,
+        phoneNumber: phoneNumber || null,
+        isOwner: true,
+        isOnboardingComplete: true,
+      },
+      include: { roleRef: true },
+    });
+
+    // Create trial subscription
+    const trialEnd = new Date();
+    trialEnd.setDate(trialEnd.getDate() + 28);
+    await prisma.subscription.create({
+      data: { organizationId: org.id, planType: 'TRIAL', status: 'ACTIVE', trialEndDate: trialEnd },
+    });
+
+    await logActivity({ userId, organizationId: org.id, action: 'ONBOARDING_COMPLETE', details: { organizationName }, req });
+
+    return updatedUser;
   },
 
   /**
-   * Signup an organization and create first admin user with 28-day trial
+   * Register — create org + user + trial
    */
   async register({ email, password, name, organizationName, phoneNumber, ipAddress, deviceFingerprint }) {
-    // 1. Fail-fast duplicate checks (Outside transaction for performance and clarity)
-    // Use case-insensitive checks for email and organization name
-    const [existingEmail, existingPhone, existingOrg] = await Promise.all([
-      User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } }),
-      User.findOne({ phoneNumber }),
-      Organization.findOne({ name: { $regex: new RegExp(`^${organizationName}$`, 'i') } })
+    const [existingEmail, existingPhone, existingOrg, existingTrial] = await Promise.all([
+      prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } }),
+      phoneNumber ? prisma.user.findFirst({ where: { phoneNumber } }) : null,
+      prisma.organization.findFirst({ where: { name: { equals: organizationName, mode: 'insensitive' } } }),
+      prisma.trialTracking.findFirst({
+        where: { OR: [{ email: email.toLowerCase().trim() }, phoneNumber ? { phoneNumber } : undefined].filter(Boolean) },
+      }),
     ]);
 
-    if (existingEmail) {
-      throw new AppError('Email already registered. Please sign in instead.', 409);
+    const errors = {};
+    if (existingEmail) errors.email = `${email} ALREADY TAKEN`;
+    if (existingPhone) errors.phoneNumber = `${phoneNumber} ALREADY TAKEN`;
+    if (existingOrg) errors.organizationName = 'An organization with this name already exists.';
+    if (existingTrial) errors.trial = 'You have already used your free trial.';
+
+    if (Object.keys(errors).length > 0) {
+      throw new AppError('Validation failed', 409, errors);
     }
 
-    if (existingPhone) {
-      throw new AppError('Phone number already registered. Please use another number.', 409);
+    // Create org
+    const slug = organizationName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
+    const org = await prisma.organization.create({ data: { name: organizationName, slug } });
+
+    // Settings
+    await prisma.orgSettings.create({
+      data: {
+        organizationId: org.id,
+        data: { organization: { companyName: organizationName }, branding: { organizationName } },
+      },
+    });
+
+    // Roles
+    const roleData = [
+      { name: 'Admin', permissions: { all: { all: ['all'] } } },
+      { name: 'Employee', permissions: { timesheets: { entry: ['view', 'create', 'edit'] } } },
+      { name: 'Finance', permissions: { payroll: { all: ['view', 'approve'] } } },
+    ];
+    let adminRole = null;
+    for (const rd of roleData) {
+      const r = await prisma.role.create({ data: { ...rd, organizationId: org.id } });
+      if (rd.name === 'Admin') adminRole = r;
     }
 
-    if (existingOrg) {
-      throw new AppError('Organization name already taken. Please choose another.', 409);
-    }
+    // Create user
+    const hashed = await bcrypt.hash(password, saltRounds());
+    const user = await prisma.user.create({
+      data: {
+        email: email.toLowerCase().trim(),
+        password: hashed,
+        name,
+        phone: phoneNumber || null,
+        phoneNumber: phoneNumber || null,
+        organizationId: org.id,
+        role: ROLES.OWNER,
+        roleId: adminRole?.id || null,
+        provider: 'local',
+        providers: ['local'],
+        isActive: true,
+        isOnboardingComplete: true,
+        isOwner: true,
+        lastLogin: new Date(),
+      },
+      include: { roleRef: true },
+    });
 
-    const session = await mongoose.startSession();
+    // Employee code
+    await prisma.employee.create({
+      data: {
+        userId: user.id,
+        organizationId: org.id,
+        employeeCode: 'EMP0001',
+        status: 'ACTIVE',
+        joiningDate: new Date(),
+      },
+    });
 
-    try {
-      let result;
-      let isReplicaSet = false;
-      try {
-        const adminDb = mongoose.connection.db.admin();
-        const status = await adminDb.command({ isMaster: 1 });
-        isReplicaSet = !!status.setName;
-      } catch (e) {
-        logger.warn('Could not determine replica set status for registration, defaulting to non-replica set mode');
-        isReplicaSet = false;
-      }
+    // Trial subscription
+    const trialEnd = new Date();
+    trialEnd.setDate(trialEnd.getDate() + 28);
+    const subscription = await prisma.subscription.create({
+      data: { organizationId: org.id, planType: 'TRIAL', status: 'ACTIVE', trialEndDate: trialEnd },
+    });
 
+    // Record trial
+    await prisma.trialTracking.create({
+      data: { organizationId: org.id, email: user.email, phoneNumber: phoneNumber || user.email, ipAddress, deviceFingerprint },
+    });
 
-      const executeRegistration = async () => {
-        // 2. Trial Abuse Prevention (Inside transaction for strict safety)
-        const existingTrial = await TrialTracking.findOne({
-          $or: [
-            { email: { $regex: new RegExp(`^${email}$`, 'i') } },
-            { phoneNumber }
-          ]
-        }).session(isReplicaSet ? session : null);
+    await logActivity({
+      userId: user.id,
+      organizationId: org.id,
+      action: 'SIGNUP_TRIAL',
+      details: { plan: 'TRIAL', organizationName },
+      req: { ip: ipAddress, headers: { 'user-agent': deviceFingerprint } },
+    });
 
-        if (existingTrial) {
-          throw new AppError('You have already used your free trial.', 400);
-        }
-// ... [rest of the function omitted for brevity in instruction, will be handled by tool]
-
-        // 3. Create Organization
-        logger.info(`Creating organization: ${organizationName}`);
-        const organization = (await Organization.create([{
-          name: organizationName
-        }], { session: isReplicaSet ? session : null }))[0];
-
-        // 4. Create Default Settings For Organization
-        logger.info(`Creating default settings for organization: ${organization._id}`);
-        await Settings.create([{
-          organizationId: organization._id,
-          organization: {
-            companyName: organizationName
-          },
-          branding: {
-            organizationName: organizationName
-          }
-        }], { session: isReplicaSet ? session : null });
-
-        // 5. Create Default Roles
-        logger.info(`Creating default roles for organization: ${organization._id}`);
-        const defaultRoles = [
-          {
-            name: 'Admin',
-            permissions: { all: { all: ['all'] } },
-            isSystemRole: true,
-          },
-          {
-            name: 'Employee',
-            permissions: { 
-              timesheets: { 
-                dashboard: ['view'],
-                entry: ['view', 'create', 'edit'],
-                history: ['view']
-              } 
-            },
-            isSystemRole: false,
-          },
-          {
-            name: 'Finance',
-            permissions: { payroll: { all: ['view', 'approve'] } },
-            isSystemRole: false,
-          }
-        ];
-
-        let adminRole;
-        for (const roleDef of defaultRoles) {
-          // Check existence first to avoid poisoning the transaction with a write error
-          const existingRole = await Role.findOne({ 
-            name: roleDef.name, 
-            organizationId: organization._id 
-          }).session(isReplicaSet ? session : null);
-
-          if (existingRole) {
-            if (roleDef.name === 'Admin') adminRole = existingRole;
-            continue;
-          }
-
-          const r = (await Role.create([{
-            ...roleDef,
-            organizationId: organization._id
-          }], { session: isReplicaSet ? session : null }))[0];
-          
-          if (roleDef.name === 'Admin') adminRole = r;
-        }
-
-        if (!adminRole) {
-          throw new AppError('Critical Error: Admin role could not be initialized.', 500);
-        }
-
-        // 6. Create Admin User
-        logger.info(`Creating admin user: ${email}`);
-        const user = (await User.create([{
-          email,
-          password,
-          name,
-          phoneNumber,
-          organizationId: organization._id,
-          role: ROLES.ADMIN,
-          roleId: adminRole._id,
-          provider: 'local',
-          providers: ['local'],
-          isActive: true,
-          isOnboardingComplete: true,
-          isOwner: true,
-          lastLogin: new Date()
-        }], { session: isReplicaSet ? session : null }))[0];
-
-        // 7. Create Trial Subscription
-        const subscription = (await Subscription.create([{
-          organizationId: organization._id,
-          planType: 'TRIAL',
-          status: 'ACTIVE'
-        }], { session: isReplicaSet ? session : null }))[0];
-
-        // 8. Save Trial Tracking info
-        await TrialTracking.create([{
-          email,
-          phoneNumber,
-          ipAddress,
-          deviceFingerprint
-        }], { session: isReplicaSet ? session : null });
-
-        // Carry result out of transaction
-        result = { user, subscription, organizationId: organization._id };
-      };
-
-      if (isReplicaSet) {
-        await session.withTransaction(executeRegistration);
-      } else {
-        await executeRegistration();
-      }
-
-      // 9. Post-Transaction Operations (Logging)
-      await logActivity({
-        userId: result.user._id,
-        organizationId: result.organizationId,
-        action: 'SIGNUP_TRIAL',
-        details: { plan: 'TRIAL', organizationName },
-        req: { ip: ipAddress, headers: { 'user-agent': deviceFingerprint } }
-      });
-
-      return { user: result.user, subscription: result.subscription };
-    } catch (err) {
-      logger.error('Registration Transaction Failed:', err);
-      
-      // Detailed error reporting for MongoDB duplicate key errors (code 11000)
-      if (err.code === 11000) {
-        const fieldMapping = {
-          name: 'Organization name',
-          email: 'Work Email',
-          phoneNumber: 'Phone Number'
-        };
-
-        const field = Object.keys(err.keyValue || {})[0] || 'some data';
-        let friendlyField = fieldMapping[field] || (field.charAt(0).toUpperCase() + field.slice(1));
-        
-        throw new AppError(`Conflict detected: ${friendlyField} is already registered or taken.`, 409);
-      }
-      
-      throw err;
-    } finally {
-      session.endSession();
-    }
+    return { user, subscription };
   },
 
   /**
-   * Refresh access token using refresh token from cookie
+   * Refresh access token
    */
   async refreshAccessToken(refreshToken) {
     if (!refreshToken) throw new AppError('Refresh token not provided', 401);
@@ -419,112 +280,170 @@ const authService = {
       throw new AppError('Invalid or expired refresh token', 401);
     }
 
-    const user = await User.findById(decoded.sub)
-      .select('+refreshTokenHash')
-      .populate('roleId');
-    if (!user || !user.isActive) {
-      throw new AppError('User not found or deactivated', 401);
-    }
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.sub },
+      include: { roleRef: true },
+    });
+
+    if (!user || !user.isActive) throw new AppError('User not found or deactivated', 401);
 
     const tokenHash = hashToken(refreshToken);
     if (user.refreshTokenHash !== tokenHash) {
-      // Token reuse detected — revoke all sessions
-      user.refreshTokenHash = null;
-      await user.save({ validateBeforeSave: false });
+      await prisma.user.update({ where: { id: user.id }, data: { refreshTokenHash: null } });
       throw new AppError('Token reuse detected. Please log in again.', 401);
     }
 
-    // Rotate refresh token
-    const { accessToken, refreshToken: newRefreshToken } = generateTokens(user._id, user.role);
-    user.refreshTokenHash = hashToken(newRefreshToken);
-    await user.save({ validateBeforeSave: false });
+    const { accessToken, refreshToken: newRefreshToken } = generateTokens(user.id, user.role);
+    await prisma.user.update({ where: { id: user.id }, data: { refreshTokenHash: hashToken(newRefreshToken) } });
 
-    return { accessToken, refreshToken: newRefreshToken, user: user.toPublicJSON() };
+    return { accessToken, refreshToken: newRefreshToken, user: formatUser(user) };
   },
 
-  /**
-   * Logout — revoke refresh token
-   */
   async logout(userId) {
-    await User.findByIdAndUpdate(userId, { refreshTokenHash: null });
+    await prisma.user.update({ where: { id: userId }, data: { refreshTokenHash: null } });
   },
 
-  /**
-   * Change password
-   */
   async changePassword(userId, { currentPassword, newPassword }) {
-    const user = await User.findById(userId).select('+password');
+    const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError('User not found', 404);
-
-    if (!(await user.comparePassword(currentPassword))) {
-      throw new AppError('Current password is incorrect', 401);
-    }
-
-    user.password = newPassword;
-    await user.save({ validateBeforeSave: false });
+    if (!user.password) throw new AppError('Password login not available for OAuth accounts', 400);
+    const valid = await bcrypt.compare(currentPassword, user.password);
+    if (!valid) throw new AppError('Current password is incorrect', 401);
+    const hashed = await bcrypt.hash(newPassword, saltRounds());
+    await prisma.user.update({ where: { id: userId }, data: { password: hashed, passwordChangedAt: new Date(), refreshTokenHash: null } });
     return true;
   },
 
-  /**
-   * Generate and store password reset token
-   */
   async forgotPassword(email) {
-    const user = await User.findOne({ email, isActive: true });
+    const user = await prisma.user.findFirst({ where: { email: email.toLowerCase().trim(), isActive: true } });
     if (!user) throw new AppError('No user with this email address', 404);
-
     const resetToken = crypto.randomBytes(32).toString('hex');
-    user.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-    user.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-    await user.save({ validateBeforeSave: false });
-
+    const hashed = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const expires = new Date(Date.now() + 10 * 60 * 1000);
+    await prisma.user.update({ where: { id: user.id }, data: { passwordResetToken: hashed, passwordResetExpires: expires } });
     return { resetToken, user };
   },
 
-  /**
-   * Reset password using token
-   */
   async resetPassword(token, newPassword) {
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-    const user = await User.findOne({
-      passwordResetToken: hashedToken,
-      passwordResetExpires: { $gt: Date.now() },
+    const hashed = crypto.createHash('sha256').update(token).digest('hex');
+    const user = await prisma.user.findFirst({
+      where: { passwordResetToken: hashed, passwordResetExpires: { gt: new Date() } },
     });
-
     if (!user) throw new AppError('Token is invalid or has expired', 400);
-
-    user.password = newPassword;
-    user.passwordResetToken = undefined;
-    user.passwordResetExpires = undefined;
-    user.refreshTokenHash = null;
-    await user.save({ validateBeforeSave: false });
+    const newHashed = await bcrypt.hash(newPassword, saltRounds());
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: newHashed,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+        refreshTokenHash: null,
+        passwordChangedAt: new Date(),
+      },
+    });
     return true;
   },
 
   async generateTokensForUser(user, req) {
-    const userId = user._id || user.id;
-    // Always re-fetch or ensure population to get role/permissions
-    user = await User.findById(userId).populate('roleId');
-    if (!user) throw new AppError('User not found during token generation', 404);
+    const userId = user.id || user.id;
+    const freshUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { roleRef: true },
+    });
+    if (!freshUser) throw new AppError('User not found during token generation', 404);
+    if (!freshUser.isActive) throw new AppError('Your account has been deactivated.', 403);
 
-    if (!user.isActive) {
-      throw new AppError('Your account has been deactivated. Please contact your administrator.', 403);
-    }
-
-    user.lastLogin = new Date();
-    const { accessToken, refreshToken } = generateTokens(user._id, user.role);
-    user.refreshTokenHash = hashToken(refreshToken);
-    await user.save({ validateBeforeSave: false });
-
-    // Log login activity (Note: logActivity will only record if organizationId is present)
-    await logActivity({
-      userId: user._id,
-      organizationId: user.organizationId,
-      action: 'LOGIN',
-      req
+    const { accessToken, refreshToken } = generateTokens(freshUser.id, freshUser.role);
+    await prisma.user.update({
+      where: { id: freshUser.id },
+      data: { lastLogin: new Date(), refreshTokenHash: hashToken(refreshToken) },
     });
 
-    return { accessToken, refreshToken, user: user.toPublicJSON() };
+    await logActivity({ userId: freshUser.id, organizationId: freshUser.organizationId, action: 'LOGIN', req });
+
+    return { accessToken, refreshToken, user: formatUser(freshUser) };
   },
 };
+
+function formatUser(u) {
+  if (!u) return null;
+  const raw = u.roleRef?.permissions || {};
+  const role = (u.role || '').toLowerCase();
+  
+  // Hardcoded fallbacks matching user.service.js
+  const defaultPermissions = {
+    'admin': { all: true },
+    'super_admin': { all: true },
+    'owner': { all: true },
+    'manager': { 
+      "Timesheets": { "Dashboard": ["view"], "Entry": ["view", "create", "edit"], "History": ["view"], "Management": ["view", "approve", "reject"] },
+      "Leave Management": { "Leave Tracker": ["view"] },
+      "My Payslip": { "Payslip View": ["view", "download"] },
+      "Support": { "Help & Support": ["view"] }
+    },
+    'hr': { 
+      "Payroll": { "Dashboard": ["view"], "Payroll Engine": ["view", "run", "submit"], "Payslip Generation": ["view", "generate"], "Payroll Reports": ["view"] },
+      "Employees": { "Employee List": ["view", "create", "edit", "delete"], "Management": ["view", "edit"] },
+      "Leave Management": { "Leave Tracker": ["view"], "Leave Requests": ["view", "create", "approve", "reject"] },
+      "Timesheets": { "Dashboard": ["view"], "Management": ["view", "approve", "reject"] },
+      "Announcements": { "Announcements": ["view", "create", "edit"] }
+    },
+    'finance': { 
+      "Payroll": { "Dashboard": ["view"], "Payroll Engine": ["view", "approve", "disburse"], "Bank Export": ["view", "export"], "Payroll Reports": ["view", "export"] },
+      "Reports": { "Reports Dashboard": ["view", "export"] },
+      "My Payslip": { "Payslip View": ["view", "download"] }
+    },
+    'employee': { 
+      "Timesheets": { "Dashboard": ["view"], "Entry": ["view", "create", "edit"], "History": ["view"] },
+      "My Payslip": { "Payslip View": ["view", "download"] },
+      "Leave Management": { "Leave Tracker": ["view"] },
+      "Support": { "Help & Support": ["view"] }
+    }
+  };
+
+  let permissions = raw;
+  if (['admin', 'manager', 'hr', 'finance', 'employee'].includes(role) && defaultPermissions[role]) {
+    const merged = { ...defaultPermissions[role] };
+    Object.keys(raw).forEach(module => {
+      if (typeof raw[module] === 'object' && !Array.isArray(raw[module]) && raw[module] !== null) {
+        merged[module] = { ...(merged[module] || {}), ...raw[module] };
+      } else {
+        merged[module] = raw[module];
+      }
+    });
+    permissions = merged;
+  } else if (Object.keys(raw).length === 0) {
+    permissions = defaultPermissions[role] || {};
+  }
+
+  return {
+    id: u.id,
+    _id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    roleId: u.roleId,
+    roleName: u.roleRef?.name,
+    permissions,
+    organizationId: u.organizationId,
+    phone: u.phone,
+    phoneNumber: u.phoneNumber,
+    isActive: u.isActive,
+    isOwner: u.isOwner,
+    isOnboardingComplete: u.isOnboardingComplete,
+    provider: u.provider,
+    providers: u.providers,
+    avatar: u.avatar,
+    lastLogin: u.lastLogin,
+    createdAt: u.createdAt,
+    bankName: u.bankName,
+    accountNumber: u.accountNumber,
+    branchName: u.branchName,
+    ifscCode: u.ifscCode,
+    uan: u.uan,
+    pan: u.pan,
+    aadhaar: u.aadhaar,
+  };
+}
 
 module.exports = { authService, generateTokens };

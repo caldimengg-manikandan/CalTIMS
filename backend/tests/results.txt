@@ -1,0 +1,25 @@
+≡ƒÜÇ Starting System Validation...
+
+--- ≡ƒº¬ 1. USER FLOW TESTING ---
+Γ£à Registered Org A: OrgA_1775362700799 (ID: c994aee8-9bc0-4d60-8efc-d2729c578d60)
+Γ£à Role: owner (Expected: owner)
+Γ£à Registered Org B: OrgB_1775362701746 (ID: 61557f4e-93f4-4b31-ad49-8a2129fe427b)
+
+--- ≡ƒº¬ 2. ORGANIZATION ISOLATION ---
+Γ£à PASS: No data leakage in User list.
+
+--- ≡ƒº¬ 3. EMPLOYEE CREATION FLOW ---
+Γ£à Created HR: hr_1775362702531@test.com
+Γ£à Created Manager: mgr_1775362715898@test.com
+Γ£à Created Employee: emp_1775362730134@test.com
+
+--- ≡ƒº¬ 4. MODULE TESTING ---
+Γ£à Created Project: Project Alpha
+Γ£à PASS: Org B blocked from accessing Org A project.
+Γ£à Created Incident: INC-0001
+
+--- ≡ƒº¬ 6. SUBSCRIPTION & TRIAL LOGIC ---
+Γ£à Simulated Expiry for OrgB_1775362701746
+Γ£à PASS: Org B blocked globally after trial expiry.
+
+Γ£¿ Validation Complete! See summary above.

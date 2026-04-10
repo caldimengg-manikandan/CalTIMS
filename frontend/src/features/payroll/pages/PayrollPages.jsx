@@ -1,16 +1,18 @@
 import React from 'react';
 import { LayoutDashboard, Wallet, Receipt, Calculator, FileText, Percent, BarChart3, Landmark, ShieldCheck, PieChart, TrendingUp, Users, Clock, CheckCircle2, Download, DollarSign, TrendingDown, AlertCircle, Layers, Play, Trash2, ShieldAlert, Plus, X, CreditCard, Settings, ChevronDown, ExternalLink, Search, RefreshCw, Shield, Lock, Edit3, Archive, Eye, Building2, Building, Zap, Filter, Upload, MoreVertical, CreditCard as BankIcon, Check, ChevronLeft, ChevronRight, Mail, Send, Printer, Activity, FileSpreadsheet, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { payrollAPI, userAPI, settingsAPI } from '@/services/endpoints';
 import { toast } from 'react-hot-toast';
 import Spinner from '@/components/ui/Spinner';
 import StatementPreview from '../components/StatementPreview';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart as RePieChart, Pie } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart as RePieChart, Pie, LineChart, Line } from 'recharts';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Modal from '@/components/ui/Modal';
-import { formatCurrency } from '@/utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '@/utils/formatters';
 import { exportToPdf } from '@/utils/pdfExport';
+import { calculateSalaryBreakdown } from '../payrollUtils';
 
 
 const fadeUp = {
@@ -20,14 +22,15 @@ const fadeUp = {
 const PayrollPlaceholder = ({ title, description, children }) => (
    <div className="p-6 space-y-6">
       <motion.div initial="hidden" animate="visible" variants={fadeUp}>
-         <h1 className="text-2xl font-medium text-gray-900 dark:text-gray-900">{title}</h1>
-         <p className="text-gray-500 dark:text-gray-500 mt-1">{description}</p>
+         <h1 className="text-2xl font-medium text-gray-900 dark:text-white">{title}</h1>
+         <p className="text-gray-500 dark:text-gray-400 mt-1">{description}</p>
       </motion.div>
       {children}
    </div>
 );
 
 export const PayrollDashboard = () => {
+   const navigate = useNavigate();
    const [selectedMonth, setSelectedMonth] = React.useState(new Date().getMonth() + 1);
    const [selectedYear, setSelectedYear] = React.useState(new Date().getFullYear());
    const queryClient = useQueryClient();
@@ -36,7 +39,7 @@ export const PayrollDashboard = () => {
       queryKey: ['settings'],
       queryFn: () => settingsAPI.getSettings().then(res => res.data.data)
    });
-   const currencySymbol = settings?.payroll?.currencySymbol || '₹';
+   const currencySymbol = settings?.organization?.currency ? getCurrencySymbol(settings.organization.currency) : (settings?.payroll?.currencySymbol || '₹');
 
    const { data: dash, isLoading } = useQuery({
       queryKey: ['payrollDashboard', selectedMonth, selectedYear],
@@ -118,22 +121,22 @@ export const PayrollDashboard = () => {
    ];
 
    return (
-      <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen">
+      <div className="p-8 space-y-8 bg-slate-50/50 dark:bg-black min-h-screen">
          {/* 🚀 Header & Action Bar */}
          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
-               <h1 className="text-2xl font-black text-slate-900 tracking-tight">Payroll Dashboard</h1>
-               <p className="text-sm text-slate-500 font-medium">Manage organization dispersal and compliance</p>
+               <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Payroll Dashboard</h1>
+               <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Manage organization dispersal and compliance</p>
             </div>
 
             <div className="flex items-center gap-3">
-               <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
-                  <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="bg-transparent px-3 py-1.5 text-xs font-bold outline-none cursor-pointer border-r border-slate-100">{[...Array(12)].map((_, i) => <option key={i} value={i + 1}>{new Date(2024, i).toLocaleString('default', { month: 'short' })}</option>)}</select>
-                  <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="bg-transparent px-3 py-1.5 text-xs font-bold outline-none cursor-pointer">{[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}</select>
+               <div className="flex items-center bg-white dark:bg-[#111111] border border-slate-200 dark:border-[#333333] rounded-lg p-1 shadow-sm">
+                  <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="bg-transparent dark:text-white px-3 py-1.5 text-xs font-bold outline-none cursor-pointer border-r border-slate-100 dark:border-[#333333]">{[...Array(12)].map((_, i) => <option key={i} value={i + 1}>{new Date(2024, i).toLocaleString('default', { month: 'short' })}</option>)}</select>
+                  <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="bg-transparent dark:text-white px-3 py-1.5 text-xs font-bold outline-none cursor-pointer">{[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}</select>
                </div>
                <button
                   onClick={() => window.location.href = '/payroll/run'}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold transition-all shadow-md shadow-indigo-200"
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold transition-all shadow-md shadow-indigo-200 dark:shadow-none"
                >
                   <Play size={16} fill="currentColor" /> Run Payroll
                </button>
@@ -143,20 +146,20 @@ export const PayrollDashboard = () => {
          {/* KPI Grid */}
          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {kpis.map((kpi, i) => (
-               <div key={i} className="bg-white p-5 rounded-xl border border-slate-100 shadow-[0_1px_3px_0_rgb(0_0_0/0.05)] flex items-center gap-4 hover:shadow-[0_4px_12px_-2px_rgb(0_0_0/0.08)] hover:-translate-y-0.5 transition-all duration-200">
+               <div key={i} className="bg-white dark:bg-[#111111] p-5 rounded-xl border border-slate-100 dark:border-[#333333] shadow-[0_1px_3px_0_rgb(0_0_0/0.05)] flex items-center gap-4 hover:shadow-[0_4px_12px_-2px_rgb(0_0_0/0.08)] hover:-translate-y-0.5 transition-all duration-200">
                   <div className={`p-3 ${kpi.bg} ${kpi.color} rounded-xl flex-shrink-0`}>
                      <kpi.icon size={20} />
                   </div>
                   <div className="min-w-0 flex-1">
                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest truncate">{kpi.label}</p>
                      <div className="flex items-baseline gap-2">
-                        <h4 className="text-xl font-bold text-slate-800 tabular-nums mt-0.5">
+                        <h4 className="text-xl font-bold text-slate-800 dark:text-white tabular-nums mt-0.5">
                            {kpi.isStatic ? kpi.value : `${currencySymbol}${formatCurrency(kpi.value)}`}
                         </h4>
                         {!kpi.isStatic && dash?.summary?.growthPercentage !== undefined && i === 1 && (
-                            <span className={`text-[10px] font-bold ${dash.summary.growthPercentage >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                {dash.summary.growthPercentage >= 0 ? '↑' : '↓'} {Math.abs(dash.summary.growthPercentage)}%
-                            </span>
+                           <span className={`text-[10px] font-bold ${dash.summary.growthPercentage >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                              {dash.summary.growthPercentage >= 0 ? '↑' : '↓'} {Math.abs(dash.summary.growthPercentage)}%
+                           </span>
                         )}
                      </div>
                   </div>
@@ -166,25 +169,24 @@ export const PayrollDashboard = () => {
 
          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* 🧾 Left: Summary & Status */}
-            <div className="lg:col-span-4 bg-white rounded-2xl p-6 border border-slate-100 shadow-sm space-y-6">
+            <div className="lg:col-span-4 bg-white dark:bg-[#111111] rounded-2xl p-6 border border-slate-100 dark:border-[#333333] shadow-sm space-y-6">
                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-slate-800">Payroll Cycle Status</h3>
-                  <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border transition-all ${
-                     dash?.summary?.status === 'Draft' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                     dash?.summary?.status === 'Processed' || dash?.summary?.status === 'Warning' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
-                     dash?.summary?.status === 'Completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                     dash?.summary?.status === 'Paid' ? 'bg-emerald-600 text-white' :
-                     dash?.summary?.status === 'Locked' ? 'bg-slate-900 text-white' :
-                     'bg-slate-50 text-slate-400'
-                  }`}>
+                  <h3 className="font-bold text-slate-800 dark:text-white">Payroll Cycle Status</h3>
+                  <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border transition-all ${dash?.summary?.status === 'Draft' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                        dash?.summary?.status === 'Processed' || dash?.summary?.status === 'Warning' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+                           dash?.summary?.status === 'Completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                              dash?.summary?.status === 'Paid' ? 'bg-emerald-600 text-white' :
+                                 dash?.summary?.status === 'Locked' ? 'bg-slate-900 dark:bg-white dark:text-black text-white' :
+                                    'bg-slate-50 dark:bg-[#1a1a1a] text-slate-400'
+                     }`}>
                      {dash?.summary?.status || 'Draft'}
                   </span>
                </div>
 
                <div className="space-y-4">
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <div className="p-4 bg-slate-50 dark:bg-[#0a0a0a] rounded-xl border border-slate-100 dark:border-[#333333]">
                      <p className="text-xs font-bold text-slate-400 uppercase">Last Execution</p>
-                     <p className="text-sm font-bold text-slate-700 mt-1">{dash?.summary?.lastRunDate ? new Date(dash.summary.lastRunDate).toLocaleDateString() : 'No recent runs'}</p>
+                     <p className="text-sm font-bold text-slate-700 dark:text-slate-300 mt-1">{dash?.summary?.lastRunDate ? new Date(dash.summary.lastRunDate).toLocaleDateString() : 'No recent runs'}</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-center">
@@ -203,8 +205,8 @@ export const PayrollDashboard = () => {
                </div>
 
                {/* 🚨 Redesigned Alerts Panel */}
-               <div className="pt-6 border-t border-slate-100">
-                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+               <div className="pt-6 border-t border-slate-100 dark:border-white/5">
+                  <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest mb-4 flex items-center gap-2">
                      <AlertCircle size={14} className="text-rose-500" /> Critical Alerts
                   </h4>
                   <div className="space-y-2">
@@ -213,9 +215,9 @@ export const PayrollDashboard = () => {
                         { label: 'Pending Structures', count: dash?.compliance?.missingSalaryStructure || 0, route: '/payroll/profiles' },
                         { label: 'Formula Errors', count: dash?.summary?.failedEmployees || 0, route: '/payroll/run' }
                      ].map((alert, idx) => (
-                        <div key={idx} onClick={() => window.location.href = alert.route} className="flex justify-between items-center p-3 hover:bg-slate-50 border border-transparent hover:border-slate-100 rounded-xl transition-all cursor-pointer group">
-                           <span className="text-xs font-bold text-slate-600 group-hover:text-slate-900">{alert.label}</span>
-                           <span className={`text-[10px] font-black px-2 py-0.5 rounded ${alert.count > 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                        <div key={idx} onClick={() => window.location.href = alert.route} className="flex justify-between items-center p-3 hover:bg-slate-50 dark:hover:bg-white/5 border border-transparent hover:border-slate-100 dark:hover:border-white/5 rounded-xl transition-all cursor-pointer group">
+                           <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white">{alert.label}</span>
+                           <span className={`text-[10px] font-black px-2 py-0.5 rounded ${alert.count > 0 ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400' : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}`}>
                               {alert.count}
                            </span>
                         </div>
@@ -225,24 +227,24 @@ export const PayrollDashboard = () => {
             </div>
 
             {/* 📈 Right: Trend Chart (UPGRADED) */}
-            <div className="lg:col-span-8 bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col">
+            <div className="lg:col-span-8 bg-white dark:bg-[#111111] rounded-2xl p-6 border border-slate-100 dark:border-[#333333] shadow-sm flex flex-col">
                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-8">
                   <div>
-                     <h3 className="font-bold text-slate-800">Financial Disbursement Trend</h3>
+                     <h3 className="font-bold text-slate-800 dark:text-white">Financial Disbursement Trend</h3>
                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-0.5">Explore organization liabilities</p>
                   </div>
 
                   {/* Chart Controls */}
                   <div className="flex flex-wrap items-center gap-3">
-                     <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1">
+                     <div className="flex items-center bg-slate-50 dark:bg-[#0a0a0a] border border-slate-200 dark:border-[#333333] rounded-lg p-1">
                         {['line', 'bar', 'area'].map(type => (
-                           <button key={type} onClick={() => setChartType(type)} className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase transition-all ${chartType === type ? 'bg-white shadow-sm text-indigo-600 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
+                           <button key={type} onClick={() => setChartType(type)} className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase transition-all ${chartType === type ? 'bg-white dark:bg-[#111111] shadow-sm text-indigo-600 border border-slate-200 dark:border-[#333333]' : 'text-slate-400 hover:text-slate-600'}`}>
                               {type}
                            </button>
                         ))}
                      </div>
 
-                     <select value={timeRange} onChange={e => setTimeRange(parseInt(e.target.value))} className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase outline-none cursor-pointer">
+                     <select value={timeRange} onChange={e => setTimeRange(parseInt(e.target.value))} className="bg-slate-50 dark:bg-[#0a0a0a] border border-slate-200 dark:border-[#333333] rounded-lg px-2 py-1.5 text-[10px] font-black uppercase outline-none cursor-pointer dark:text-white">
                         <option value={3}>3 Months</option>
                         <option value={6}>6 Months</option>
                         <option value={12}>12 Months</option>
@@ -260,7 +262,7 @@ export const PayrollDashboard = () => {
                               }}
                            >
                               <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: config.color }} />
-                              <span className="text-[10px] font-bold text-slate-700">{config.label}</span>
+                              <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{config.label}</span>
                            </button>
                         ))}
                      </div>
@@ -274,7 +276,18 @@ export const PayrollDashboard = () => {
                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `${currencySymbol}${v / 1000}k`} />
-                           <ReTooltip contentStyle={{ borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 700 }} />
+                           <ReTooltip 
+                              contentStyle={{ 
+                                 borderRadius: '12px', 
+                                 border: 'none', 
+                                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)', 
+                                 backgroundColor: '#111827',
+                                 color: '#fff',
+                                 fontWeight: 700 
+                              }} 
+                              itemStyle={{ color: '#fff' }}
+                              labelStyle={{ color: '#94a3b8' }}
+                           />
                            {metrics.map(m => (
                               <Bar key={m} dataKey={m} fill={metricConfigs[m].color} radius={[4, 4, 0, 0]} barSize={25} />
                            ))}
@@ -284,7 +297,19 @@ export const PayrollDashboard = () => {
                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `${currencySymbol}${v / 1000}k`} />
-                           <ReTooltip contentStyle={{ borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 700 }} formatter={(v, name) => [formatCurrency(v), metricConfigs[name]?.label || name]} />
+                           <ReTooltip 
+                              contentStyle={{ 
+                                 borderRadius: '12px', 
+                                 border: 'none', 
+                                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)', 
+                                 backgroundColor: '#111827',
+                                 color: '#fff',
+                                 fontWeight: 700 
+                              }} 
+                              itemStyle={{ color: '#fff' }}
+                              labelStyle={{ color: '#94a3b8' }}
+                              formatter={(v, name) => [formatCurrency(v), metricConfigs[name]?.label || name]} 
+                           />
 
                            {metrics.map(m => (
                               <Line key={m} type="monotone" dataKey={m} stroke={metricConfigs[m].color} strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6 }} />
@@ -303,7 +328,19 @@ export const PayrollDashboard = () => {
                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `${currencySymbol}${v / 1000}k`} />
-                           <ReTooltip contentStyle={{ borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 700 }} formatter={(v, name) => [formatCurrency(v), metricConfigs[name]?.label || name]} />
+                           <ReTooltip 
+                              contentStyle={{ 
+                                 borderRadius: '12px', 
+                                 border: 'none', 
+                                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)', 
+                                 backgroundColor: '#111827',
+                                 color: '#fff',
+                                 fontWeight: 700 
+                              }} 
+                              itemStyle={{ color: '#fff' }}
+                              labelStyle={{ color: '#94a3b8' }}
+                              formatter={(v, name) => [formatCurrency(v), metricConfigs[name]?.label || name]} 
+                           />
 
                            {metrics.map(m => (
                               <Area key={m} type="monotone" dataKey={m} stroke={metricConfigs[m].color} strokeWidth={3} fillOpacity={1} fill={`url(#${metricConfigs[m].gradient})`} />
@@ -319,9 +356,9 @@ export const PayrollDashboard = () => {
          {/* 🎯 Analytics Overview */}
          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* 🥧 Department Distribution */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col">
+            <div className="bg-white dark:bg-[#111111] rounded-2xl p-6 border border-slate-100 dark:border-[#333333] shadow-sm flex flex-col">
                <div className="mb-6">
-                  <h3 className="font-bold text-slate-800 text-base">Cost by Department</h3>
+                  <h3 className="font-bold text-slate-800 dark:text-white text-base">Cost by Department</h3>
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-0.5">Organizational Payroll Weight</p>
                </div>
                <div className="flex-1 min-h-[300px]">
@@ -330,26 +367,51 @@ export const PayrollDashboard = () => {
                         <Pie data={deptData} cx="50%" cy="50%" innerRadius={70} outerRadius={100} fill="#8884d8" paddingAngle={5} dataKey="value" isAnimationActive={true} animationBegin={0} animationDuration={1500} animationEasing="ease-out">
                            {deptData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                         </Pie>
-                        <ReTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 700 }} formatter={(v) => [`${currencySymbol}${formatCurrency(v)}`, 'Total Cost']} />
-                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 900, textTransform: 'uppercase'}} />
+                        <ReTooltip 
+                           contentStyle={{ 
+                              borderRadius: '12px', 
+                              border: 'none', 
+                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)', 
+                              backgroundColor: '#111827',
+                              color: '#fff',
+                              fontWeight: 700 
+                           }} 
+                           itemStyle={{ color: '#fff' }}
+                           labelStyle={{ color: '#94a3b8' }}
+                           formatter={(v) => [`${currencySymbol}${formatCurrency(v)}`, 'Total Cost']} 
+                        />
+                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }} />
                      </RePieChart>
                   </ResponsiveContainer>
                </div>
             </div>
 
             {/* 📊 Component Breakdown */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col">
+            <div className="bg-white dark:bg-[#111111] rounded-2xl p-6 border border-slate-100 dark:border-[#333333] shadow-sm flex flex-col">
                <div className="mb-6">
-                  <h3 className="font-bold text-slate-800 text-base">Payroll Component Breakdown</h3>
+                  <h3 className="font-bold text-slate-800 dark:text-white text-base">Payroll Component Breakdown</h3>
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-0.5">Top 8 Global Components</p>
                </div>
                <div className="flex-1 min-h-[300px]">
                   <ResponsiveContainer width="100%" height={300}>
                      <BarChart data={breakdownData} layout="vertical" margin={{ top: 20, right: 30, left: 100, bottom: 20 }} barCategoryGap="20%">
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="currentColor" className="text-slate-100 dark:text-white/5" />
                         <XAxis type="number" hide />
-                        <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fontWeight: 700, fill: '#475569'}} width={120} />
-                        <ReTooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 700 }} formatter={(v) => [`${currencySymbol}${formatCurrency(v)}`, 'Total Vol.']} />
+                        <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: '#475569' }} width={120} />
+                        <ReTooltip 
+                           cursor={{ fill: 'rgba(255,255,255,0.02)' }} 
+                           contentStyle={{ 
+                              borderRadius: '12px', 
+                              border: 'none', 
+                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)', 
+                              backgroundColor: '#111827',
+                              color: '#fff',
+                              fontWeight: 700 
+                           }} 
+                           itemStyle={{ color: '#fff' }}
+                           labelStyle={{ color: '#94a3b8' }}
+                           formatter={(v) => [`${currencySymbol}${formatCurrency(v)}`, 'Total Vol.']} 
+                        />
                         <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={30} isAnimationActive={true} animationBegin={0} animationDuration={1500} animationEasing="ease-out">
                            {breakdownData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.type === 'Earning' ? '#6366f1' : '#f43f5e'} fillOpacity={0.8} />)}
                         </Bar>
@@ -364,9 +426,9 @@ export const PayrollDashboard = () => {
          </div>
 
          {/* 📅 Recent Payroll Runs */}
-         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-               <h3 className="font-bold text-slate-800">Recent Payroll Batches</h3>
+         <div className="bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-50 dark:border-white/5 flex justify-between items-center">
+               <h3 className="font-bold text-slate-800 dark:text-white">Recent Payroll Batches</h3>
                <button onClick={() => window.location.href = '/payroll/history'} className="text-xs font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-700 transition-colors flex items-center gap-1.5">
                   View Full Ledger <ExternalLink size={12} />
                </button>
@@ -374,25 +436,24 @@ export const PayrollDashboard = () => {
             <div className="overflow-x-auto">
                <table className="w-full text-left">
                   <thead>
-                     <tr className="bg-slate-50 text-[11px] font-semibold text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                     <tr className="bg-slate-50 dark:bg-[#1a1a1a] text-[11px] font-semibold text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5">
                         <th className="px-6 py-3.5 text-left">Pay Period</th>
                         <th className="px-6 py-3.5 text-left">Employees</th>
                         <th className="px-6 py-3.5 text-right">Net Disbursed</th>
                         <th className="px-6 py-3.5 text-center">Status</th>
                      </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody className="divide-y divide-slate-50 dark:divide-white/5">
                      {(history || []).map((run, i) => (
-                        <tr key={i} className="hover:bg-slate-50/80 transition-colors text-sm">
-                           <td className="px-6 py-4 font-semibold text-slate-700">{new Date(0, run.month - 1).toLocaleString('default', { month: 'long' })} {run.year}</td>
-                           <td className="px-6 py-4 text-slate-500">{run.totalEmployees} employees</td>
-                           <td className="px-6 py-4 text-right font-bold text-slate-800 tabular-nums">{currencySymbol}{formatCurrency(run.totalNet || 0)}</td>
+                        <tr key={i} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors text-sm">
+                           <td className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">{new Date(0, run.month - 1).toLocaleString('default', { month: 'long' })} {run.year}</td>
+                           <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{run.totalEmployees} employees</td>
+                           <td className="px-6 py-4 text-right font-bold text-slate-800 dark:text-white tabular-nums">{currencySymbol}{formatCurrency(run.totalNet || 0)}</td>
                            <td className="px-6 py-4 text-center">
-                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
-                                 run.status === 'Completed' || run.status === 'Paid' ? 'bg-emerald-50 text-emerald-700' :
-                                 run.status === 'Processed' ? 'bg-indigo-50 text-indigo-700' :
-                                 'bg-slate-100 text-slate-500'
-                              }`}>
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium ${run.status === 'Completed' || run.status === 'Paid' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' :
+                                    run.status === 'Processed' ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400' :
+                                       'bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400'
+                                 }`}>
                                  <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
                                  {run.status}
                               </span>
@@ -419,27 +480,16 @@ export const EmployeePayrollProfiles = () => {
       queryKey: ['settings'],
       queryFn: () => settingsAPI.getSettings().then(res => res.data.data)
    });
-   const currencySymbol = settings?.payroll?.currencySymbol || '₹';
+   const currencySymbol = settings?.organization?.currency ? getCurrencySymbol(settings.organization.currency) : (settings?.payroll?.currencySymbol || '₹');
 
-   const [selectedUser, setSelectedUser] = React.useState(null);
-   const [isEditing, setIsEditing] = React.useState(false);
+   const navigate = useNavigate();
    const [deleteConfirm, setDeleteConfirm] = React.useState({ isOpen: false, id: null });
+   const [viewModal, setViewModal] = React.useState({ isOpen: false, data: null });
    const [searchTerm, setSearchTerm] = React.useState('');
    const [deptFilter, setDeptFilter] = React.useState('All');
    const [statusFilter, setStatusFilter] = React.useState('All');
    const [currentPage, setCurrentPage] = React.useState(1);
    const itemsPerPage = 10;
-   const [formData, setFormData] = React.useState({
-      payrollType: 'Monthly',
-      employeeType: 'Permanent',
-      salaryMode: 'Role-Based',
-      salaryStructureId: '',
-      weeklyRate: '',
-      hourlyRate: '',
-      dailyRate: '',
-      monthlyCTC: '',
-      isActive: true
-   });
 
    const { data: users } = useQuery({
       queryKey: ['users'],
@@ -465,30 +515,17 @@ export const EmployeePayrollProfiles = () => {
       if (!users) return [];
 
       let filtered = users.map(u => {
-         const profile = profiles?.find(p => p.user?._id === u._id);
+         // Find profile using both standard and legacy user identity mappings
+         const profile = profiles?.find(p => (p.employee?.userId === (u._id || u.id)) || (p.user === (u._id || u.id)));
 
-         // Bank Status Logic
-         let bankStatus = 'Missing';
-         if (u.bankName && u.accountNumber && u.ifscCode) {
-            bankStatus = 'Verified';
-         } else if (u.bankName || u.accountNumber) {
-            bankStatus = 'Pending';
-         }
+         const bankDetailsComplete = !!(u.bankName && u.accountNumber && u.ifscCode && u.pan);
+         let bankStatus = bankDetailsComplete ? 'Verified' : (u.bankName || u.accountNumber ? 'Pending' : 'Missing');
 
-         // Payroll Status Logic
+         // Payroll Status Logic (Unified Profile)
          let payrollStatus = 'Not Configured';
          if (profile) {
-            // Check if there is an explicit or implicit salary structure link
-            const hasExplicitLink = !!profile.salaryStructureId;
-            const hasRoleFallback = profile.salaryMode === 'Role-Based' && 
-               structures?.some(s => s.name?.toLowerCase() === u.role?.toLowerCase() && s.type === 'Role-Based');
-
-            // A profile is in Error if it's active but has no identifiable salary structure
-            if (profile.isActive && !hasExplicitLink && !hasRoleFallback) {
-               payrollStatus = 'Error';
-            } else {
-               payrollStatus = profile.isActive ? 'Active' : 'Inactive';
-            }
+            const isProfileComplete = !!(profile.annualCTC && profile.earnings?.length > 0 && bankDetailsComplete);
+            payrollStatus = isProfileComplete ? 'Active' : 'Warning';
          }
 
          return {
@@ -505,7 +542,8 @@ export const EmployeePayrollProfiles = () => {
          const lowerTerm = searchTerm.toLowerCase();
          filtered = filtered.filter(u =>
             u.name.toLowerCase().includes(lowerTerm) ||
-            u.employeeId.toLowerCase().includes(lowerTerm)
+            (u.employeeId && u.employeeId.toLowerCase().includes(lowerTerm)) ||
+            (u.employee?.employeeCode && u.employee.employeeCode.toLowerCase().includes(lowerTerm))
          );
       }
 
@@ -518,7 +556,7 @@ export const EmployeePayrollProfiles = () => {
       }
 
       return filtered;
-   }, [users, profiles, searchTerm, deptFilter, statusFilter]);
+   }, [users, profiles, structures, searchTerm, deptFilter, statusFilter]);
 
    React.useEffect(() => {
       setCurrentPage(1);
@@ -535,59 +573,9 @@ export const EmployeePayrollProfiles = () => {
       { label: 'Total Employees', value: users?.length || 0, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
       { label: 'Configured Profiles', value: profiles?.length || 0, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
       { label: 'Pending Setup', value: (users?.length || 0) - (profiles?.length || 0), icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
-      { label: 'Critical Errors', value: enrichedUsers?.filter(u => u.payrollStatus === 'Error' || u.bankStatus === 'Missing').length || 0, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
+      { label: 'Critical Errors', value: enrichedUsers?.filter(u => u.payrollStatus === 'Warning' || u.bankStatus === 'Missing').length || 0, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
    ], [users, profiles, enrichedUsers]);
 
-   const profilePreview = React.useMemo(() => {
-      if (!formData.monthlyCTC || !structures) return null;
-
-      let structure = null;
-      if (formData.salaryMode === 'Role-Based') {
-         structure = structures.find(s => s.name?.toLowerCase() === selectedUser?.role?.toLowerCase() && s.type === 'Role-Based');
-      } else {
-         structure = structures.find(s => s._id === formData.salaryStructureId);
-      }
-
-      if (!structure) return null;
-
-      const context = {};
-      const ctc = parseFloat(formData.monthlyCTC) || 0;
-      const earnings = (structure.earnings || []).map(e => {
-         let val = parseFloat(e.value) || 0;
-         if (e.calculationType === 'Percentage') {
-            const formula = (e.formula || '').toLowerCase();
-            let base = formula.includes('ctc') ? ctc : (context['Basic Salary'] || context['Basic'] || 0);
-            if (e.name.toLowerCase().includes('basic')) base = ctc;
-            val = (base * (parseFloat(e.value) || 0)) / 100;
-         }
-         context[e.name] = val;
-         return { name: e.name, value: val };
-      });
-
-      const gross = earnings.reduce((acc, e) => acc + e.value, 0);
-      const deductions = (structure.deductions || []).map(d => {
-         let val = parseFloat(d.value) || 0;
-         if (d.calculationType === 'Percentage') {
-            const formula = (d.formula || '').toLowerCase();
-            let base = formula.includes('ctc') ? ctc : (context['Basic Salary'] || context['Basic'] || 0);
-            if (formula.includes('gross')) base = gross;
-            val = (base * (parseFloat(d.value) || 0)) / 100;
-         }
-         return { name: d.name, value: val };
-      });
-
-      const totalDeds = deductions.reduce((acc, d) => acc + d.value, 0);
-      return { earnings, deductions, gross, totalDeds, net: gross - totalDeds };
-   }, [formData, structures, selectedUser]);
-
-   const profileMutation = useMutation({
-      mutationFn: (data) => payrollAPI.updateProfile(data),
-      onSuccess: () => {
-         queryClient.invalidateQueries({ queryKey: ['payrollProfiles'] });
-         toast.success('Payroll Profile Successfully Updated');
-         setIsEditing(false);
-      }
-   });
 
    const deleteProfileMutation = useMutation({
       mutationFn: (id) => payrollAPI.deleteProfile(id),
@@ -597,66 +585,52 @@ export const EmployeePayrollProfiles = () => {
       }
    });
 
-   const handleUserSelect = (userId) => {
-      const user = users.find(u => u._id === userId);
-      const existingProfile = profiles?.find(p => p.user?._id === userId);
-
-      setSelectedUser(user);
-      if (existingProfile) {
-         setFormData({
-            ...existingProfile,
-            salaryStructureId: existingProfile.salaryStructureId || '',
-            isActive: existingProfile.isActive ?? true
-         });
+   const handleUserSelect = (userId, mode = 'edit') => {
+      const user = users.find(u => (u._id === userId || u.id === userId));
+      if (mode === 'view') {
+         const profile = profiles?.find(p => (p.employee?.userId === userId) || (p.user === userId));
+         if (!profile) return toast.error('No payroll configuration found for this user');
+         
+         const breakdown = calculateSalaryBreakdown(profile.earnings, profile.deductions, profile.monthlyCTC);
+         setViewModal({ isOpen: true, data: { user, profile, breakdown } });
       } else {
-         setFormData({
-            payrollType: 'Monthly',
-            employeeType: 'Permanent',
-            salaryMode: 'Role-Based',
-            salaryStructureId: '',
-            weeklyRate: '',
-            hourlyRate: '',
-            dailyRate: '',
-            monthlyCTC: '',
-            isActive: true
-         });
+         navigate(`/payroll/profile/${user.id || user._id}`, { state: { preSelectedUser: user } });
       }
-      setIsEditing(true);
    };
 
    return (
-      <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen">
+      <div className="p-8 space-y-8 bg-slate-50/50 dark:bg-black min-h-screen">
          {/* 🚀 Header Section */}
          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
-               <h1 className="text-2xl font-black text-slate-900 tracking-tight">Payroll Profiles</h1>
-               <p className="text-sm text-slate-500 font-medium mt-1">Manage employee salary structures and bank configurations</p>
+               <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Payroll Profiles</h1>
+               <p className="text-sm text-slate-500 dark:text-gray-400 font-medium mt-1">Manage employee salary structures and bank configurations</p>
             </div>
          </div>
 
          {/* 📊 KPI Summary */}
          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {kpis.map((kpi, i) => (
-               <div key={i} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+               <div key={i} className="bg-white dark:bg-[#111111] p-5 rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
                   <div className={`p-3 ${kpi.bg} ${kpi.color} rounded-xl`}>
                      <kpi.icon size={22} />
                   </div>
                   <div>
-                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{kpi.label}</p>
-                     <h4 className="text-xl font-black text-slate-900">{kpi.value}</h4>
+                     <p className="text-xs font-bold text-slate-400 dark:text-gray-500 uppercase tracking-wider">{kpi.label}</p>
+                     <h4 className="text-xl font-black text-slate-900 dark:text-white">{kpi.value}</h4>
                   </div>
                </div>
             ))}
          </div>
 
          {/* 🔍 Search & Filters */}
-         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-wrap items-center gap-4">
+         <div className="bg-white dark:bg-[#111111] p-4 rounded-xl border border-slate-100 dark:border-[#333333] shadow-sm flex flex-wrap items-center gap-4">
             <div className="relative flex-1 min-w-[300px]">
                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                <input
                   type="text"
                   placeholder="Search employee by name or ID..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-200 dark:border-[#333333] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all dark:text-white"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                />
@@ -665,40 +639,40 @@ export const EmployeePayrollProfiles = () => {
             <div className="flex items-center gap-2">
                <Filter size={16} className="text-slate-400" />
                <select
-                  className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none cursor-pointer hover:border-slate-300 transition-colors"
+                  className="bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-lg px-3 py-2 text-sm font-medium outline-none cursor-pointer hover:border-slate-300 transition-colors dark:text-white"
                   value={deptFilter}
                   onChange={(e) => setDeptFilter(e.target.value)}
                >
                   {departments.map(dept => (
-                     <option key={dept} value={dept}>{dept === 'All' ? 'All Departments' : dept}</option>
+                     <option key={dept} value={dept} className="dark:bg-[#111111]">{dept === 'All' ? 'All Departments' : dept}</option>
                   ))}
                </select>
 
                <select
-                  className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none cursor-pointer hover:border-slate-300 transition-colors"
+                  className="bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-lg px-3 py-2 text-sm font-medium outline-none cursor-pointer hover:border-slate-300 transition-colors dark:text-white"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                >
-                  <option value="All">All Status</option>
-                  <option value="Active">Active</option>
-                  <option value="Not Configured">Pending Setup</option>
-                  <option value="Error">Configuration Error</option>
+                  <option value="All" className="dark:bg-[#111111]">All Status</option>
+                  <option value="Active" className="dark:bg-[#111111]">Active</option>
+                  <option value="Not Configured" className="dark:bg-[#111111]">Pending Setup</option>
+                  <option value="Warning" className="dark:bg-[#111111]">Incomplete Details</option>
                </select>
             </div>
          </div>
 
          {/* 📋 Main Table */}
-         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+         <div className="bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden flex flex-col">
             <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
                <table className="w-full text-left border-collapse">
                   <thead className="sticky top-0 z-20">
-                     <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                        <th className="px-6 py-4 bg-slate-50">Employee</th>
-                        <th className="px-6 py-4 bg-slate-50">Role / Designation</th>
-                        <th className="px-6 py-4 text-right bg-slate-50">Defined CTC</th>
-                        <th className="px-6 py-4 text-center bg-slate-50">Payroll Status</th>
-                        <th className="px-6 py-4 text-center bg-slate-50">Bank Status</th>
-                        <th className="px-6 py-4 text-right bg-slate-50">Actions</th>
+                     <tr className="bg-slate-50 dark:bg-white/5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-[#333333]">
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a]">Employee</th>
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a]">Role / Designation</th>
+                        <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a]">Defined CTC</th>
+                        <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a]">Payroll Status</th>
+                        <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a]">Bank Status</th>
+                        <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a]">Actions</th>
                      </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -713,57 +687,57 @@ export const EmployeePayrollProfiles = () => {
                         <tr>
                            <td colSpan="6" className="px-6 py-20 text-center">
                               <div className="max-w-xs mx-auto">
-                                 <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <Users size={32} className="text-slate-300" />
+                                 <div className="w-16 h-16 bg-slate-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <Users size={32} className="text-slate-300 dark:text-gray-600" />
                                  </div>
-                                 <h3 className="text-slate-900 font-bold">No payroll profiles configured yet</h3>
-                                 <p className="text-slate-500 text-xs mt-1 mb-6">Start by configuring payroll for your employees to enable salary processing.</p>
+                                 <h3 className="text-slate-900 dark:text-white font-bold">No payroll profiles configured yet</h3>
+                                 <p className="text-slate-500 dark:text-gray-400 text-xs mt-1 mb-6">Start by configuring payroll for your employees to enable salary processing.</p>
                                  <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all"
+                                    onClick={() => navigate('/payroll/profile')}
+                                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all dark:shadow-none"
                                  >
-                                    + Create Profile
+                                    + Launch Setup Wizard
                                  </button>
                               </div>
                            </td>
                         </tr>
                      ) : paginatedUsers.map((u, i) => (
-                        <tr key={u._id || i} className="group border-b border-slate-50">
+                        <tr key={u._id || i} className="group border-b border-slate-50 dark:border-white/5 hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
                            <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
-                                 <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm shadow-sm">
+                                 <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 flex items-center justify-center font-bold text-sm shadow-sm">
                                     {u.avatar ? <img src={u.avatar} alt="" className="w-full h-full rounded-full object-cover" /> : u.name.charAt(0)}
                                  </div>
                                  <div>
-                                    <p className="text-sm font-bold text-slate-800">{u.name}</p>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">ID: {u.employeeId}</p>
+                                    <p className="text-sm font-bold text-slate-800 dark:text-white">{u.name}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase tracking-tighter">ID: {u.employeeId}</p>
                                  </div>
                               </div>
                            </td>
                            <td className="px-6 py-4">
-                              <p className="text-sm font-medium text-slate-700">{u.designation || 'Technical Resource'}</p>
-                              <p className="text-xs text-slate-400">{u.department}</p>
+                              <p className="text-sm font-medium text-slate-700 dark:text-gray-300">{u.designation || 'Technical Resource'}</p>
+                              <p className="text-xs text-slate-400 dark:text-gray-500">{u.department}</p>
                            </td>
                            <td className="px-6 py-4 text-right">
-                              <p className="text-sm font-black text-slate-900">
+                              <p className="text-sm font-black text-slate-900 dark:text-white">
                                  {u.profile ? `${currencySymbol}${formatCurrency(u.profile.monthlyCTC)}` : '—'}
                               </p>
-                              {u.profile && <p className="text-[10px] font-bold text-slate-400 italic font-medium">{u.profile.payrollType}</p>}
+                              {u.profile && <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 italic font-medium">{u.profile.payrollType}</p>}
                            </td>
 
                            <td className="px-6 py-4 text-center">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 mx-auto w-fit ${u.payrollStatus === 'Active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                                    u.payrollStatus === 'Error' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                                       'bg-amber-50 text-amber-600 border border-amber-100'
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 mx-auto w-fit ${u.payrollStatus === 'Active' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20' :
+                                 u.payrollStatus === 'Warning' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-500/20' :
+                                    'bg-slate-50 dark:bg-white/10 text-slate-400 dark:text-gray-500 border border-slate-100 dark:border-white/5'
                                  }`}>
-                                 {u.payrollStatus === 'Active' ? <CheckCircle2 size={10} /> : u.payrollStatus === 'Error' ? <AlertCircle size={10} /> : <Clock size={10} />}
+                                 {u.payrollStatus === 'Active' ? <CheckCircle2 size={10} /> : u.payrollStatus === 'Warning' ? <AlertCircle size={10} /> : <Clock size={10} />}
                                  {u.payrollStatus === 'Not Configured' ? 'Pending Setup' : u.payrollStatus}
                               </span>
                            </td>
                            <td className="px-6 py-4 text-center">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 mx-auto w-fit ${u.bankStatus === 'Verified' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                                    u.bankStatus === 'Missing' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                                       'bg-amber-50 text-amber-600 border border-amber-100'
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 mx-auto w-fit ${u.bankStatus === 'Verified' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20' :
+                                 u.bankStatus === 'Missing' ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20' :
+                                    'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-500/20'
                                  }`}>
                                  {u.bankStatus === 'Verified' ? <ShieldCheck size={10} /> : <AlertCircle size={10} />}
                                  {u.bankStatus}
@@ -772,24 +746,24 @@ export const EmployeePayrollProfiles = () => {
                            <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-2">
                                  <button
-                                    onClick={() => handleUserSelect(u._id)}
-                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all"
+                                    onClick={() => handleUserSelect(u._id, 'view')}
+                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg transition-all"
                                     title="View Profile"
                                  >
                                     <Eye size={16} />
                                  </button>
                                  <button
                                     onClick={() => handleUserSelect(u._id)}
-                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all"
+                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg transition-all"
                                     title={u.hasProfile ? 'Edit Profile' : 'Configure Profile'}
                                  >
                                     <Edit3 size={16} />
                                  </button>
                                  <button
-                                    onClick={() => setDeleteConfirm({ isOpen: true, id: u.profile?._id })}
+                                    onClick={() => setDeleteConfirm({ isOpen: true, id: u.profile?.id })}
                                     disabled={!u.hasProfile}
-                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-white rounded-lg transition-all disabled:opacity-0"
-                                    title="Delete Profile"
+                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg transition-all disabled:opacity-0"
+                                    title="Remove Salary Configuration"
                                  >
                                     <Trash2 size={16} />
                                  </button>
@@ -803,15 +777,15 @@ export const EmployeePayrollProfiles = () => {
 
             {/* 📄 Pagination Controls */}
             {totalPages > 1 && (
-               <div className="p-4 border-t border-slate-50 flex items-center justify-between bg-white">
-                  <p className="text-xs font-bold text-slate-400">
-                     Showing <span className="text-slate-900">{Math.min(enrichedUsers.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className="text-slate-900">{Math.min(enrichedUsers.length, currentPage * itemsPerPage)}</span> of <span className="text-slate-900">{enrichedUsers.length}</span> employees
+               <div className="p-4 border-t border-slate-50 dark:border-white/5 flex items-center justify-between bg-white dark:bg-[#111111]">
+                  <p className="text-xs font-bold text-slate-400 dark:text-gray-500">
+                     Showing <span className="text-slate-900 dark:text-white">{Math.min(enrichedUsers.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className="text-slate-900 dark:text-white">{Math.min(enrichedUsers.length, currentPage * itemsPerPage)}</span> of <span className="text-slate-900 dark:text-white">{enrichedUsers.length}</span> employees
                   </p>
                   <div className="flex items-center gap-2">
                      <button
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                        className="p-2 border border-slate-100 rounded-lg text-slate-400 hover:text-indigo-600 disabled:opacity-30 transition-all"
+                        className="p-2 border border-slate-100 dark:border-white/5 rounded-lg text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 transition-all"
                      >
                         <ChevronLeft size={16} />
                      </button>
@@ -819,7 +793,7 @@ export const EmployeePayrollProfiles = () => {
                         <button
                            key={idx}
                            onClick={() => setCurrentPage(idx + 1)}
-                           className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${currentPage === idx + 1 ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'
+                           className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${currentPage === idx + 1 ? 'bg-indigo-600 text-white' : 'text-slate-400 dark:text-gray-500 hover:bg-slate-50 dark:hover:bg-white/5'
                               }`}
                         >
                            {idx + 1}
@@ -837,198 +811,143 @@ export const EmployeePayrollProfiles = () => {
             )}
          </div>
 
-         {/* Configuration Side Panel / Modal */}
-         {isEditing && selectedUser && (
-            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-end">
-               <motion.div
-                  initial={{ x: '100%' }}
-                  animate={{ x: 0 }}
-                  className="bg-white w-full max-w-2xl h-full shadow-2xl flex flex-col"
-               >
-                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
-                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-lg">
-                           {selectedUser.name.charAt(0)}
-                        </div>
-                        <div>
-                           <h3 className="text-lg font-black text-slate-900">{selectedUser.name}</h3>
-                           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{selectedUser.employeeId} • {selectedUser.department}</p>
-                        </div>
-                     </div>
-                     <button onClick={() => { setIsEditing(false); setSelectedUser(null); }} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all">
-                        <X size={20} />
-                     </button>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-8 space-y-10">
-                     {/* Section: Employee Info */}
-                     <div className="grid grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                        <div className="space-y-4">
-                           <div className="flex items-center gap-2 text-slate-400">
-                              <Building2 size={14} />
-                              <span className="text-[10px] font-black uppercase tracking-widest">Job Details</span>
-                           </div>
-                           <div className="space-y-1">
-                              <p className="text-xs font-bold text-slate-400">Designation</p>
-                              <p className="text-sm font-black text-slate-700">{selectedUser.designation || 'Not Assigned'}</p>
-                           </div>
-                           <div className="space-y-1">
-                              <p className="text-xs font-bold text-slate-400">Join Date</p>
-                              <p className="text-sm font-black text-slate-700">{selectedUser.joinDate ? new Date(selectedUser.joinDate).toLocaleDateString() : '—'}</p>
-                           </div>
-                        </div>
-                        <div className="space-y-4">
-                           <div className="flex items-center gap-2 text-slate-400">
-                              <BankIcon size={14} />
-                              <span className="text-[10px] font-black uppercase tracking-widest">Bank details</span>
-                           </div>
-                           <div className="space-y-1">
-                              <p className="text-xs font-bold text-slate-400">Bank Name</p>
-                              <p className="text-sm font-black text-slate-700">{selectedUser.bankName || 'Missing'}</p>
-                           </div>
-                           <div className="space-y-1">
-                              <p className="text-xs font-bold text-slate-400">A/C Number</p>
-                              <p className="text-sm font-black text-slate-700">{selectedUser.accountNumber ? `****${selectedUser.accountNumber.slice(-4)}` : 'Missing'}</p>
-                           </div>
-                        </div>
-                     </div>
-
-                     {/* Section: Payroll Config */}
-                     <div className="space-y-6">
-                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                           <Settings size={14} className="text-indigo-500" /> Payroll Configuration
-                        </h4>
-
-                        <div className="grid grid-cols-2 gap-6">
-                           <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Payroll Cycle</label>
-                              <select
-                                 value={formData.payrollType}
-                                 onChange={(e) => setFormData({ ...formData, payrollType: e.target.value })}
-                                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                              >
-                                 <option value="Monthly">Monthly</option>
-                                 <option value="Weekly">Weekly</option>
-                                 <option value="Hourly">Hourly</option>
-                                 <option value="Daily">Daily</option>
-                              </select>
-                           </div>
-
-                           <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Employment Type</label>
-                              <select
-                                 value={formData.employeeType}
-                                 onChange={(e) => setFormData({ ...formData, employeeType: e.target.value })}
-                                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                              >
-                                 <option value="Permanent">Permanent</option>
-                                 <option value="Contractor">Contractor</option>
-                                 <option value="Probation">Probation</option>
-                                 <option value="Trainee">Intern</option>
-                              </select>
-                           </div>
-                        </div>
-
-                        <div className="space-y-2">
-                           <label className="text-xs font-bold text-slate-500 uppercase">Salary Structure Mode</label>
-                           <div className="flex gap-2 p-1 bg-slate-50 rounded-xl border border-slate-100">
-                              {['Role-Based', 'Employee-Based'].map(mode => (
-                                 <button
-                                    key={mode}
-                                    onClick={() => setFormData({ ...formData, salaryMode: mode })}
-                                    className={`flex-1 py-2 text-xs font-black uppercase rounded-lg transition-all ${formData.salaryMode === mode ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'
-                                       }`}
-                                 >
-                                    {mode.split('-')[0]} Based
-                                 </button>
-                              ))}
-                           </div>
-                        </div>
-
-                        {formData.salaryMode === 'Employee-Based' && (
-                           <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Selected Structure</label>
-                              <select
-                                 value={formData.salaryStructureId}
-                                 onChange={(e) => setFormData({ ...formData, salaryStructureId: e.target.value })}
-                                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                              >
-                                 <option value="">Select a structure...</option>
-                                 {structures?.filter(s => s.type === 'Employee-Based').map(s => (
-                                    <option key={s._id} value={s._id}>{s.name}</option>
-                                 ))}
-                              </select>
-                           </div>
-                        )}
-
-                        <div className="space-y-2">
-                           <label className="text-xs font-bold text-slate-500 uppercase">Monthly CTC</label>
-                           <div className="relative group">
-                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-300 group-focus-within:text-indigo-500 transition-colors">{currencySymbol}</span>
-                              <input
-                                 type="number"
-                                 placeholder="0.00"
-                                 value={formData.monthlyCTC}
-                                 onChange={(e) => setFormData({ ...formData, monthlyCTC: e.target.value })}
-                                 className="w-full pl-12 pr-6 py-6 bg-slate-50 border border-slate-200 rounded-2xl text-4xl font-black focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-mono"
-                              />
-                           </div>
-                        </div>
-                     </div>
-
-                     {/* Section: Preview */}
-                     <div className="bg-indigo-900 rounded-2xl p-6 text-white relative overflow-hidden shadow-xl shadow-indigo-200">
-                        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                           <BankIcon size={120} />
-                        </div>
-                        <div className="relative z-10 space-y-4">
-                           <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60">Estimated Monthly Net Pay</p>
-                           <h4 className="text-4xl font-black tracking-tight">
-                              {currencySymbol}{profilePreview ? formatCurrency(profilePreview.net) : '0.00'}
-                           </h4>
-
-                           <div className="flex gap-4 pt-2">
-                              <div className="flex flex-col">
-                                 <span className="text-[10px] font-bold opacity-50 uppercase">Earnings</span>
-                                 <span className="text-sm font-black">{currencySymbol}{formatCurrency(profilePreview?.gross)}</span>
-
-                              </div>
-                              <div className="w-px bg-white/10" />
-                              <div className="flex flex-col">
-                                 <span className="text-[10px] font-bold opacity-50 uppercase">Deductions</span>
-                                 <span className="text-sm font-black text-rose-300">{currencySymbol}{formatCurrency(profilePreview?.totalDeds)}</span>
-
-                              </div>
-                           </div>
-                        </div>
-                     </div>
-                  </div>
-
-                  <div className="p-6 border-t border-slate-100 flex gap-4 bg-white sticky bottom-0">
-                      <button
-                        disabled={formData.salaryMode === 'Employee-Based' && !formData.salaryStructureId}
-                        onClick={() => profileMutation.mutate({ userId: selectedUser._id, ...formData })}
-                        className="flex-1 bg-indigo-600 text-white hover:bg-indigo-700 py-4 rounded-xl font-black text-sm transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                     >
-                        <Check size={18} /> Save
-                     </button>
-                     <button onClick={() => { setIsEditing(false); setSelectedUser(null); }} className="px-8 py-4 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl font-black text-sm transition-all">
-                        Cancel
-                     </button>
-                  </div>
-               </motion.div>
-            </div>
-         )}
-
          {/* Delete Confirmation Modal */}
          <ConfirmModal
             isOpen={deleteConfirm.isOpen}
             onClose={() => setDeleteConfirm({ isOpen: false, id: null })}
             onConfirm={() => deleteConfirm.id && deleteProfileMutation.mutate(deleteConfirm.id)}
-            title="Remove Payroll Profile?"
-            message="Are you sure you want to remove the salary structure for this employee? This will stop future salary processing but historical records will be preserved."
-            confirmText="Yes, Remove Profile"
+            title="Remove Salary Configuration?"
+            message="Are you sure you want to clear the salary structure for this employee? This will stop future salary processing, but bank details and historical records will remain intact."
+            confirmText="Yes, Remove Salary"
          />
+
+         {/* Clean Profile View Modal */}
+         <Modal
+            isOpen={viewModal.isOpen}
+            onClose={() => setViewModal({ isOpen: false, data: null })}
+            title="Employee Payroll Profile"
+            maxWidth="3xl"
+         >
+            {viewModal.data && (
+               <div className="space-y-8 p-1">
+                  {/* Header: User Info */}
+                  <div className="flex items-center gap-5 p-6 bg-slate-50 dark:bg-white/5 rounded-[2rem] border border-slate-100 dark:border-[#333333]">
+                     <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-indigo-200 dark:shadow-none">
+                        {viewModal.data.user.name.charAt(0)}
+                     </div>
+                     <div className="flex-1">
+                        <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight">{viewModal.data.user.name}</h3>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{viewModal.data.user.designation || 'Staff'}</span>
+                           <span className="text-xs font-bold text-slate-300 dark:text-gray-600">•</span>
+                           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{viewModal.data.user.department}</span>
+                           <span className="text-xs font-bold text-slate-300 dark:text-gray-600">•</span>
+                           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">ID: {viewModal.data.user.employeeId}</span>
+                        </div>
+                     </div>
+                     <div className="text-right">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Annual CTC</p>
+                        <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 tabular-nums">
+                           {currencySymbol}{formatCurrency(viewModal.data.profile.annualCTC || (viewModal.data.profile.monthlyCTC * 12))}
+                        </p>
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                     {/* Salary Structure Card */}
+                     <div className="space-y-6">
+                        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-[#333333] pb-3">
+                           <Calculator size={16} className="text-indigo-500" />
+                           <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">Monthly Breakdown</span>
+                        </div>
+
+                        <div className="bg-slate-900 rounded-[2rem] p-6 text-white space-y-5 shadow-xl shadow-indigo-100/10">
+                           <div className="space-y-3">
+                              <p className="text-[9px] font-black uppercase text-white/20 tracking-widest">Earnings</p>
+                              {viewModal.data.breakdown.earnings.map((e, idx) => (
+                                 <div key={idx} className="flex justify-between items-center">
+                                    <span className="text-[11px] font-bold text-white/50">{e.name}</span>
+                                    <span className="text-xs font-black text-emerald-400">{currencySymbol}{formatCurrency(e.calculatedValue)}</span>
+                                 </div>
+                              ))}
+                           </div>
+                           <div className="h-px bg-white/5" />
+                           <div className="space-y-3">
+                              <p className="text-[9px] font-black uppercase text-white/20 tracking-widest">Deductions</p>
+                              {viewModal.data.breakdown.deductions.map((d, idx) => (
+                                 <div key={idx} className="flex justify-between items-center">
+                                    <span className="text-[11px] font-bold text-white/50">{d.name}</span>
+                                    <span className="text-xs font-black text-rose-400">{currencySymbol}{formatCurrency(d.calculatedValue)}</span>
+                                 </div>
+                              ))}
+                           </div>
+                           <div className="pt-4 border-t border-white/10 flex justify-between items-end">
+                              <div className="space-y-1">
+                                 <span className="text-[9px] font-black uppercase text-white/20">Monthly Net Payout</span>
+                                 <p className="text-2xl font-black text-emerald-400">{currencySymbol}{formatCurrency(viewModal.data.breakdown.netSalary)}</p>
+                              </div>
+                              <div className="text-right space-y-1">
+                                 <span className="text-[9px] font-black uppercase text-white/20">Gross Pay</span>
+                                 <p className="text-lg font-black text-white/80">{currencySymbol}{formatCurrency(viewModal.data.breakdown.grossPay)}</p>
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* Bank & Compliance Card */}
+                     <div className="space-y-6">
+                        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-[#333333] pb-3">
+                           <Landmark size={16} className="text-emerald-500" />
+                           <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">Bank & Compliance</span>
+                        </div>
+                        
+                        <div className="space-y-4">
+                           <div className="p-5 bg-white dark:bg-[#1a1a1a] border border-slate-100 dark:border-[#333333] rounded-2xl shadow-sm space-y-4">
+                              <div className="flex justify-between items-center">
+                                 <span className="text-[10px] font-bold text-slate-400 uppercase">Bank Name</span>
+                                 <span className="text-sm font-black text-slate-800 dark:text-white">{viewModal.data.user.bankName || 'Not Set'}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                 <span className="text-[10px] font-bold text-slate-400 uppercase">Account Number</span>
+                                 <span className="text-sm font-bold text-slate-600 dark:text-gray-300 tabular-nums">{viewModal.data.user.accountNumber || '—'}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                 <span className="text-[10px] font-bold text-slate-400 uppercase">IFSC Code</span>
+                                 <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{viewModal.data.user.ifscCode || '—'}</span>
+                              </div>
+                           </div>
+
+                           <div className="p-5 bg-white dark:bg-[#1a1a1a] border border-slate-100 dark:border-[#333333] rounded-2xl shadow-sm space-y-4">
+                              <div className="flex justify-between items-center">
+                                 <span className="text-[10px] font-bold text-slate-400 uppercase">PAN Card</span>
+                                 <span className="text-sm font-black text-slate-800 dark:text-white font-mono">{viewModal.data.user.pan || '—'}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                 <span className="text-[10px] font-bold text-slate-400 uppercase">UAN Number</span>
+                                 <span className="text-sm font-bold text-slate-600 dark:text-gray-300 tabular-nums">{viewModal.data.user.uan || '—'}</span>
+                              </div>
+                           </div>
+
+                           <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl flex items-center gap-3 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20">
+                              <ShieldCheck size={18} />
+                              <p className="text-[10px] font-bold">Payroll profile is currently active and verified.</p>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="flex justify-end pt-4">
+                     <button 
+                        onClick={() => navigate(`/payroll/profile/${viewModal.data.user.id || viewModal.data.user._id}`, { state: { preSelectedUser: viewModal.data.user } })}
+                        className="flex items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white dark:text-black text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 dark:shadow-none"
+                     >
+                        <Edit3 size={14} /> Edit Configuration
+                     </button>
+                  </div>
+               </div>
+            )}
+         </Modal>
+
       </div>
    );
 };
@@ -1039,7 +958,7 @@ export const SalaryStructures = () => {
       queryKey: ['settings'],
       queryFn: () => settingsAPI.getSettings().then(res => res.data.data)
    });
-   const currencySymbol = settings?.payroll?.currencySymbol || '₹';
+   const currencySymbol = settings?.organization?.currency ? getCurrencySymbol(settings.organization.currency) : (settings?.payroll?.currencySymbol || '₹');
 
    const [isEditing, setIsEditing] = React.useState(null);
    const [showTemplates, setShowTemplates] = React.useState(false);
@@ -1323,16 +1242,16 @@ export const SalaryStructures = () => {
                   { label: 'Active Structures', value: structures?.filter(s => s.isActive).length || 0, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
                   { label: 'Assigned Employees', value: profiles?.length || 0, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
                ].map((kpi, i) => (
-                  <motion.div 
+                  <motion.div
                      key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
-                     className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-all group"
+                     className="bg-white dark:bg-[#111111] p-4 rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm flex items-center gap-4 hover:shadow-md transition-all group"
                   >
                      <div className={`p-3 ${kpi.bg} ${kpi.color} rounded-xl group-hover:scale-110 transition-transform`}>
                         <kpi.icon size={20} />
                      </div>
                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">{kpi.label}</p>
-                        <h4 className="text-xl font-black text-slate-900 leading-none">{kpi.value}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase tracking-widest leading-none mb-1">{kpi.label}</p>
+                        <h4 className="text-xl font-black text-slate-900 dark:text-white leading-none">{kpi.value}</h4>
                      </div>
                   </motion.div>
                ))}
@@ -1348,11 +1267,11 @@ export const SalaryStructures = () => {
             </div>
          </div>
 
-         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+         <div className="bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
                <table className="w-full text-left border-collapse">
                   <thead>
-                     <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                     <tr className="bg-slate-50 dark:bg-white/5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-[#333333]">
                         <th className="px-6 py-4">Structure Details</th>
                         <th className="px-6 py-4">Configuration Type</th>
                         <th className="px-6 py-4">Component Preview</th>
@@ -1361,7 +1280,7 @@ export const SalaryStructures = () => {
                         <th className="px-6 py-4 text-right">Actions</th>
                      </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody className="divide-y divide-slate-50 dark:divide-[#333333]">
                      {isLoading ? (
                         <tr>
                            <td colSpan="6" className="px-6 py-20 text-center">
@@ -1373,10 +1292,10 @@ export const SalaryStructures = () => {
                         <tr>
                            <td colSpan="6" className="px-6 py-20 text-center">
                               <div className="max-w-xs mx-auto">
-                                 <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                 <div className="w-16 h-16 bg-slate-50 dark:bg-[#1a1a1a] rounded-full flex items-center justify-center mx-auto mb-4">
                                     <Layers size={32} className="text-slate-300" />
                                  </div>
-                                 <h3 className="text-slate-900 font-bold">No salary structures yet</h3>
+                                 <h3 className="text-slate-900 dark:text-white font-bold">No salary structures yet</h3>
                                  <p className="text-slate-500 text-xs mt-1 mb-6">Create templates with earnings and deductions to automate payroll.</p>
                                  <button onClick={handleAdd} className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100">
                                     + Create First Architecture
@@ -1388,20 +1307,20 @@ export const SalaryStructures = () => {
                         structures.map((struct, i) => {
                            const assignedCount = profiles?.filter(p => p.salaryStructureId === struct._id).length || 0;
                            return (
-                              <tr key={struct._id || i} className="group hover:bg-slate-50 transition-colors">
+                              <tr key={struct._id || i} className="group hover:bg-slate-50 dark:hover:bg-[#1a1a1a] transition-colors">
                                  <td className="px-6 py-4">
                                     <div className="flex items-center gap-3">
                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${struct.isActive ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}>
                                           <Layers size={20} />
                                        </div>
                                        <div>
-                                          <p className="text-sm font-black text-slate-800 tracking-tight">{struct.name}</p>
-                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest uppercase">ST_ID: {struct._id?.slice(-6).toUpperCase()}</p>
+                                          <p className="text-sm font-black text-slate-800 dark:text-white tracking-tight">{struct.name}</p>
+                                          <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase tracking-widest uppercase">ST_ID: {struct._id?.slice(-6).toUpperCase()}</p>
                                        </div>
                                     </div>
                                  </td>
                                  <td className="px-6 py-4">
-                                    <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest border ${struct.type === 'Employee-Based' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
+                                    <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest border ${struct.type === 'Employee-Based' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-500/20' : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-500/20'}`}>
                                        {struct.type === 'Employee-Based' ? 'Individual' : `${struct.role || 'General'}`}
                                     </span>
                                  </td>
@@ -1409,37 +1328,43 @@ export const SalaryStructures = () => {
                                     <div className="flex flex-col gap-1.5">
                                        <div className="flex gap-1.5 flex-wrap">
                                           {struct.earnings?.slice(0, 2).map((e, idx) => (
-                                             <span key={idx} className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-bold border border-emerald-100">{e.name}</span>
+                                             <span key={idx} className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-md text-[9px] font-bold border border-emerald-100 dark:border-emerald-500/20">{e.name}</span>
                                           ))}
-                                          {struct.earnings?.length > 2 && <span className="text-[9px] font-bold text-slate-400">+{struct.earnings.length - 2}</span>}
+                                          {struct.earnings?.length > 2 && <span className="text-[9px] font-bold text-slate-400 dark:text-gray-500">+{struct.earnings.length - 2}</span>}
                                        </div>
                                        <div className="flex gap-1.5 flex-wrap">
                                           {struct.deductions?.slice(0, 2).map((d, idx) => (
-                                             <span key={idx} className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md text-[9px] font-bold border border-rose-100">{d.name}</span>
+                                             <span key={idx} className="px-2 py-0.5 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 rounded-md text-[9px] font-bold border border-rose-100 dark:border-rose-500/20">{d.name}</span>
                                           ))}
-                                          {struct.deductions?.length > 2 && <span className="text-[9px] font-bold text-slate-400">+{struct.deductions.length - 2}</span>}
+                                          {struct.deductions?.length > 2 && <span className="text-[9px] font-bold text-slate-400 dark:text-gray-500">+{struct.deductions.length - 2}</span>}
                                        </div>
                                     </div>
                                  </td>
                                  <td className="px-6 py-4 text-center">
-                                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-lg text-slate-600">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-50 dark:bg-[#0a0a0a] rounded-lg text-slate-600 dark:text-gray-400">
                                        <Users size={14} />
                                        <span className="text-sm font-black">{assignedCount}</span>
                                     </div>
                                  </td>
                                  <td className="px-6 py-4 text-center">
-                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5 ${struct.isActive ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-50 text-slate-400 border border-slate-200'}`}>
-                                       <div className={`w-1.5 h-1.5 rounded-full ${struct.isActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`} />
+                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5 ${struct.isActive ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20' : 'bg-slate-50 dark:bg-[#1a1a1a] text-slate-400 dark:text-gray-500 border border-slate-200 dark:border-[#333333]'}`}>
+                                       <div className={`w-1.5 h-1.5 rounded-full ${struct.isActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300 dark:bg-gray-600'}`} />
                                        {struct.isActive ? 'Active' : 'Archived'}
                                     </span>
                                  </td>
                                  <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                       <button onClick={() => handleEdit(struct)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all" title="Edit Architecture"><Edit3 size={16} /></button>
-                                       <button onClick={() => setStatusConfirm({ isOpen: true, id: struct._id, isActive: struct.isActive })} className={`p-2 rounded-lg transition-all ${struct.isActive ? 'text-amber-500 hover:bg-amber-50' : 'text-emerald-500 hover:bg-emerald-50'}`} title={struct.isActive ? 'Archive' : 'Activate'}>
+                                       <button onClick={() => handleEdit(struct)} className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white dark:hover:bg-[#222222] rounded-lg transition-all" title="Edit Architecture"><Edit3 size={16} /></button>
+                                       <button onClick={() => setStatusConfirm({ isOpen: true, id: struct._id, isActive: struct.isActive })} className={`p-2 rounded-lg transition-all ${struct.isActive ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10' : 'text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'}`} title={struct.isActive ? 'Archive' : 'Activate'}>
                                           {struct.isActive ? <Archive size={16} /> : <Play size={16} />}
                                        </button>
-                                       <button onClick={() => setHardDeleteConfirm({ isOpen: true, id: struct._id })} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Delete Structure"><Trash2 size={16} /></button>
+                                       <button
+                                          onClick={() => setHardDeleteConfirm({ isOpen: true, id: struct.id })}
+                                          className="p-2 text-slate-400 dark:text-gray-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-all"
+                                          title="Delete Structure"
+                                       >
+                                          <Trash2 size={16} />
+                                       </button>
                                     </div>
                                  </td>
                               </tr>
@@ -1455,22 +1380,22 @@ export const SalaryStructures = () => {
                <motion.div
                   initial={{ x: '100%' }}
                   animate={{ x: 0 }}
-                  className="bg-white w-full max-w-4xl h-full shadow-2xl flex flex-col"
+                  className="bg-white dark:bg-[#0a0a0a] w-full max-w-4xl h-full shadow-2xl flex flex-col"
                >
                   {/* Drawer Header */}
-                  <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                  <div className="p-8 border-b border-slate-100 dark:border-[#333333] flex justify-between items-center bg-white dark:bg-[#111111] shrink-0">
                      <div className="flex items-center gap-6">
-                        <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
+                        <div className="w-16 h-16 bg-indigo-600 dark:bg-indigo-500 text-white rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-100 dark:shadow-none">
                            <Calculator size={32} />
                         </div>
                         <div>
                            <div className="flex items-center gap-3">
-                              <h3 className="text-xl font-black text-slate-900 tracking-tight">Salary Structure Designer</h3>
+                              <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Salary Structure Designer</h3>
                            </div>
                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Configure architecture for {modalRole.toUpperCase()}</p>
                         </div>
                      </div>
-                     <button onClick={() => setIsEditing(null)} className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all active:scale-95">
+                     <button onClick={() => setIsEditing(null)} className="w-12 h-12 bg-slate-50 dark:bg-[#1a1a1a] rounded-xl flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all active:scale-95">
                         <X size={20} />
                      </button>
                   </div>
@@ -1484,7 +1409,7 @@ export const SalaryStructures = () => {
                         }}
                         className="flex flex-col h-full"
                      >
-                        <div className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-slate-50/30">
+                        <div className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-slate-50/30 dark:bg-[#0a0a0a]">
                            <div className="max-w-3xl mx-auto space-y-12">
                               {/* Meta Config */}
                               <div className="grid grid-cols-2 gap-8">
@@ -1500,9 +1425,9 @@ export const SalaryStructures = () => {
                                              setFormData({ ...formData, type: 'Role-Based', userId: null, name: `${newRole.toUpperCase()} STANDARD` });
                                              loadTemplate(newRole);
                                           }}
-                                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                                          className="w-full px-4 py-3 bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all dark:text-white"
                                        >
-                                          {['intern', 'employee', 'manager', 'hr', 'finance', 'admin'].map(r => <option key={r} value={r}>{r.toUpperCase()}</option>)}
+                                          {['intern', 'employee', 'manager', 'hr', 'finance', 'admin'].map(r => <option key={r} value={r} className="dark:bg-[#111111]">{r.toUpperCase()}</option>)}
                                        </select>
                                     </div>
                                     <div className="space-y-2">
@@ -1510,7 +1435,7 @@ export const SalaryStructures = () => {
                                        <input
                                           required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                           placeholder="e.g. Senior Developer Template"
-                                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                                          className="w-full px-4 py-3 bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all dark:text-white"
                                        />
                                     </div>
                                  </div>
@@ -1536,7 +1461,7 @@ export const SalaryStructures = () => {
                                                 loadTemplate(modalRole);
                                              }
                                           }}
-                                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                                          className="w-full px-4 py-3 bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all dark:text-white"
                                        >
                                           <option value="">Standard Role Structure</option>
                                           {employeesList?.filter(u => u.role === modalRole).map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
@@ -1575,19 +1500,19 @@ export const SalaryStructures = () => {
                                  {/* Earnings */}
                                  <div className="space-y-6">
                                     <div className="flex justify-between items-center">
-                                       <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                       <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
                                           <TrendingUp size={16} className="text-emerald-500" /> Earnings
                                        </h4>
                                        <button type="button" onClick={() => addComponent('earnings')} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-700 transition-all">+ Add Item</button>
                                     </div>
                                     <div className="space-y-3">
                                        {formData.earnings.map((e, idx) => (
-                                          <div key={idx} className="flex gap-4 items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm transition-all group">
-                                             <input value={e.name} onChange={(ev) => updateComponent('earnings', idx, 'name', ev.target.value)} placeholder="Basic" className="flex-1 bg-transparent border-none text-xs font-bold outline-none" />
-                                             <select value={e.calculationType} onChange={(ev) => updateComponent('earnings', idx, 'calculationType', ev.target.value)} className="w-24 bg-slate-50 border-none rounded-lg text-[10px] font-black outline-none px-2 py-1">
-                                                <option>Fixed</option><option>Percentage</option><option>Formula</option>
+                                          <div key={idx} className="flex gap-4 items-center bg-white dark:bg-[#0a0a0a] p-3 rounded-xl border border-slate-100 dark:border-[#333333] shadow-sm transition-all group">
+                                             <input value={e.name} onChange={(ev) => updateComponent('earnings', idx, 'name', ev.target.value)} placeholder="Basic" className="flex-1 bg-transparent border-none text-xs font-bold outline-none dark:text-white" />
+                                             <select value={e.calculationType} onChange={(ev) => updateComponent('earnings', idx, 'calculationType', ev.target.value)} className="w-24 bg-slate-50 dark:bg-[#1a1a1a] border-none rounded-lg text-[10px] font-black outline-none px-2 py-1 dark:text-white">
+                                                <option className="dark:bg-[#111111]">Fixed</option><option className="dark:bg-[#111111]">Percentage</option><option className="dark:bg-[#111111]">Formula</option>
                                              </select>
-                                             <input type={e.calculationType === 'Formula' ? 'text' : 'number'} value={e.value} onChange={(ev) => updateComponent('earnings', idx, 'value', ev.target.value)} disabled={e.calculationType === 'Formula'} className="w-20 bg-slate-50 border-none rounded-lg text-[10px] font-black outline-none px-2 py-1 text-right disabled:opacity-20" />
+                                             <input type={e.calculationType === 'Formula' ? 'text' : 'number'} value={e.value} onChange={(ev) => updateComponent('earnings', idx, 'value', ev.target.value)} disabled={e.calculationType === 'Formula'} className="w-20 bg-slate-50 dark:bg-[#1a1a1a] border-none rounded-lg text-[10px] font-black outline-none px-2 py-1 text-right disabled:opacity-20 dark:text-white" />
                                              <button type="button" onClick={() => removeComponent('earnings', idx)} className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={14} /></button>
                                           </div>
                                        ))}
@@ -1597,19 +1522,19 @@ export const SalaryStructures = () => {
                                  {/* Deductions */}
                                  <div className="space-y-6">
                                     <div className="flex justify-between items-center">
-                                       <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                       <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
                                           <TrendingDown size={16} className="text-rose-500" /> Deductions
                                        </h4>
                                        <button type="button" onClick={() => addComponent('deductions')} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-700 transition-all">+ Add Item</button>
                                     </div>
                                     <div className="space-y-3">
                                        {formData.deductions.map((d, idx) => (
-                                          <div key={idx} className="flex gap-4 items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm transition-all group">
-                                             <input value={d.name} onChange={(ev) => updateComponent('deductions', idx, 'name', ev.target.value)} placeholder="PF" className="flex-1 bg-transparent border-none text-xs font-bold outline-none" />
-                                             <select value={d.calculationType} onChange={(ev) => updateComponent('deductions', idx, 'calculationType', ev.target.value)} className="w-24 bg-slate-50 border-none rounded-lg text-[10px] font-black outline-none px-2 py-1">
-                                                <option>Fixed</option><option>Percentage</option><option>Formula</option>
+                                          <div key={idx} className="flex gap-4 items-center bg-white dark:bg-[#0a0a0a] p-3 rounded-xl border border-slate-100 dark:border-[#333333] shadow-sm transition-all group">
+                                             <input value={d.name} onChange={(ev) => updateComponent('deductions', idx, 'name', ev.target.value)} placeholder="PF" className="flex-1 bg-transparent border-none text-xs font-bold outline-none dark:text-white" />
+                                             <select value={d.calculationType} onChange={(ev) => updateComponent('deductions', idx, 'calculationType', ev.target.value)} className="w-24 bg-slate-50 dark:bg-[#1a1a1a] border-none rounded-lg text-[10px] font-black outline-none px-2 py-1 dark:text-white">
+                                                <option className="dark:bg-[#111111]">Fixed</option><option className="dark:bg-[#111111]">Percentage</option><option className="dark:bg-[#111111]">Formula</option>
                                              </select>
-                                             <input type={d.calculationType === 'Formula' ? 'text' : 'number'} value={d.value} onChange={(ev) => updateComponent('deductions', idx, 'value', ev.target.value)} disabled={d.calculationType === 'Formula'} className="w-20 bg-slate-50 border-none rounded-lg text-[10px] font-black outline-none px-2 py-1 text-right disabled:opacity-20" />
+                                             <input type={d.calculationType === 'Formula' ? 'text' : 'number'} value={d.value} onChange={(ev) => updateComponent('deductions', idx, 'value', ev.target.value)} disabled={d.calculationType === 'Formula'} className="w-20 bg-slate-50 dark:bg-[#1a1a1a] border-none rounded-lg text-[10px] font-black outline-none px-2 py-1 text-right disabled:opacity-20 dark:text-white" />
                                              <button type="button" onClick={() => removeComponent('deductions', idx)} className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={14} /></button>
                                           </div>
                                        ))}
@@ -1619,14 +1544,14 @@ export const SalaryStructures = () => {
                            </div>
                         </div>
 
-                        <div className="p-8 bg-white border-t border-slate-100 flex justify-between items-center shrink-0">
-                           <div className="flex items-center gap-2 text-slate-400">
+                        <div className="p-8 bg-white dark:bg-[#111111] border-t border-slate-100 dark:border-white/5 flex justify-between items-center shrink-0">
+                           <div className="flex items-center gap-2 text-slate-400 dark:text-gray-500">
                               <AlertCircle size={16} />
                               <p className="text-[9px] font-black uppercase tracking-widest">Recalculation triggers on save</p>
                            </div>
                            <div className="flex gap-4">
-                              <button onClick={() => setIsEditing(null)} type="button" className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-all">Cancel</button>
-                              <button type="submit" className="px-10 py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:-translate-y-0.5 transition-all">Save</button>
+                              <button onClick={() => setIsEditing(null)} type="button" className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest hover:text-slate-600 dark:hover:text-white transition-all">Cancel</button>
+                              <button type="submit" className="px-10 py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none hover:-translate-y-0.5 transition-all">Save</button>
                            </div>
                         </div>
                      </form>
@@ -1677,11 +1602,11 @@ export const SalaryStructures = () => {
             maxWidth="max-w-md"
          >
             <div className="p-8 space-y-8">
-               <div className="flex items-center gap-4 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
-                  <div className="p-2 bg-white rounded-lg text-indigo-600 shadow-sm"><Settings size={20} /></div>
+               <div className="flex items-center gap-4 p-4 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-2xl">
+                  <div className="p-2 bg-white dark:bg-[#1a1a1a] rounded-lg text-indigo-600 dark:text-indigo-400 shadow-sm"><Settings size={20} /></div>
                   <div>
-                     <p className="text-xs font-black text-slate-900 uppercase tracking-widest">Advanced Logic</p>
-                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Configure specific triggers and values for {configModal.type}</p>
+                     <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">Advanced Logic</p>
+                     <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase tracking-widest">Configure specific triggers and values for {configModal.type}</p>
                   </div>
                </div>
 
@@ -1691,11 +1616,11 @@ export const SalaryStructures = () => {
                      <select
                         value={configModal.data.durationType || ''}
                         onChange={(e) => setConfigModal({ ...configModal, data: { ...configModal.data, durationType: e.target.value } })}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                        className="w-full px-4 py-3 bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all dark:text-white"
                      >
-                        <option value="">Select Duration</option>
-                        <option value="6 Months">6 Months</option>
-                        <option value="1 Year">1 Year</option>
+                        <option value="" className="dark:bg-[#111111]">Select Duration</option>
+                        <option value="6 Months" className="dark:bg-[#111111]">6 Months</option>
+                        <option value="1 Year" className="dark:bg-[#111111]">1 Year</option>
                      </select>
                   </div>
 
@@ -1711,7 +1636,7 @@ export const SalaryStructures = () => {
                               const val = e.target.value;
                               setConfigModal({ ...configModal, data: { ...configModal.data, amount: val === '' ? '' : Math.max(0, parseFloat(val) || 0) } });
                            }}
-                           className="w-full pl-8 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                           className="w-full pl-8 pr-4 py-3 bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all dark:text-white"
                            placeholder="0.00"
                         />
                      </div>
@@ -1733,11 +1658,11 @@ export const SalaryStructures = () => {
                         setConfigModal({ ...configModal, isOpen: false });
                         toast.success('Configuration Applied');
                      }}
-                     className="w-full py-4 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all hover:-translate-y-0.5"
+                     className="w-full py-4 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none transition-all hover:-translate-y-0.5"
                   >
                      Save Logic Parameters
                   </button>
-                  <button onClick={() => setConfigModal({ ...configModal, isOpen: false })} className="w-full py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-all">Cancel</button>
+                  <button onClick={() => setConfigModal({ ...configModal, isOpen: false })} className="w-full py-3 text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest hover:text-slate-600 dark:hover:text-white transition-all">Cancel</button>
                </div>
             </div>
          </Modal>
@@ -1751,7 +1676,7 @@ export const PayrollProcessing = () => {
       queryKey: ['settings'],
       queryFn: () => settingsAPI.getSettings().then(res => res.data.data)
    });
-   const currencySymbol = settings?.payroll?.currencySymbol || '₹';
+   const currencySymbol = settings?.organization?.currency ? getCurrencySymbol(settings.organization.currency) : (settings?.payroll?.currencySymbol || '₹');
 
    const [filters, setFilters] = React.useState({
       month: new Date().getMonth() + 1,
@@ -1922,14 +1847,14 @@ export const PayrollProcessing = () => {
       const total = employeesList.length;
       const issues = [];
       const readyEmployees = [];
-      
+
       employeesList.forEach(emp => {
          const profile = profiles?.find(p => (p.user?._id || p.user) === emp._id);
          const empIssues = [];
-         
+
          if (!profile) empIssues.push('Salary Structure Missing');
          if (!emp.accountNumber) empIssues.push('Bank Account Missing');
-         
+
          if (empIssues.length === 0) {
             readyEmployees.push(emp);
          } else {
@@ -1964,14 +1889,14 @@ export const PayrollProcessing = () => {
       >
          <div className="flex flex-col gap-10">
             {/* 1. Header & Status Bar */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm">
                <div className="flex items-center gap-6">
-                  <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
+                  <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100 dark:shadow-none">
                      <ShieldCheck size={32} />
                   </div>
                   <div>
                      <div className="flex items-center gap-3">
-                        <h2 className="text-2xl font-black text-slate-900 tracking-tight">Enterprise Control Panel</h2>
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Enterprise Control Panel</h2>
                         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${simulatedData ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
                            {simulatedData ? 'READY TO EXECUTE' : 'PENDING SIMULATION'}
                         </span>
@@ -1982,11 +1907,11 @@ export const PayrollProcessing = () => {
 
                <div className="flex items-center gap-3 w-full md:w-auto">
                   <div className="grid grid-cols-2 gap-2 flex-1 md:flex-none">
-                     <select value={filters.month} onChange={(e) => setFilters({ ...filters, month: parseInt(e.target.value) })} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-100 text-sm font-bold outline-none appearance-none cursor-pointer">
-                        {[...Array(12)].map((_, i) => <option key={i + 1} value={i + 1}>{new Date(2024, i).toLocaleString('default', { month: 'long' })}</option>)}
+                     <select value={filters.month} onChange={(e) => setFilters({ ...filters, month: parseInt(e.target.value) })} className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-100 dark:border-[#333333] text-sm font-bold outline-none appearance-none cursor-pointer dark:text-white">
+                        {[...Array(12)].map((_, i) => <option key={i + 1} value={i + 1} className="dark:bg-[#111111]">{new Date(2024, i).toLocaleString('default', { month: 'long' })}</option>)}
                      </select>
-                     <select value={filters.year} onChange={(e) => setFilters({ ...filters, year: parseInt(e.target.value) })} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-100 text-sm font-bold outline-none appearance-none cursor-pointer">
-                        {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+                     <select value={filters.year} onChange={(e) => setFilters({ ...filters, year: parseInt(e.target.value) })} className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-100 dark:border-[#333333] text-sm font-bold outline-none appearance-none cursor-pointer dark:text-white">
+                        {[2024, 2025, 2026].map(y => <option key={y} value={y} className="dark:bg-[#111111]">{y}</option>)}
                      </select>
                   </div>
                </div>
@@ -2002,13 +1927,13 @@ export const PayrollProcessing = () => {
                   { label: 'Estimated Cost', value: `${currencySymbol}${formatCurrency(costStats.net)}`, icon: Wallet, color: 'text-slate-900', bg: 'bg-slate-100' },
 
                ].map((kpi, i) => (
-                  <div key={i} className={`bg-white p-6 rounded-2xl border ${kpi.urgent ? 'border-rose-100 shadow-rose-50' : 'border-slate-100'} shadow-sm flex items-center gap-4 hover:shadow-md transition-all group`}>
+                  <div key={i} className={`bg-white dark:bg-[#111111] p-6 rounded-2xl border ${kpi.urgent ? 'border-rose-100 dark:border-rose-500/20 shadow-rose-50 dark:shadow-none' : 'border-slate-100 dark:border-[#333333]'} shadow-sm flex items-center gap-4 hover:shadow-md transition-all group`}>
                      <div className={`p-3 ${kpi.bg} ${kpi.color} rounded-xl group-hover:scale-110 transition-transform`}>
                         <kpi.icon size={20} />
                      </div>
                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{kpi.label}</p>
-                        <h4 className={`text-xl font-black ${kpi.urgent ? 'text-rose-600' : 'text-slate-900'}`}>{kpi.value}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase tracking-widest mb-1">{kpi.label}</p>
+                        <h4 className={`text-xl font-black ${kpi.urgent ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>{kpi.value}</h4>
                      </div>
                   </div>
                ))}
@@ -2020,21 +1945,21 @@ export const PayrollProcessing = () => {
                <div className="xl:col-span-2 space-y-10">
                   {/* Readiness Alerts */}
                   {readinessStats.issues.length > 0 && (
-                     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                        <div className="p-6 border-b border-slate-50 flex items-center gap-3">
-                           <div className="w-8 h-8 bg-rose-50 text-rose-500 rounded-lg flex items-center justify-center">
+                     <div className="bg-white dark:bg-[#111111] rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden">
+                        <div className="p-6 border-b border-slate-50 dark:border-white/5 flex items-center gap-3">
+                           <div className="w-8 h-8 bg-rose-50 dark:bg-rose-500/10 text-rose-500 rounded-lg flex items-center justify-center">
                               <AlertCircle size={18} />
                            </div>
-                           <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Crucial Execution Alerts</h3>
+                           <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Crucial Execution Alerts</h3>
                         </div>
                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                            {readinessStats.issues.slice(0, 4).map((issue, idx) => (
-                              <div key={idx} className="flex items-center gap-4 p-4 bg-rose-50/30 rounded-2xl border border-rose-50 group hover:border-rose-100 transition-all cursor-pointer">
-                                 <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[10px] font-bold text-rose-500 shadow-sm border border-rose-100">
+                              <div key={idx} className="flex items-center gap-4 p-4 bg-rose-50/30 dark:bg-rose-500/5 rounded-2xl border border-rose-50 dark:border-rose-500/10 group hover:border-rose-100 dark:hover:border-rose-500/20 transition-all cursor-pointer">
+                                 <div className="w-10 h-10 rounded-full bg-white dark:bg-[#1a1a1a] flex items-center justify-center text-[10px] font-bold text-rose-500 shadow-sm border border-rose-100 dark:border-rose-500/10">
                                     {issue.employee.name[0]}
                                  </div>
                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-black text-slate-800 truncate">{issue.employee.name}</p>
+                                    <p className="text-xs font-black text-slate-800 dark:text-gray-200 truncate">{issue.employee.name}</p>
                                     <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest truncate">{issue.messages[0]}</p>
                                  </div>
                                  <ChevronRight size={14} className="text-rose-300 group-hover:translate-x-1 transition-transform" />
@@ -2050,11 +1975,11 @@ export const PayrollProcessing = () => {
                   )}
 
                   {/* Readiness Table */}
-                  <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                     <div className="p-8 border-b border-slate-50 flex justify-between items-center">
+                  <div className="bg-white dark:bg-[#111111] rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden">
+                     <div className="p-8 border-b border-slate-50 dark:border-white/5 flex justify-between items-center">
                         <div>
-                           <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Payroll Readiness Table</h3>
-                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cross-check profile and attendance status before commit</p>
+                           <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Payroll Readiness Table</h3>
+                           <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase tracking-widest mt-1">Cross-check profile and attendance status before commit</p>
                         </div>
                         <div className="flex gap-2">
                            <button className="p-2 text-slate-400 hover:text-indigo-600 transition-all"><Search size={18} /></button>
@@ -2064,27 +1989,27 @@ export const PayrollProcessing = () => {
                      <div className="overflow-x-auto">
                         <table className="w-full text-left">
                            <thead>
-                              <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                              <tr className="bg-slate-50/50 dark:bg-white/5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-[#333333]">
                                  <th className="px-8 py-4">Employee</th>
                                  <th className="px-6 py-4">Profile</th>
                                  <th className="px-6 py-4 text-center">Status</th>
                                  <th className="px-6 py-4 text-right">Preview</th>
                               </tr>
                            </thead>
-                           <tbody className="divide-y divide-slate-50">
+                           <tbody className="divide-y divide-slate-50 dark:divide-white/5">
                               {employeesList.slice(0, 10).map((emp, i) => {
                                  const profile = profiles?.find(p => (p.user?._id || p.user) === emp._id);
                                  const simulation = simulatedData?.find(s => s.user?._id === emp._id);
                                  return (
-                                    <tr key={emp._id} className="group hover:bg-slate-50 transition-all">
+                                    <tr key={emp._id} className="group hover:bg-slate-50 dark:hover:bg-white/5 transition-all">
                                        <td className="px-8 py-4">
                                           <div className="flex items-center gap-3">
-                                             <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-xs font-black text-slate-500 uppercase">
+                                             <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-[#1a1a1a] flex items-center justify-center text-xs font-black text-slate-500 dark:text-gray-500 uppercase">
                                                 {emp.name[0]}
                                              </div>
                                              <div>
-                                                <p className="text-sm font-black text-slate-800 leading-none mb-1">{emp.name}</p>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{emp.employeeId}</p>
+                                                <p className="text-sm font-black text-slate-800 dark:text-white leading-none mb-1">{emp.name}</p>
+                                                <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase tracking-tight">{emp.employeeId}</p>
                                              </div>
                                           </div>
                                        </td>
@@ -2100,7 +2025,7 @@ export const PayrollProcessing = () => {
                                           </div>
                                        </td>
                                        <td className="px-6 py-4 text-right">
-                                          <p className="text-[11px] font-black text-slate-800">
+                                          <p className="text-[11px] font-black text-slate-800 dark:text-white">
                                              {simulation ? `${currencySymbol}${formatCurrency(simulation.breakdown?.netPay)}` : '--'}
                                           </p>
 
@@ -2110,8 +2035,8 @@ export const PayrollProcessing = () => {
                               })}
                            </tbody>
                         </table>
-                        <div className="p-4 bg-slate-50/30 border-t border-slate-50 text-center">
-                           <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-all">Displaying top 10 results — Scroll for more</button>
+                        <div className="p-4 bg-slate-50/30 dark:bg-white/5 border-t border-slate-50 dark:border-[#333333] text-center">
+                           <button className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest hover:text-indigo-600 transition-all">Displaying top 10 results — Scroll for more</button>
                         </div>
                      </div>
                   </div>
@@ -2130,7 +2055,7 @@ export const PayrollProcessing = () => {
                            <h2 className="text-4xl font-black mt-2">{currencySymbol}{formatCurrency(costStats.net)}</h2>
 
                         </div>
-                        
+
                         <div className="space-y-4 pt-8 border-t border-white/10">
                            <div className="flex justify-between items-center text-xs font-bold">
                               <span className="text-white/40 uppercase tracking-widest">Gross Earning</span>
@@ -2152,7 +2077,7 @@ export const PayrollProcessing = () => {
                            {simulatedData ? (
                               <button onClick={() => setSimulatedData(null)} className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest text-center transition-all">Discard Preview</button>
                            ) : (
-                              <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                              <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
                                  <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest text-center">Run simulation to view precise costs</p>
                               </div>
                            )}
@@ -2161,12 +2086,12 @@ export const PayrollProcessing = () => {
                   </div>
 
                   {/* Execution Panel */}
-                  <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 space-y-8">
+                  <div className="bg-white dark:bg-[#111111] rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm p-8 space-y-8">
                      <div className="space-y-2">
-                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                        <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
                            <Zap size={16} className="text-amber-500" /> Action Terminal
                         </h3>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Final Step: Commit organization payroll</p>
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase tracking-widest">Final Step: Commit organization payroll</p>
                      </div>
 
                      <div className="space-y-6">
@@ -2176,39 +2101,39 @@ export const PayrollProcessing = () => {
                                  <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Executing Simulation...</span>
                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">74%</span>
                               </div>
-                              <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                 <motion.div 
-                                    initial={{ width: 0 }} 
-                                    animate={{ width: '74%' }} 
-                                    className="h-full bg-indigo-600 rounded-full shadow-[0_0_10px_rgba(79,70,229,0.3)]"
+                              <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
+                                 <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: '74%' }}
+                                    className="h-full bg-indigo-600 rounded-full shadow-[0_0_10px_rgba(79,70,229,0.3)] dark:shadow-none"
                                  />
                               </div>
                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center">Applying formula logic to employee nodes...</p>
                            </div>
                         ) : (
-                           <button 
+                           <button
                               onClick={handleRun}
-                              className="w-full py-5 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3"
+                              className="w-full py-5 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3"
                            >
                               <Play size={18} fill="currentColor" /> Run Payroll Simulation
                            </button>
                         )}
-                        
+
                         {simulatedData && (
-                           <div className="space-y-4 pt-4 border-t border-slate-50">
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-6">Simulation Successful — No Critical Faults</p>
+                           <div className="space-y-4 pt-4 border-t border-slate-50 dark:border-white/5">
+                              <p className="text-[9px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest text-center mb-6">Simulation Successful — No Critical Faults</p>
                               <div className="grid grid-cols-2 gap-3">
-                                 <button onClick={exportToCSV} className="py-3 bg-slate-50 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center gap-2">
+                                 <button onClick={exportToCSV} className="py-3 bg-slate-50 dark:bg-[#1a1a1a] text-slate-600 dark:text-gray-300 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-100 dark:hover:bg-[#222222] transition-all flex items-center justify-center gap-2">
                                     <Download size={14} /> Export CSV
                                  </button>
-                                 <button onClick={exportToBankFormat} className="py-3 bg-slate-50 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center gap-2">
+                                 <button onClick={exportToBankFormat} className="py-3 bg-slate-50 dark:bg-[#1a1a1a] text-slate-600 dark:text-gray-300 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-100 dark:hover:bg-[#222222] transition-all flex items-center justify-center gap-2">
                                     <Building size={14} /> Bank File
                                  </button>
                               </div>
-                              <button 
+                              <button
                                  onClick={() => saveMutation.mutate(simulatedData.filter(s => !s.error))}
                                  disabled={saveMutation.isPending}
-                                 className="w-full py-5 bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3"
+                                 className="w-full py-5 bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-emerald-100 dark:shadow-none hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3"
                               >
                                  {saveMutation.isPending ? <Spinner size="sm" /> : <ShieldCheck size={18} />}
                                  {saveMutation.isPending ? 'Committing...' : 'Commit & Execute Payroll'}
@@ -2225,11 +2150,13 @@ export const PayrollProcessing = () => {
 };
 
 export const PayslipGeneration = () => {
+   const navigate = useNavigate();
+   const queryClient = useQueryClient();
    const { data: settings } = useQuery({
       queryKey: ['settings'],
       queryFn: () => settingsAPI.getSettings().then(res => res.data.data)
    });
-   const currencySymbol = settings?.payroll?.currencySymbol || '₹';
+   const currencySymbol = settings?.organization?.currency ? getCurrencySymbol(settings.organization.currency) : (settings?.payroll?.currencySymbol || '₹');
 
    const [filters, setFilters] = React.useState({
       month: new Date().getMonth() + 1,
@@ -2242,6 +2169,9 @@ export const PayslipGeneration = () => {
    const [isPreviewOpen, setIsPreviewOpen] = React.useState(false);
    const [activePayslipId, setActivePayslipId] = React.useState(null);
    const [downloadingId, setDownloadingId] = React.useState(null);
+   const [sendingEmailId, setSendingEmailId] = React.useState(null);
+   const [markPaidConfirm, setMarkPaidConfirm] = React.useState({ isOpen: false, id: null, name: '' });
+   const [bulkMarkPaidConfirm, setBulkMarkPaidConfirm] = React.useState(false);
 
    const { data: usersData } = useQuery({
       queryKey: ['usersListForPayslips'],
@@ -2257,32 +2187,39 @@ export const PayslipGeneration = () => {
       return ['All', ...new Set(employeesList.map(e => e.department).filter(Boolean))];
    }, [employeesList]);
 
-   const { data: payslips, isLoading } = useQuery({
+   const { data: payslips, isLoading: payslipsLoading } = useQuery({
       queryKey: ['payslipsList', filters],
-      queryFn: () => payrollAPI.getHistory({
+      queryFn: () => payrollAPI.getGeneratedPayslips({
          month: filters.month,
          year: filters.year
       }).then(res => res.data.data)
    });
 
+   const { data: history = [], isLoading: historyLoading } = useQuery({
+      queryKey: ['processedHistoryCheck', filters.month, filters.year],
+      queryFn: () => payrollAPI.getHistory({ month: filters.month, year: filters.year }).then(res => res.data.data)
+   });
+
+   const isLoading = payslipsLoading || historyLoading;
+
    const enrichedPayslips = React.useMemo(() => {
       if (!payslips) return [];
       return payslips.filter(p => {
-         const matchesSearch = p.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              p.user?.employeeId?.toLowerCase().includes(searchTerm.toLowerCase());
-         const matchesDept = filters.department === 'All' || p.user?.department === filters.department;
+         const matchesSearch = p.employeeInfo?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            p.employeeInfo?.employeeId?.toLowerCase().includes(searchTerm.toLowerCase());
+         const matchesDept = filters.department === 'All' || p.employeeInfo?.department === filters.department;
          const matchesStatus = filters.status === 'all' || p.status?.toLowerCase() === filters.status.toLowerCase();
          return matchesSearch && matchesDept && matchesStatus;
       });
    }, [payslips, searchTerm, filters]);
 
    const stats = React.useMemo(() => {
-      const total = enrichedPayslips.length;
-      const generated = enrichedPayslips.filter(p => p.status === 'Completed' || p.status === 'Paid').length;
-      const sent = enrichedPayslips.filter(p => p.isEmailSent).length; // Assuming flag exists or mock
-      const pending = total - generated;
-      return { total, generated, pending, sent };
-   }, [enrichedPayslips]);
+      const total = history?.length || 0;
+      const generated = payslips?.filter(p => p.status === 'GENERATED').length || 0;
+      const paid = payslips?.filter(p => p.status === 'PAID').length || 0;
+      const sent = payslips?.filter(p => p.status === 'SENT' || p.isEmailSent).length || 0;
+      return { total, generated, paid, sent };
+   }, [payslips, history]);
 
    const { data: selectedPayslip } = useQuery({
       queryKey: ['payslip', activePayslipId],
@@ -2290,104 +2227,189 @@ export const PayslipGeneration = () => {
       enabled: !!activePayslipId
    });
 
-   // Frontend Pixel-Perfect Export
+   // ─── Mark as Paid mutations ──────────────────────────────────────────────
+   const markPaidMutation = useMutation({
+      mutationFn: (id) => payrollAPI.markPayslipAsPaid(id),
+      onSuccess: (_, id) => {
+         queryClient.invalidateQueries({ queryKey: ['payslipsList'] });
+         const record = (payslips || []).find(p => p.id === id);
+         toast.success(`✅ Payslip for ${record?.employeeInfo?.name || 'employee'} marked as Paid.`);
+         setMarkPaidConfirm({ isOpen: false, id: null, name: '' });
+      },
+      onError: (err) => {
+         toast.error(`❌ Mark as Paid failed: ${err.response?.data?.message || err.message}`);
+         setMarkPaidConfirm({ isOpen: false, id: null, name: '' });
+      }
+   });
+
+   const bulkMarkPaidMutation = useMutation({
+      mutationFn: (ids) => payrollAPI.bulkMarkPayslipsAsPaid(ids),
+      onSuccess: (res) => {
+         queryClient.invalidateQueries({ queryKey: ['payslipsList'] });
+         const { success = 0, failed = 0 } = res.data?.data || {};
+         if (failed > 0) toast(`⚠️ Marked ${success} as Paid. ${failed} failed.`);
+         else toast.success(`✅ ${success} payslip(s) marked as Paid!`);
+         setSelectedRows([]);
+         setBulkMarkPaidConfirm(false);
+      },
+      onError: (err) => {
+         toast.error(`❌ Bulk Mark as Paid failed: ${err.response?.data?.message || err.message}`);
+         setBulkMarkPaidConfirm(false);
+      }
+   });
+
+   const selectedGeneratedCount = selectedRows.filter(id => {
+      const p = (payslips || []).find(x => x.id === id);
+      return p?.status === 'GENERATED';
+   }).length;
+
+   // ─── Download ────────────────────────────────────────────────────────────
    const handleDownload = async (id) => {
       const targetId = id || activePayslipId;
       if (!targetId) return;
-      
-      const toastId = toast.loading('Synchronizing statement artifacts...');
+
+      const record = enrichedPayslips.find(p => p.id === targetId);
+      const empName = record?.employeeInfo?.name || 'Employee';
+      const monthName = new Date(filters.year, (record?.month || filters.month) - 1).toLocaleString('default', { month: 'long' });
+      const filename = `Payslip-${record?.employeeInfo?.employeeId || 'Export'}-${monthName}-${record?.year || filters.year}.pdf`;
+
+      const toastId = toast.loading(`Preparing payslip for ${empName}...`);
       try {
-         // Enable background capture
          setDownloadingId(targetId);
-         
+
          // Wait for DOM to sync and render hidden preview
          setTimeout(async () => {
             const element = document.getElementById(`gen-capture-${targetId}`);
             if (!element) {
-               toast.error('Synthesis element not found', { id: toastId });
+               toast.error(`Could not render payslip for ${empName}. Please try again.`, { id: toastId });
                setDownloadingId(null);
                return;
             }
 
-            const record = enrichedPayslips.find(p => p._id === targetId);
-            const monthName = new Date(2024, (record?.month || 1) - 1).toLocaleString('default', { month: 'long' });
-            const filename = `Payslip-${record?.user?.employeeId || 'Export'}-${monthName}-${record?.year}.pdf`;
-            
             const success = await exportToPdf(element, { filename, pixelRatio: 3 });
             if (success) {
-               toast.success('Payslip generated and exported', { id: toastId });
+               toast.success(
+                  `✅ Payslip downloaded successfully!
+${filename}`,
+                  { id: toastId, duration: 4000 }
+               );
             } else {
-               toast.error('PDF Engine failed', { id: toastId });
+               toast.error(`PDF generation failed for ${empName}. Please retry.`, { id: toastId });
             }
             setDownloadingId(null);
          }, 800);
       } catch (err) {
          setDownloadingId(null);
          console.error('Download error:', err);
-         toast.error('Failed to generate statement.', { id: toastId });
+         toast.error(`Failed to download payslip for ${empName}.`, { id: toastId });
       }
    };
 
-   const handleSendEmail = (id) => {
+   const handleBulkDownload = async () => {
+      if (selectedRows.length === 0) {
+         toast.error('Please select at least one employee first.');
+         return;
+      }
+      const toastId = toast.loading(`Preparing ${selectedRows.length} payslip(s) for download...`);
+      let success = 0;
+      for (const id of selectedRows) {
+         await handleDownload(id);
+         success++;
+      }
+      toast.success(`✅ ${success} payslip(s) downloaded successfully!`, { id: toastId, duration: 4000 });
+      setSelectedRows([]);
+   };
+
+   const handleSendEmail = (id, empRecord) => {
       const targetId = id || activePayslipId;
       if (!targetId) return;
 
+      const empName = empRecord?.employeeInfo?.name || enrichedPayslips.find(p => p.id === targetId)?.employeeInfo?.name || 'employee';
+      const empEmail = empRecord?.employeeInfo?.email || enrichedPayslips.find(p => p.id === targetId)?.employeeInfo?.email;
+
+      setSendingEmailId(targetId);
       toast.promise(
          payrollAPI.sendPayslipEmail(targetId),
          {
-            loading: 'Dispatching payslip to employee email...',
+            loading: `Sending payslip email to ${empName}...`,
             success: () => {
-                queryClient.invalidateQueries({ queryKey: ['payslipsList'] });
-                return 'Payslip successfully delivered.';
+               setSendingEmailId(null);
+               queryClient.invalidateQueries({ queryKey: ['payslipsList'] });
+               return `✅ Payslip sent to ${empEmail || empName} successfully!`;
             },
-            error: (err) => err.response?.data?.message || 'Failed to dispatch email.',
+            error: (err) => {
+               setSendingEmailId(null);
+               const msg = err.response?.data?.message || err.message || 'Unknown error';
+               return `❌ Failed to send to ${empName}: ${msg}`;
+            },
          }
       );
    };
 
    const handleBulkSend = () => {
       if (selectedRows.length === 0) {
-         toast.error('Please select at least one employee');
+         toast.error('Please select at least one employee.');
          return;
       }
 
       toast.promise(
          payrollAPI.bulkSendPayslipEmails(selectedRows),
          {
-            loading: `Sending ${selectedRows.length} payslips in bulk...`,
+            loading: `Sending payslips to ${selectedRows.length} employee(s)...`,
             success: (res) => {
                setSelectedRows([]);
-               // Invalidate query to update counts and visual sent flags
                queryClient.invalidateQueries({ queryKey: ['payslipsList'] });
-               return res.data?.message || 'Bulk dispatch successful';
+               return `📦 ${selectedRows.length} payslip(s) queued for background delivery!`;
             },
-            error: 'Bulk dispatch failed.',
+            error: (err) => {
+               const msg = err.response?.data?.message || err.message || 'Server error';
+               return `❌ Bulk send failed: ${msg}`;
+            },
          }
       );
    };
 
    const handleGenerate = () => {
+      const monthLabel = new Date(filters.year, filters.month - 1).toLocaleString('default', { month: 'long' });
       toast.promise(
-         new Promise(resolve => setTimeout(resolve, 2500)),
+         payrollAPI.generatePayslips({ month: filters.month, year: filters.year }),
          {
-            loading: 'Generating payslip artifacts...',
-            success: 'All payslips generated successfully.',
-            error: 'Generation failed.',
+            loading: `Generating payslips for ${monthLabel} ${filters.year}...`,
+            success: (res) => {
+               queryClient.invalidateQueries({ queryKey: ['payslipsList'] });
+               const count = res.data?.data?.length || '';
+               return `✅ ${count ? count + ' payslips' : 'Payslips'} generated successfully for ${monthLabel} ${filters.year}!`;
+            },
+            error: (err) => {
+               const msg = err.response?.data?.message || err.message || 'Server error';
+               return `❌ Generation failed: ${msg}`;
+            },
          }
       );
    };
 
-   const toggleRow = (id) => {
-      setSelectedRows(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-   };
+   const toggleRow = (id) => { setSelectedRows(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); };
+   const toggleAll = () => { if (selectedRows.length === enrichedPayslips.length) setSelectedRows([]); else setSelectedRows(enrichedPayslips.map(p => p.id)); };
 
-   const toggleAll = () => {
-      if (selectedRows.length === enrichedPayslips.length) setSelectedRows([]);
-      else setSelectedRows(enrichedPayslips.map(p => p._id));
+   const monthLabel = new Date(filters.year, filters.month - 1).toLocaleString('default', { month: 'long' });
+
+   const StatusBadge = ({ status, isEmailSent }) => {
+      const effectiveStatus = (status === 'SENT' || isEmailSent) ? 'SENT' : (status || 'GENERATED');
+      const cfg = {
+         GENERATED: { label: 'Generated', cls: 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-500/20', dot: 'bg-blue-400' },
+         PAID:      { label: 'Paid',      cls: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20', dot: 'bg-emerald-500' },
+         SENT:      { label: 'Sent',      cls: 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-500/20', dot: 'bg-indigo-400' },
+         PENDING:   { label: 'Pending',   cls: 'bg-amber-50 dark:bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-100 dark:border-amber-500/20', dot: 'bg-amber-400' },
+      }[effectiveStatus] || { label: effectiveStatus, cls: 'bg-slate-50 dark:bg-white/10 text-slate-400 dark:text-gray-500 border-slate-100 dark:border-white/5', dot: 'bg-slate-300' };
+      return (
+         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${cfg.cls}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />{cfg.label}
+         </span>
+      );
    };
 
    return (
-      <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen font-sans text-slate-900">
+      <div className="p-8 space-y-8 bg-slate-50/50 dark:bg-black min-h-screen font-sans text-slate-900 dark:text-gray-200">
          <style>{`
             @media print {
                .no-print { display: none !important; }
@@ -2396,29 +2418,45 @@ export const PayslipGeneration = () => {
             }
          `}</style>
 
-         {/* 🚀 Header Section */}
+         {/* ── Header ─────────────────────────────────────────────────── */}
          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
             <div>
                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-100">
+                  <div className="p-2.5 bg-indigo-600 dark:bg-indigo-500 rounded-xl text-white shadow-lg shadow-indigo-100 dark:shadow-none">
                      <Receipt size={24} />
                   </div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">Payslip Generation</h1>
+                  <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Payslip Generation</h1>
                </div>
-               <p className="text-sm text-slate-500 font-medium mt-1 ml-14">Generate, preview, download, and distribute employee payslips</p>
+               <p className="text-sm text-slate-500 dark:text-gray-400 font-medium mt-1 ml-14">Generate payslips → Mark as Paid → Send by email</p>
+               <div className="flex items-center gap-2 ml-14 mt-3">
+                  {[
+                     { label: 'Processed', done: stats.total > 0, color: 'bg-slate-400' },
+                     { label: 'Generated', done: (stats.generated + stats.paid + stats.sent) > 0, color: 'bg-blue-500' },
+                     { label: 'Paid', done: (stats.paid + stats.sent) > 0, color: 'bg-emerald-500' },
+                     { label: 'Sent', done: stats.sent > 0, color: 'bg-indigo-500' },
+                  ].map((step, i, arr) => (
+                     <React.Fragment key={step.label}>
+                        <div className="flex items-center gap-1.5">
+                           <div className={`w-2 h-2 rounded-full transition-colors ${step.done ? step.color : 'bg-slate-200 dark:bg-white/10'}`} />
+                           <span className={`text-[10px] font-black uppercase tracking-widest ${step.done ? 'text-slate-700 dark:text-gray-300' : 'text-slate-300 dark:text-gray-600'}`}>{step.label}</span>
+                        </div>
+                        {i < arr.length - 1 && <div className="w-6 h-px bg-slate-200 dark:bg-white/5" />}
+                     </React.Fragment>
+                  ))}
+               </div>
             </div>
 
             <div className="flex items-center gap-3 w-full md:w-auto">
-               <button 
+               <button
                   onClick={handleGenerate}
-                  className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-sm font-bold transition-all shadow-sm"
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-[#111111] border border-slate-200 dark:border-[#333333] text-slate-700 dark:text-gray-200 hover:bg-slate-50 dark:hover:bg-[#1a1a1a] rounded-xl text-sm font-bold transition-all shadow-sm"
                >
-                  <RefreshCw size={16} className="text-indigo-600" />
+                  <RefreshCw size={16} className="text-indigo-600 dark:text-indigo-400" />
                   Generate Payslips
                </button>
-               <button 
+               <button
                   onClick={() => handleBulkSend()}
-                  className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-indigo-100 border border-indigo-500"
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-indigo-100 dark:shadow-none border border-indigo-500"
                >
                   <Send size={16} />
                   Send All
@@ -2426,53 +2464,54 @@ export const PayslipGeneration = () => {
             </div>
          </div>
 
-         {/* 📊 Summary Metrics */}
+         {/* ── KPI Cards ──────────────────────────────────────────────── */}
          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-               { label: 'Total Employees', value: stats.total, icon: Users, color: 'indigo' },
-               { label: 'Payslips Generated', value: stats.generated, icon: CheckCircle2, color: 'emerald' },
-               { label: 'Pending Process', value: stats.pending, icon: Clock, color: 'amber' },
-               { label: 'Successfully Sent', value: stats.sent, icon: Mail, color: 'blue' },
+               { label: 'Payroll Records', value: stats.total, icon: Users, color: 'slate', desc: 'Processed employees' },
+               { label: 'Generated', value: stats.generated, icon: FileText, color: 'blue', desc: 'Statements ready' },
+               { label: 'Marked as Paid', value: stats.paid, icon: CreditCard, color: 'emerald', desc: 'Salary disbursed' },
+               { label: 'Sent to Employees', value: stats.sent, icon: Mail, color: 'indigo', desc: 'Emails dispatched' },
             ].map((kpi, i) => (
-               <div key={i} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group flex items-center gap-4">
-                  <div className={`p-3 bg-${kpi.color}-50 text-${kpi.color}-600 rounded-xl group-hover:scale-110 transition-transform`}>
+               <div key={i} className="bg-white dark:bg-[#111111] p-6 rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm hover:shadow-md transition-all group flex items-center gap-4">
+                  <div className={`p-3 bg-${kpi.color}-50 dark:bg-${kpi.color}-500/10 text-${kpi.color}-600 dark:text-${kpi.color}-400 rounded-xl group-hover:scale-110 transition-transform flex-shrink-0`}>
                      <kpi.icon size={22} />
                   </div>
                   <div>
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">{kpi.label}</p>
-                     <h4 className="text-2xl font-black text-slate-900 leading-none">{kpi.value}</h4>
+                     <p className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest leading-none mb-1">{kpi.label}</p>
+                     <h4 className="text-2xl font-black text-slate-900 dark:text-white leading-none">{kpi.value}</h4>
+                     <p className="text-[10px] text-slate-400 dark:text-gray-500 mt-1">{kpi.desc}</p>
                   </div>
                </div>
             ))}
          </div>
 
          {/* 🔍 Filters & Search */}
-         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-wrap items-center gap-4">
-            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1 shadow-inner">
-               <select 
-                  value={filters.month} 
-                  onChange={(e) => setFilters({ ...filters, month: parseInt(e.target.value) })} 
-                  className="bg-transparent px-3 py-1.5 text-xs font-black outline-none tracking-tight cursor-pointer border-r border-slate-200"
+         <div className="bg-white dark:bg-[#111111] p-4 rounded-xl border border-slate-100 dark:border-[#333333] shadow-sm flex flex-wrap items-center gap-4">
+            <div className="flex items-center bg-slate-50 dark:bg-[#0a0a0a] border border-slate-200 dark:border-[#333333] rounded-lg p-1 shadow-inner">
+               <select
+                  value={filters.month}
+                  onChange={(e) => setFilters({ ...filters, month: parseInt(e.target.value) })}
+                  className="bg-transparent px-3 py-1.5 text-xs font-black outline-none tracking-tight cursor-pointer border-r border-slate-200 dark:text-white"
                >
                   {[...Array(12)].map((_, i) => (
-                     <option key={i + 1} value={i + 1}>{new Date(2024, i).toLocaleString('default', { month: 'long' })}</option>
+                     <option key={i + 1} value={i + 1} className="dark:bg-[#111111]">{new Date(2024, i).toLocaleString('default', { month: 'long' })}</option>
                   ))}
                </select>
-               <select 
-                  value={filters.year} 
-                  onChange={(e) => setFilters({ ...filters, year: parseInt(e.target.value) })} 
-                  className="bg-transparent px-3 py-1.5 text-xs font-black outline-none tracking-tight cursor-pointer"
+               <select
+                  value={filters.year}
+                  onChange={(e) => setFilters({ ...filters, year: parseInt(e.target.value) })}
+                  className="bg-transparent px-3 py-1.5 text-xs font-black outline-none tracking-tight cursor-pointer dark:text-white"
                >
-                  {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+                  {[2024, 2025, 2026].map(y => <option key={y} value={y} className="dark:bg-[#111111]">{y}</option>)}
                </select>
             </div>
 
             <div className="flex-1 min-w-[250px] relative">
                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-               <input 
-                  type="text" 
+               <input
+                  type="text"
                   placeholder="Search employee by name or ID..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-200 dark:border-[#333333] rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all dark:text-white"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                />
@@ -2481,41 +2520,49 @@ export const PayslipGeneration = () => {
             <div className="flex items-center gap-3">
                <div className="flex items-center gap-2">
                   <Filter size={14} className="text-slate-400" />
-                  <select 
-                     value={filters.department} 
+                  <select
+                     value={filters.department}
                      onChange={(e) => setFilters({ ...filters, department: e.target.value })}
-                     className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none cursor-pointer"
+                     className="bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-lg px-3 py-2 text-xs font-bold outline-none cursor-pointer dark:text-white"
                   >
-                     {departments.map(d => <option key={d} value={d}>{d === 'All' ? 'All Departments' : d}</option>)}
+                     {departments.map(d => <option key={d} value={d} className="dark:bg-[#111111]">{d === 'All' ? 'All Departments' : d}</option>)}
                   </select>
                </div>
-               <select 
-                  value={filters.status} 
+               <select
+                  value={filters.status}
                   onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                  className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none cursor-pointer"
+                  className="bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-lg px-3 py-2 text-xs font-bold outline-none cursor-pointer dark:text-white"
                >
-                  <option value="all">All Status</option>
-                  <option value="Completed">Generated</option>
-                  <option value="Sent">Sent</option>
-                  <option value="Paid">Processed</option>
+                  <option value="all" className="dark:bg-[#111111]">All Status</option>
+                  <option value="GENERATED" className="dark:bg-[#111111]">Generated</option>
+                  <option value="PAID" className="dark:bg-[#111111]">Paid</option>
+                  <option value="SENT" className="dark:bg-[#111111]">Sent</option>
                </select>
             </div>
          </div>
 
          {/* 📋 Employee Payslip Table */}
-         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-            {/* Bulk Action Overlay */}
+         <div className="bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden flex flex-col">
+            {/* ── Bulk Action Overlay ─────────────────────────────────── */}
             {selectedRows.length > 0 && (
-               <div className="bg-indigo-600 p-3 flex items-center justify-between animate-in slide-in-from-top-4 duration-300">
+               <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-3 flex items-center justify-between">
                   <div className="flex items-center gap-4 text-white">
-                     <span className="text-sm font-black">{selectedRows.length} items selected</span>
+                     <span className="text-sm font-black">{selectedRows.length} selected</span>
                      <div className="h-4 w-px bg-white/20" />
-                     <button onClick={toggleAll} className="text-[10px] font-black uppercase tracking-widest hover:underline">Deselect All</button>
+                     <button onClick={toggleAll} className="text-[10px] font-black uppercase tracking-widest hover:underline opacity-80">Deselect All</button>
                   </div>
                   <div className="flex items-center gap-2">
-                     <button onClick={() => toast.success('Bulk download started')} className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2">
-                        <Download size={14} /> Download PDF
+                     <button onClick={handleBulkDownload} className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2">
+                        <Download size={14} /> PDF
                      </button>
+                     {selectedGeneratedCount > 0 && (
+                        <button
+                           onClick={() => setBulkMarkPaidConfirm(true)}
+                           className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2"
+                        >
+                           <CreditCard size={14} /> Mark {selectedGeneratedCount} as Paid
+                        </button>
+                     )}
                      <button onClick={handleBulkSend} className="px-4 py-1.5 bg-white text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs font-bold transition-all flex items-center gap-2">
                         <Mail size={14} /> Send Email
                      </button>
@@ -2526,17 +2573,17 @@ export const PayslipGeneration = () => {
             <div className="overflow-x-auto">
                <table className="w-full text-left border-collapse">
                   <thead>
-                     <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                     <tr className="bg-slate-50 dark:bg-white/5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-[#333333]">
                         <th className="px-6 py-4 w-10">
-                           <input 
-                              type="checkbox" 
+                           <input
+                              type="checkbox"
                               className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                               checked={selectedRows.length === enrichedPayslips.length && enrichedPayslips.length > 0}
                               onChange={toggleAll}
                            />
                         </th>
                         <th className="px-6 py-4">Employee</th>
-                        <th className="px-6 py-4">Structure / Role</th>
+                        <th className="px-6 py-4">Role</th>
                         <th className="px-6 py-4 text-right">Gross Amount</th>
                         <th className="px-6 py-4 text-right">Deductions</th>
                         <th className="px-6 py-4 text-right">Net Payout</th>
@@ -2544,7 +2591,7 @@ export const PayslipGeneration = () => {
                         <th className="px-6 py-4 text-right">Actions</th>
                      </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody className="divide-y divide-slate-50 dark:divide-[#333333]">
                      {isLoading ? (
                         <tr>
                            <td colSpan="8" className="px-6 py-20 text-center">
@@ -2556,101 +2603,159 @@ export const PayslipGeneration = () => {
                         <tr>
                            <td colSpan="8" className="px-6 py-32 text-center">
                               <div className="max-w-xs mx-auto space-y-4">
-                                 <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-300">
+                                 <div className="w-20 h-20 bg-slate-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto text-slate-300 dark:text-gray-600">
                                     <Receipt size={40} />
                                  </div>
+                                 {history?.length > 0 ? (
+                                    <div className="space-y-4">
+                                       <div>
+                                          <h3 className="text-slate-900 dark:text-white font-bold">Payroll Processed but Statements Not Generated</h3>
+                                          <p className="text-slate-500 dark:text-gray-400 text-xs mt-1">We found {history.length} processed payroll records for {new Date(2024, filters.month - 1).toLocaleString('default', { month: 'long' })} ready for final statement generation.</p>
+                                       </div>
+                                       <button
+                                          onClick={handleGenerate}
+                                          className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-100 dark:shadow-none flex items-center justify-center gap-2 mx-auto"
+                                       >
+                                          <RefreshCw size={14} /> Generate & Finalize Payslips
+                                       </button>
+                                       <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-2 italic">Generating payslips will create immutable records for employee distribution.</p>
+                                    </div>
+                                 ) : (
+                                    <div className="space-y-4">
+                                       <div>
+                                          <h3 className="text-slate-900 dark:text-white font-bold">No Payslips Generated Yet</h3>
+                                          <p className="text-slate-500 dark:text-gray-400 text-xs mt-1">Start by processing payroll for {new Date(2024, filters.month - 1).toLocaleString('default', { month: 'long' })} to generate statements.</p>
+                                       </div>
+                                       <button
+                                          onClick={() => navigate('/payroll/run')}
+                                          className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-100 dark:shadow-none"
+                                       >
+                                          Run Payroll Wizard
+                                       </button>
+                                       <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-2">Payslips are only available after payroll execution.</p>
+                                    </div>
+                                 )}
+                              </div>
+                           </td>
+                        </tr>
+                     ) : enrichedPayslips.map((p) => {
+                        const isGenerated = p.isGenerated || p.status === 'GENERATED';
+                        const isPaid = p.status === 'PAID';
+                        const isSent = p.status === 'SENT' || p.isEmailSent;
+                        const canSendEmail = isPaid || isSent;
+                        return (
+                        <tr key={p.id} className={`group hover:bg-indigo-50/30 dark:hover:bg-indigo-500/10 transition-colors ${selectedRows.includes(p.id) ? 'bg-indigo-50/50 dark:bg-indigo-500/20' : ''}`}>
+                           <td className="px-6 py-4">
+                              <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" checked={selectedRows.includes(p.id)} onChange={() => toggleRow(p.id)} />
+                           </td>
+                           <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                 <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center font-black text-indigo-600 dark:text-indigo-400 text-sm flex-shrink-0">{p.employeeInfo?.name?.charAt(0) || 'E'}</div>
                                  <div>
-                                    <h3 className="text-slate-900 font-bold">No Payslips Generated Yet</h3>
-                                    <p className="text-slate-500 text-xs mt-1">Start by processing payroll for {new Date(2024, filters.month - 1).toLocaleString('default', { month: 'long' })} to generate statements.</p>
+                                    <p className="text-sm font-bold text-slate-800 dark:text-white leading-none mb-1">{p.employeeInfo?.name}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 tracking-tighter uppercase">{p.employeeInfo?.employeeId} • {p.employeeInfo?.department}</p>
                                  </div>
-                                 <button 
-                                    onClick={handleGenerate}
-                                    className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-100"
+                              </div>
+                           </td>
+                           <td className="px-6 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-300">{p.employeeInfo?.designation || 'Technical Staff'}</p></td>
+                           <td className="px-6 py-4 text-right font-bold text-slate-600 dark:text-gray-400">{currencySymbol}{formatCurrency(p.gross || 0)}</td>
+                           <td className="px-6 py-4 text-right font-bold text-rose-500">-{currencySymbol}{formatCurrency(p.totalDeductions || 0)}</td>
+                           <td className="px-6 py-4 text-right">
+                              <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{currencySymbol}{formatCurrency(p.netPay || 0)}</span>
+                              {p.paidAt && <p className="text-[9px] font-bold text-slate-400 dark:text-gray-500 mt-0.5">Paid {new Date(p.paidAt).toLocaleDateString()}</p>}
+                           </td>
+                           <td className="px-6 py-4 text-center">
+                              <StatusBadge status={p.status} isEmailSent={p.isEmailSent} />
+                           </td>
+                           <td className="px-6 py-4">
+                              <div className="flex items-center justify-end gap-1">
+                                 <button onClick={() => { setActivePayslipId(p.id); setIsPreviewOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="View Statement"><Eye size={16} /></button>
+                                 <button onClick={() => handleDownload(p.id)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-all" title="Download PDF">
+                                    {downloadingId === p.id ? <RefreshCw size={16} className="animate-spin text-indigo-600" /> : <Download size={16} />}
+                                 </button>
+                                 {isGenerated && (
+                                    <button
+                                       onClick={() => setMarkPaidConfirm({ isOpen: true, id: p.id, name: p.employeeInfo?.name || 'employee' })}
+                                       className="p-2 text-slate-400 dark:text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-all"
+                                       title="Mark as Paid — confirm salary disbursement"
+                                    ><CreditCard size={16} /></button>
+                                 )}
+                                 {(isPaid && !isSent) && <span className="p-2 text-emerald-500 dark:text-emerald-400" title="Salary Paid"><Check size={16} /></span>}
+                                 <button
+                                    onClick={() => canSendEmail ? handleSendEmail(p.id, p) : (isGenerated ? toast.error('Mark this payslip as Paid before sending.') : toast.error('Generate this payslip before sending.'))}
+                                    className={`p-2 rounded-lg transition-all ${canSendEmail ? (isSent ? 'text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/10' : 'text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10') : 'text-slate-200 dark:text-gray-800 cursor-not-allowed'}`}
+                                    title={canSendEmail ? (isSent ? `Resend email` : `Send payslip email`) : 'Mark as Paid before sending'}
                                  >
-                                    Generate Now
+                                    {sendingEmailId === p.id ? <RefreshCw size={16} className="animate-spin text-indigo-600 dark:text-indigo-400" /> : <Mail size={16} />}
                                  </button>
                               </div>
                            </td>
                         </tr>
-                     ) : enrichedPayslips.map((p) => (
-                        <tr key={p._id} className={`group hover:bg-indigo-50/30 transition-colors ${selectedRows.includes(p._id) ? 'bg-indigo-50/50' : ''}`}>
-                           <td className="px-6 py-4">
-                              <input 
-                                 type="checkbox" 
-                                 className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                 checked={selectedRows.includes(p._id)}
-                                 onChange={() => toggleRow(p._id)}
-                              />
-                           </td>
-                           <td className="px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                 <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-black text-slate-400 text-xs shadow-inner">
-                                    {p.user?.name?.charAt(0) || 'E'}
-                                 </div>
-                                 <div>
-                                    <p className="text-sm font-bold text-slate-800 leading-none mb-1">{p.user?.name}</p>
-                                    <p className="text-[10px] font-bold text-slate-400 tracking-tighter uppercase">{p.user?.employeeId} • {p.user?.department}</p>
-                                 </div>
-                              </div>
-                           </td>
-                           <td className="px-6 py-4">
-                              <p className="text-xs font-bold text-slate-700">{p.user?.designation || 'Technical Staff'}</p>
-                              <p className="text-[10px] text-slate-400 font-medium">Standard Structural</p>
-                           </td>
-                           <td className="px-6 py-4 text-right font-bold text-slate-600">{currencySymbol}{formatCurrency(p.breakdown?.earnings?.grossEarnings)}</td>
+                        );
+                     })}
 
-                           <td className="px-6 py-4 text-right font-bold text-rose-500">-{currencySymbol}{formatCurrency(p.breakdown?.deductions?.totalDeductions)}</td>
-
-                           <td className="px-6 py-4 text-right">
-                              <div className="flex flex-col items-end">
-                                 <span className="text-sm font-black text-emerald-600">{currencySymbol}{formatCurrency(p.breakdown?.netPay)}</span>
-
-                                 {p.isEmailSent && <span className="text-[8px] font-black uppercase text-indigo-400 tracking-widest flex items-center gap-1"><Mail size={8}/> Dispatched</span>}
-                              </div>
-                           </td>
-                           <td className="px-6 py-4 text-center">
-                              <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                                 p.status === 'Completed' || p.status === 'Paid' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-200'
-                              }`}>
-                                 {p.status}
-                              </span>
-                           </td>
-                           <td className="px-6 py-4 text-right">
-                              <div className="flex items-center justify-end gap-1 opacity-10 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                                 <button onClick={() => { setActivePayslipId(p._id); setIsPreviewOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all" title="View Statement"><Eye size={16} /></button>
-                                 <button onClick={() => handleDownload(p._id)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all" title="Download PDF"><Download size={16} /></button>
-                                 <button onClick={() => handleSendEmail(p._id)} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-white rounded-lg transition-all" title="Send Email"><Mail size={16} /></button>
-                              </div>
-                           </td>
-                        </tr>
-                     ))}
                   </tbody>
                </table>
             </div>
          </div>
 
-         {/* 🔍 Payslip Preview Side Drawer */}
+         {/* ── Preview Drawer ─────────────────────────────────────── */}
          {isPreviewOpen && selectedPayslip && (
-            <StatementPreview 
-               payslip={selectedPayslip} 
-               settings={settings} 
-               onClose={() => setIsPreviewOpen(false)} 
-               onDownload={handleDownload}
-            />
+            <StatementPreview payslip={selectedPayslip} settings={settings} onClose={() => setIsPreviewOpen(false)} onDownload={handleDownload} />
          )}
 
-         {/* 📥 Background Capture Module (Strict 1:1 Rendering) */}
+         {/* ── PDF Capture Module ────────────────────────────────── */}
          {downloadingId && (
             <div style={{ position: 'fixed', left: '-9999px', top: 0, width: '794px' }}>
                <div id={`gen-capture-${downloadingId}`}>
-                  <StatementPreview 
-                     payslip={enrichedPayslips.find(p => p._id === downloadingId)}
-                     settings={settings}
-                     contentOnly={true}
-                  />
+                  <StatementPreview payslip={enrichedPayslips.find(p => p.id === downloadingId)} settings={settings} contentOnly={true} />
                </div>
             </div>
          )}
+
+         {/* ── Single Mark as Paid Confirm ────────────────────────── */}
+         <ConfirmModal
+            isOpen={markPaidConfirm.isOpen}
+            onClose={() => setMarkPaidConfirm({ isOpen: false, id: null, name: '' })}
+            onConfirm={() => markPaidMutation.mutate(markPaidConfirm.id)}
+            title="Confirm Salary Disbursement"
+            message={
+               <div className="space-y-3">
+                  <p className="text-slate-700 dark:text-gray-300">You are about to mark <strong>{markPaidConfirm.name}</strong>'s payslip as <strong className="text-emerald-700 dark:text-emerald-400">PAID</strong>.</p>
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20">
+                     <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                     <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">This confirms salary has been disbursed. This action is logged and auditable.</p>
+                  </div>
+               </div>
+            }
+            confirmText="Yes, Mark as Paid"
+            isLoading={markPaidMutation.isPending}
+         />
+
+         {/* ── Bulk Mark as Paid Confirm ──────────────────────────── */}
+         <ConfirmModal
+            isOpen={bulkMarkPaidConfirm}
+            onClose={() => setBulkMarkPaidConfirm(false)}
+            onConfirm={() => {
+               const generatedIds = selectedRows.filter(id => {
+                  const p = (payslips || []).find(x => x.id === id);
+                  return p?.status === 'GENERATED';
+               });
+               bulkMarkPaidMutation.mutate(generatedIds);
+            }}
+            title="Confirm Bulk Salary Disbursement"
+            message={
+               <div className="space-y-3">
+                  <p className="text-slate-700">You are marking <strong>{selectedGeneratedCount} payslip(s)</strong> as <strong className="text-emerald-700">PAID</strong>.</p>
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-100">
+                     <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                     <p className="text-xs text-amber-700 font-medium">Only GENERATED payslips will be updated. This action is logged and auditable.</p>
+                  </div>
+               </div>
+            }
+            confirmText={`Confirm — Mark ${selectedGeneratedCount} as Paid`}
+            isLoading={bulkMarkPaidMutation.isPending}
+         />
       </div>
    );
 };
@@ -2688,7 +2793,7 @@ export const TaxesDeductions = () => {
 
    const payroll = formData.payroll || {};
    const taxSlabs = payroll.taxSlabs || [];
-   const currencySymbol = payroll.currencySymbol || '₹';
+   const currencySymbol = formData.organization?.currency ? getCurrencySymbol(formData.organization.currency) : (payroll.currencySymbol || '₹');
 
    const handleSave = () => mutation.mutate(formData);
 
@@ -2744,43 +2849,43 @@ export const TaxesDeductions = () => {
    const preview = calculatePreview();
 
    return (
-      <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen">
+      <div className="p-8 space-y-8 bg-slate-50/50 dark:bg-black min-h-screen">
          {/* 🚀 Dynamic Header */}
-         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm">
             <div className="flex items-center gap-5">
-               <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+               <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100 dark:shadow-none">
                   <ShieldCheck size={28} />
                </div>
                <div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">Taxes & Compliance</h1>
-                  <p className="text-sm text-slate-500 font-medium">Configure statutory rules, tax slabs, and deduction policies</p>
+                  <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Taxes & Compliance</h1>
+                  <p className="text-sm text-slate-500 dark:text-gray-400 font-medium">Configure statutory rules, tax slabs, and deduction policies</p>
                </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-4">
-               <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 shadow-inner">
-                  <select 
-                     value={selectedFY} 
+               <div className="flex items-center bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-xl p-1 shadow-inner">
+                  <select
+                     value={selectedFY}
                      onChange={(e) => setSelectedFY(e.target.value)}
-                     className="bg-transparent px-4 py-2 text-xs font-black uppercase outline-none cursor-pointer border-r border-slate-200"
+                     className="bg-transparent px-4 py-2 text-xs font-black uppercase outline-none cursor-pointer border-r border-slate-200 dark:border-white/5 dark:text-white"
                   >
-                     <option value="2023-24">FY 2023-24</option>
-                     <option value="2024-25">FY 2024-25</option>
+                     <option value="2023-24" className="dark:bg-[#111111]">FY 2023-24</option>
+                     <option value="2024-25" className="dark:bg-[#111111]">FY 2024-25</option>
                   </select>
-                  <select 
-                     value={payroll.country || 'India'} 
+                  <select
+                     value={payroll.country || 'India'}
                      onChange={(e) => updatePayroll('country', e.target.value)}
-                     className="bg-transparent px-4 py-2 text-xs font-black uppercase outline-none cursor-pointer"
+                     className="bg-transparent px-4 py-2 text-xs font-black uppercase outline-none cursor-pointer dark:text-white"
                   >
-                     <option value="India">🇮🇳 India</option>
-                     <option value="USA">🇺🇸 USA</option>
-                     <option value="UAE">🇦🇪 UAE</option>
+                     <option value="India" className="dark:bg-[#111111]">🇮🇳 India</option>
+                     <option value="USA" className="dark:bg-[#111111]">🇺🇸 USA</option>
+                     <option value="UAE" className="dark:bg-[#111111]">🇦🇪 UAE</option>
                   </select>
                </div>
 
-               <button 
+               <button
                   onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${isEditing ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100' : 'bg-slate-900 text-white shadow-lg shadow-slate-100'}`}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${isEditing ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100 dark:shadow-none' : 'bg-slate-900 dark:bg-indigo-600 text-white shadow-lg shadow-slate-100 dark:shadow-none'}`}
                >
                   {isEditing ? <><Save size={16} /> Save Policy</> : <><Edit3 size={16} /> Edit Policy</>}
                </button>
@@ -2795,13 +2900,13 @@ export const TaxesDeductions = () => {
                { label: 'ESI Status', val: payroll.taxToggles?.esi ? 'ACTIVE' : 'INACTIVE', sub: `${payroll.esiRate || 0.75}% Health Cover`, icon: Activity, color: 'text-blue-600', bg: 'bg-blue-50' },
                { label: 'Compliance Health', val: '98%', sub: 'No Critical Alerts', icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' }
             ].map((kpi, i) => (
-               <div key={i} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm group hover:shadow-md transition-all">
-                  <div className={`p-2.5 w-fit rounded-xl ${kpi.bg} ${kpi.color} mb-4 group-hover:scale-110 transition-transform`}>
+               <div key={i} className="bg-white dark:bg-[#111111] p-6 rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm group hover:shadow-md transition-all">
+                  <div className={`p-2.5 w-fit rounded-xl ${kpi.bg} dark:bg-white/5 ${kpi.color} mb-4 group-hover:scale-110 transition-transform`}>
                      <kpi.icon size={20} />
                   </div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{kpi.label}</p>
-                  <h4 className="text-xl font-black text-slate-900 leading-none mb-1">{kpi.val}</h4>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">{kpi.sub}</p>
+                  <p className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest mb-1">{kpi.label}</p>
+                  <h4 className="text-xl font-black text-slate-900 dark:text-white leading-none mb-1">{kpi.val}</h4>
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase">{kpi.sub}</p>
                </div>
             ))}
          </div>
@@ -2809,47 +2914,47 @@ export const TaxesDeductions = () => {
          <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
             {/* 🧾 Income Tax Section */}
             <div className="xl:col-span-2 space-y-8">
-               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                  <div className="p-8 border-b border-slate-50 flex justify-between items-center">
+               <div className="bg-white dark:bg-[#111111] rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden">
+                  <div className="p-8 border-b border-slate-50 dark:border-white/5 flex justify-between items-center">
                      <div>
-                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Income Tax (TDS) Configuration</h3>
-                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Configure annual tax brackets and exemptions</p>
+                        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Income Tax (TDS) Configuration</h3>
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-1 uppercase">Configure annual tax brackets and exemptions</p>
                      </div>
-                     <div className="flex items-center bg-slate-50 p-1 rounded-lg border border-slate-200">
-                        <button 
+                     <div className="flex items-center bg-slate-50 dark:bg-[#1a1a1a] p-1 rounded-lg border border-slate-200 dark:border-[#333333]">
+                        <button
                            onClick={() => updatePayroll('taxRegime', 'OLD')}
-                           className={`px-3 py-1 text-[10px] font-black uppercase rounded-md transition-all ${payroll.taxRegime === 'OLD' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                           className={`px-3 py-1 text-[10px] font-black uppercase rounded-md transition-all ${payroll.taxRegime === 'OLD' ? 'bg-white dark:bg-[#222222] shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-gray-500 hover:text-slate-600 dark:hover:text-white'}`}
                         >Old Regime</button>
-                        <button 
+                        <button
                            onClick={() => updatePayroll('taxRegime', 'NEW')}
-                           className={`px-3 py-1 text-[10px] font-black uppercase rounded-md transition-all ${payroll.taxRegime === 'NEW' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                           className={`px-3 py-1 text-[10px] font-black uppercase rounded-md transition-all ${payroll.taxRegime === 'NEW' ? 'bg-white dark:bg-[#222222] shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-gray-500 hover:text-slate-600 dark:hover:text-white'}`}
                         >New Regime</button>
                      </div>
                   </div>
 
                   <div className="p-8 space-y-8">
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-4">Standard Deduction (Annual)</label>
+                        <div className="p-6 bg-slate-50 dark:bg-[#1a1a1a] rounded-2xl border border-slate-100 dark:border-[#333333]">
+                           <label className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest block mb-4">Standard Deduction (Annual)</label>
                            <div className="flex items-center gap-3">
-                              <span className="text-xl font-black text-slate-400">{currencySymbol}</span>
-                              <input 
-                                 type="number" 
+                              <span className="text-xl font-black text-slate-400 dark:text-gray-600">{currencySymbol}</span>
+                              <input
+                                 type="number"
                                  disabled={!isEditing}
-                                 className="bg-transparent text-xl font-black text-slate-900 outline-none w-full disabled:opacity-60"
+                                 className="bg-transparent text-xl font-black text-slate-900 dark:text-white outline-none w-full disabled:opacity-60"
                                  value={payroll.standardDeduction || 50000}
                                  onChange={e => updatePayroll('standardDeduction', e.target.value)}
                               />
                            </div>
                         </div>
-                        <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-4">TDS Exemption Threshold</label>
+                        <div className="p-6 bg-slate-50 dark:bg-[#1a1a1a] rounded-2xl border border-slate-100 dark:border-[#333333]">
+                           <label className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest block mb-4">TDS Exemption Threshold</label>
                            <div className="flex items-center gap-3">
-                              <span className="text-xl font-black text-slate-400">{currencySymbol}</span>
-                              <input 
-                                 type="number" 
+                              <span className="text-xl font-black text-slate-400 dark:text-gray-600">{currencySymbol}</span>
+                              <input
+                                 type="number"
                                  disabled={!isEditing}
-                                 className="bg-transparent text-xl font-black text-slate-900 outline-none w-full disabled:opacity-60"
+                                 className="bg-transparent text-xl font-black text-slate-900 dark:text-white outline-none w-full disabled:opacity-60"
                                  value={payroll.tdsThreshold || 50000}
                                  onChange={e => updatePayroll('tdsThreshold', e.target.value)}
                               />
@@ -2859,35 +2964,35 @@ export const TaxesDeductions = () => {
 
                      <div className="space-y-4">
                         <div className="flex justify-between items-center px-4">
-                           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tax Bracket Table</h4>
+                           <h4 className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest">Tax Bracket Table</h4>
                            {isEditing && (
-                              <button onClick={addSlab} className="flex items-center gap-2 text-indigo-600 text-[10px] font-black uppercase tracking-widest hover:underline">
+                              <button onClick={addSlab} className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-widest hover:underline">
                                  <Plus size={14} /> Add New Slab
                               </button>
                            )}
                         </div>
-                        
+
                         <div className="space-y-3">
                            {taxSlabs.map((s, i) => (
-                              <div key={i} className="flex flex-wrap items-center gap-4 p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-100 transition-colors shadow-sm">
-                                 <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-400">{i + 1}</div>
+                              <div key={i} className="flex flex-wrap items-center gap-4 p-4 bg-white dark:bg-[#1a1a1a] border border-slate-100 dark:border-[#333333] rounded-2xl hover:border-indigo-100 dark:hover:border-indigo-500/30 transition-colors shadow-sm">
+                                 <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-white/5 flex items-center justify-center text-[10px] font-black text-slate-400 dark:text-gray-500">{i + 1}</div>
                                  <div className="flex-1 min-w-[120px]">
-                                    <p className="text-[9px] font-black text-slate-300 uppercase mb-1">Min. Amount</p>
-                                    <input type="number" disabled={!isEditing} className="w-full bg-transparent text-sm font-bold text-slate-700 outline-none disabled:opacity-60" value={s.min} onChange={e => updateSlab(i, 'min', e.target.value)} />
+                                    <p className="text-[9px] font-black text-slate-300 dark:text-gray-600 uppercase mb-1">Min. Amount</p>
+                                    <input type="number" disabled={!isEditing} className="w-full bg-transparent text-sm font-bold text-slate-700 dark:text-gray-300 outline-none disabled:opacity-60" value={s.min} onChange={e => updateSlab(i, 'min', e.target.value)} />
                                  </div>
                                  <div className="flex-1 min-w-[120px]">
-                                    <p className="text-[9px] font-black text-slate-300 uppercase mb-1">Max. Amount</p>
-                                    <input type="number" disabled={!isEditing} className="w-full bg-transparent text-sm font-bold text-slate-700 outline-none disabled:opacity-60" value={s.max} onChange={e => updateSlab(i, 'max', e.target.value)} />
+                                    <p className="text-[9px] font-black text-slate-300 dark:text-gray-600 uppercase mb-1">Max. Amount</p>
+                                    <input type="number" disabled={!isEditing} className="w-full bg-transparent text-sm font-bold text-slate-700 dark:text-gray-300 outline-none disabled:opacity-60" value={s.max} onChange={e => updateSlab(i, 'max', e.target.value)} />
                                  </div>
                                  <div className="w-24">
-                                    <p className="text-[9px] font-black text-slate-300 uppercase mb-1">Tax Rate</p>
+                                    <p className="text-[9px] font-black text-slate-300 dark:text-gray-600 uppercase mb-1">Tax Rate</p>
                                     <div className="flex items-center gap-1">
-                                       <input type="number" disabled={!isEditing} className="w-full bg-transparent text-sm font-black text-indigo-600 outline-none disabled:opacity-60" value={s.rate} onChange={e => updateSlab(i, 'rate', e.target.value)} />
+                                       <input type="number" disabled={!isEditing} className="w-full bg-transparent text-sm font-black text-indigo-600 dark:text-indigo-400 outline-none disabled:opacity-60" value={s.rate} onChange={e => updateSlab(i, 'rate', e.target.value)} />
                                        <span className="text-sm font-black text-indigo-400">%</span>
                                     </div>
                                  </div>
                                  {isEditing && (
-                                    <button onClick={() => removeSlab(i)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg transition-colors">
+                                    <button onClick={() => removeSlab(i)} className="p-2 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors">
                                        <Trash2 size={16} />
                                     </button>
                                  )}
@@ -2901,74 +3006,74 @@ export const TaxesDeductions = () => {
                {/* ⚙️ Statutory Components */}
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {/* PF Card */}
-                  <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 space-y-6">
+                  <div className="bg-white dark:bg-[#111111] rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm p-8 space-y-6">
                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                           <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center"><Shield size={22} /></div>
-                           <h3 className="text-sm font-black text-slate-900 uppercase">Provident Fund (PF)</h3>
+                           <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center"><Shield size={22} /></div>
+                           <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase">Provident Fund (PF)</h3>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                            <input type="checkbox" checked={payroll.taxToggles?.pf} onChange={e => updateToggle('pf', e.target.checked)} disabled={!isEditing} className="sr-only peer" />
-                           <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                           <div className="w-11 h-6 bg-slate-200 dark:bg-[#222222] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                         </label>
                      </div>
                      <div className="space-y-5">
-                        <div className="flex justify-between items-center py-3 border-b border-slate-50">
-                           <span className="text-[10px] font-black text-slate-400 uppercase">Employee Contribution</span>
+                        <div className="flex justify-between items-center py-3 border-b border-slate-50 dark:border-white/5">
+                           <span className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase">Employee Contribution</span>
                            <div className="flex items-center gap-1">
-                              <input type="number" disabled={!isEditing} className="w-12 text-right bg-transparent text-sm font-black text-slate-800 outline-none" value={payroll.pfRate || 12} onChange={e => updatePayroll('pfRate', e.target.value)} />
-                              <span className="text-sm font-black text-slate-400">%</span>
+                              <input type="number" disabled={!isEditing} className="w-12 text-right bg-transparent text-sm font-black text-slate-800 dark:text-white outline-none" value={payroll.pfRate || 12} onChange={e => updatePayroll('pfRate', e.target.value)} />
+                              <span className="text-sm font-black text-slate-400 dark:text-gray-600">%</span>
                            </div>
                         </div>
-                        <div className="flex justify-between items-center py-3 border-b border-slate-50">
-                           <span className="text-[10px] font-black text-slate-400 uppercase">Employer Contribution</span>
+                        <div className="flex justify-between items-center py-3 border-b border-slate-50 dark:border-white/5">
+                           <span className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase">Employer Contribution</span>
                            <div className="flex items-center gap-1">
-                              <input type="number" disabled={!isEditing} className="w-12 text-right bg-transparent text-sm font-black text-slate-800 outline-none" value={payroll.pfEmployerRate || 12} onChange={e => updatePayroll('pfEmployerRate', e.target.value)} />
-                              <span className="text-sm font-black text-slate-400">%</span>
+                              <input type="number" disabled={!isEditing} className="w-12 text-right bg-transparent text-sm font-black text-slate-800 dark:text-white outline-none" value={payroll.pfEmployerRate || 12} onChange={e => updatePayroll('pfEmployerRate', e.target.value)} />
+                              <span className="text-sm font-black text-slate-400 dark:text-gray-600">%</span>
                            </div>
                         </div>
                         <div className="flex justify-between items-center py-3">
-                           <span className="text-[10px] font-black text-slate-400 uppercase">Monthly Wage Limit</span>
+                           <span className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase">Monthly Wage Limit</span>
                            <div className="flex items-center gap-1">
-                              <span className="text-sm font-black text-slate-400">{currencySymbol}</span>
-                              <input type="number" disabled={!isEditing} className="w-20 text-right bg-transparent text-sm font-black text-slate-800 outline-none" value={payroll.pfWageLimit || 15000} onChange={e => updatePayroll('pfWageLimit', e.target.value)} />
+                              <span className="text-sm font-black text-slate-400 dark:text-gray-600">{currencySymbol}</span>
+                              <input type="number" disabled={!isEditing} className="w-20 text-right bg-transparent text-sm font-black text-slate-800 dark:text-white outline-none" value={payroll.pfWageLimit || 15000} onChange={e => updatePayroll('pfWageLimit', e.target.value)} />
                            </div>
                         </div>
                      </div>
                   </div>
 
                   {/* ESI Card */}
-                  <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 space-y-6">
+                  <div className="bg-white dark:bg-[#111111] rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm p-8 space-y-6">
                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><Activity size={22} /></div>
-                           <h3 className="text-sm font-black text-slate-900 uppercase">Employees State Insurance</h3>
+                           <div className="w-12 h-12 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center"><Activity size={22} /></div>
+                           <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase">Employees State Insurance</h3>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                            <input type="checkbox" checked={payroll.taxToggles?.esi} onChange={e => updateToggle('esi', e.target.checked)} disabled={!isEditing} className="sr-only peer" />
-                           <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                           <div className="w-11 h-6 bg-slate-200 dark:bg-[#222222] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
                      </div>
                      <div className="space-y-5">
-                        <div className="flex justify-between items-center py-3 border-b border-slate-50">
-                           <span className="text-[10px] font-black text-slate-400 uppercase">Employee Rate</span>
+                        <div className="flex justify-between items-center py-3 border-b border-slate-50 dark:border-white/5">
+                           <span className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase">Employee Rate</span>
                            <div className="flex items-center gap-1">
-                              <input type="number" step="0.01" disabled={!isEditing} className="w-12 text-right bg-transparent text-sm font-black text-slate-800 outline-none" value={payroll.esiRate || 0.75} onChange={e => updatePayroll('esiRate', e.target.value)} />
-                              <span className="text-sm font-black text-slate-400">%</span>
+                              <input type="number" step="0.01" disabled={!isEditing} className="w-12 text-right bg-transparent text-sm font-black text-slate-800 dark:text-white outline-none" value={payroll.esiRate || 0.75} onChange={e => updatePayroll('esiRate', e.target.value)} />
+                              <span className="text-sm font-black text-slate-400 dark:text-gray-600">%</span>
                            </div>
                         </div>
-                        <div className="flex justify-between items-center py-3 border-b border-slate-50">
-                           <span className="text-[10px] font-black text-slate-400 uppercase">Employer Rate</span>
+                        <div className="flex justify-between items-center py-3 border-b border-slate-50 dark:border-white/5">
+                           <span className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase">Employer Rate</span>
                            <div className="flex items-center gap-1">
-                              <input type="number" step="0.01" disabled={!isEditing} className="w-12 text-right bg-transparent text-sm font-black text-slate-800 outline-none" value={payroll.esiEmployerRate || 3.25} onChange={e => updatePayroll('esiEmployerRate', e.target.value)} />
-                              <span className="text-sm font-black text-slate-400">%</span>
+                              <input type="number" step="0.01" disabled={!isEditing} className="w-12 text-right bg-transparent text-sm font-black text-slate-800 dark:text-white outline-none" value={payroll.esiEmployerRate || 3.25} onChange={e => updatePayroll('esiEmployerRate', e.target.value)} />
+                              <span className="text-sm font-black text-slate-400 dark:text-gray-600">%</span>
                            </div>
                         </div>
                         <div className="flex justify-between items-center py-3">
-                           <span className="text-[10px] font-black text-slate-400 uppercase">Max Gross Salary Cap</span>
+                           <span className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase">Max Gross Salary Cap</span>
                            <div className="flex items-center gap-1">
-                              <span className="text-sm font-black text-slate-400">{currencySymbol}</span>
-                              <input type="number" disabled={!isEditing} className="w-20 text-right bg-transparent text-sm font-black text-slate-800 outline-none" value={payroll.esiLimit || 21000} onChange={e => updatePayroll('esiLimit', e.target.value)} />
+                              <span className="text-sm font-black text-slate-400 dark:text-gray-600">{currencySymbol}</span>
+                              <input type="number" disabled={!isEditing} className="w-20 text-right bg-transparent text-sm font-black text-slate-800 dark:text-white outline-none" value={payroll.esiLimit || 21000} onChange={e => updatePayroll('esiLimit', e.target.value)} />
                            </div>
                         </div>
                      </div>
@@ -2979,7 +3084,7 @@ export const TaxesDeductions = () => {
             {/* 📊 Tax Preview Panel (Sidebar) */}
             <div className="xl:col-span-1 space-y-8">
                <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden group shadow-2xl">
-                  <div className="absolute top-0 right-0 p-8 opacity-5 -translate-x-1/4 -translate-y-1/4"><Calculator size={180}/ ></div>
+                  <div className="absolute top-0 right-0 p-8 opacity-5 -translate-x-1/4 -translate-y-1/4"><Calculator size={180} /></div>
                   <div className="relative z-10 space-y-8">
                      <div>
                         <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Quick Simulation</h3>
@@ -2991,8 +3096,8 @@ export const TaxesDeductions = () => {
                            <label className="text-[10px] font-black text-white/40 uppercase tracking-widest">Gross Monthly Salary</label>
                            <div className="relative">
                               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 font-black">{currencySymbol}</span>
-                              <input 
-                                 type="number" 
+                              <input
+                                 type="number"
                                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-10 pr-4 text-xl font-black outline-none focus:border-indigo-500 transition-all placeholder:text-white/10"
                                  value={previewSalary}
                                  onChange={e => setPreviewSalary(Number(e.target.value))}
@@ -3026,7 +3131,7 @@ export const TaxesDeductions = () => {
 
                         <div className="flex flex-col gap-3">
                            <div className="flex items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/10">
-                              <div className="p-2 bg-indigo-500 rounded-lg"><AlertCircle size={14}/></div>
+                              <div className="p-2 bg-indigo-500 rounded-lg"><AlertCircle size={14} /></div>
                               <p className="text-[10px] font-medium leading-relaxed text-indigo-100/60 uppercase tracking-wider">Estimated based on <span className="text-white font-bold">{payroll.taxRegime}</span> tax regime settings.</p>
                            </div>
                         </div>
@@ -3035,8 +3140,8 @@ export const TaxesDeductions = () => {
                </div>
 
                {/* 📅 FY History Sidebar */}
-               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 space-y-6">
-                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Compliance Timeline</h3>
+               <div className="bg-white dark:bg-[#111111] rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm p-8 space-y-6">
+                  <h3 className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest">Compliance Timeline</h3>
                   <div className="space-y-4">
                      {[
                         { fy: '2024-25', status: 'Active', color: 'bg-emerald-500', tColor: 'text-emerald-600' },
@@ -3046,13 +3151,13 @@ export const TaxesDeductions = () => {
                         <div key={i} className="flex items-center gap-4 group cursor-pointer">
                            <div className={`w-1.5 h-10 rounded-full ${item.color} group-hover:scale-y-110 transition-transform`} />
                            <div>
-                              <p className="text-sm font-black text-slate-800 tracking-tight">Financial Year {item.fy}</p>
+                              <p className="text-sm font-black text-slate-800 dark:text-white tracking-tight">Financial Year {item.fy}</p>
                               <p className={`text-[10px] font-black uppercase ${item.tColor}`}>{item.status}</p>
                            </div>
                         </div>
                      ))}
                   </div>
-                  <button className="w-full py-3 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all">Create New FY Policy</button>
+                  <button className="w-full py-3 bg-slate-50 dark:bg-white/5 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 dark:hover:bg-white/10 transition-all">Create New FY Policy</button>
                </div>
             </div>
          </div>
@@ -3065,7 +3170,7 @@ export const PayrollReports = () => {
       queryKey: ['settings'],
       queryFn: () => settingsAPI.getSettings().then(res => res.data.data)
    });
-   const currencySymbol = settings?.payroll?.currencySymbol || '₹';
+   const currencySymbol = settings?.organization?.currency ? getCurrencySymbol(settings.organization.currency) : (settings?.payroll?.currencySymbol || '₹');
 
    const { data: history } = useQuery({
       queryKey: ['payrollHistory'],
@@ -3096,10 +3201,10 @@ export const PayrollReports = () => {
       history.forEach(p => {
          const key = `${p.year}-${p.month}`;
          if (!monthMap[key]) monthMap[key] = { grossPay: 0, netPay: 0, deductions: 0, employees: new Set() };
-         monthMap[key].grossPay += safe(p.breakdown?.earnings?.grossEarnings);
-         monthMap[key].netPay += safe(p.breakdown?.netPay);
-         monthMap[key].deductions += safe(p.breakdown?.deductions?.totalDeductions);
-         monthMap[key].employees.add(p.user?._id || p.user);
+         monthMap[key].grossPay += safe(p.grossYield || p.breakdown?.grossPay || p.breakdown?.earnings?.grossEarnings);
+         monthMap[key].netPay += safe(p.netPay || p.breakdown?.netPay);
+         monthMap[key].deductions += safe(p.liability || p.breakdown?.totalDeductions || p.breakdown?.deductions?.totalDeductions);
+         monthMap[key].employees.add(p.employeeId || p.userId || p.user?._id || p.user);
       });
 
       const trends = allMonths.map(m => {
@@ -3116,8 +3221,8 @@ export const PayrollReports = () => {
 
       // 2. Department Distribution
       const depts = history.reduce((acc, p) => {
-         const d = p.user?.department || 'Operations';
-         acc[d] = (acc[d] || 0) + safe(p.breakdown?.earnings?.grossEarnings);
+         const d = p.employeeInfo?.department || p.employee?.department?.name || p.user?.department || 'Operations';
+         acc[d] = (acc[d] || 0) + safe(p.grossYield || p.breakdown?.grossPay || p.breakdown?.earnings?.grossEarnings);
          return acc;
       }, {});
       const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
@@ -3134,16 +3239,16 @@ export const PayrollReports = () => {
 
       const curr = monthMap[latestMonthKey] || { grossPay: 0, netPay: 0, deductions: 0, employees: new Set() };
       const prev = monthMap[prevMonthKey] || { grossPay: 0, netPay: 0 };
-      
+
       const growth = prev.grossPay > 0 ? ((curr.grossPay - prev.grossPay) / prev.grossPay) * 100 : 0;
       const highDept = deptList.sort((a, b) => b.value - a.value)[0]?.name || 'N/A';
       const netGrossRatio = curr.grossPay > 0 ? (curr.netPay / curr.grossPay) * 100 : 0;
 
       // Anomaly Detection for latest month
       const [lYear, lMonth] = (latestMonthKey || "").split('-').map(Number);
-      const anomalies = history.filter(h => 
-         h.month === lMonth && 
-         h.year === lYear && 
+      const anomalies = history.filter(h =>
+         h.month === lMonth &&
+         h.year === lYear &&
          ((safe(h.breakdown?.deductions?.totalDeductions) > safe(h.breakdown?.earnings?.grossEarnings) * 0.3) || safe(h.breakdown?.netPay) === 0)
       );
 
@@ -3175,10 +3280,10 @@ export const PayrollReports = () => {
                : "No anomalies detected"
          }
       ];
-      
-      return { 
-         trends, 
-         depts: deptList, 
+
+      return {
+         trends,
+         depts: deptList,
          insights,
          summary: {
             totalCost: curr.grossPay,
@@ -3195,7 +3300,7 @@ export const PayrollReports = () => {
       if (!history) return [];
       let data = history.filter(h => h.month === (new Date().getMonth() + 1) && h.year === new Date().getFullYear());
       if (tableFilter !== 'All') {
-         data = data.filter(h => h.user?.department === tableFilter);
+         data = data.filter(h => (h.employeeInfo?.department || h.user?.department) === tableFilter);
       }
       return data;
    }, [history, tableFilter]);
@@ -3209,17 +3314,25 @@ export const PayrollReports = () => {
             const res = await fetchFn(reportPeriod);
             const data = res.data.data;
             let headers = [], rows = [];
+            
             if (type === 'Summary') {
                headers = ['Metric', 'Value'];
                rows = [
-                  ['Total Nodes', data.totalEmployees],
-                  ['Total Gross', data.totalGrossEarnings],
-                  ['Total Liability', data.totalDeductions],
-                  ['Net Liquidity', data.totalNetPay]
+                  ['Total Employees', data.totalEmployees],
+                  ['Total Gross Disbursement', data.totalGrossEarnings],
+                  ['Total Statutory Deductions', data.totalDeductions],
+                  ['Total Net Liquidity (Payout)', data.totalNetPay]
                ];
             } else {
-               headers = ['Department', 'Node Count', 'Total Gross', 'Net Payout', 'Liability'];
-               rows = data.map(d => [d._id, d.employeeCount, d.totalGross, d.totalNet, d.totalDeductions]);
+               // Department Spending Analysis
+               headers = ['Department', 'Employee Count', 'Total Gross Spending', 'Total Net Payout', 'Total Liability (Deductions)'];
+               rows = data.map(d => [
+                  d.department || d._id || 'Unassigned',
+                  d.employeeCount || 0,
+                  d.totalGross || 0,
+                  d.totalNet || 0,
+                  d.totalDeductions || 0
+               ]);
             }
             const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
             const blob = new Blob([csv], { type: 'text/csv' });
@@ -3227,7 +3340,7 @@ export const PayrollReports = () => {
             const a = document.createElement('a');
             a.href = url; a.download = `Payroll_${type}_M${reportPeriod.month}_Y${reportPeriod.year}.csv`;
             a.click();
-            toast.success(`${type} Intelligence Exported`);
+            toast.success(`${type} Report Exported`);
             return;
          }
 
@@ -3237,34 +3350,115 @@ export const PayrollReports = () => {
          }
 
          if (type === 'Export') {
-            const headers = ['Resource', 'Node ID', 'Dept', 'Period', 'Gross', 'Liability', 'Net'];
             const relevantHistory = history.filter(h => h.month === reportPeriod.month && h.year === reportPeriod.year);
-            if (!relevantHistory.length) return toast.error('No data vectors for selected period');
+            if (!relevantHistory.length) return toast.error('No payroll records found for selected period');
+
+            // 1. Discover all unique earning and deduction component names across all records
+            const earningNames = new Set();
+            const deductionNames = new Set();
             
-            const rows = relevantHistory.map(h => [h.user?.name, h.user?.employeeId, h.user?.department || 'Unassigned', `${h.month}/${h.year}`, safe(h.breakdown?.earnings?.grossEarnings), safe(h.breakdown?.deductions?.totalDeductions), safe(h.breakdown?.netPay)]);
-            const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-            const blob = new Blob([csv], { type: 'text/csv' });
+            relevantHistory.forEach(h => {
+               (h.breakdown?.earnings || []).forEach(e => earningNames.add(e.name));
+               (h.breakdown?.deductions || []).forEach(d => deductionNames.add(d.name));
+            });
+
+            const sortedEarnings = Array.from(earningNames).sort();
+            const sortedDeductions = Array.from(deductionNames).sort();
+
+            // 2. Define Headers
+            const headers = [
+               'Employee Name', 
+               'Employee ID', 
+               'Department', 
+               'Pay Period', 
+               'Monthly CTC (Full)',
+               'Gross Earnings (Payable)', 
+               ...sortedEarnings.map(name => `Earning: ${name}`),
+               'Total Deductions',
+               ...sortedDeductions.map(name => `Deduction: ${name}`),
+               'Net Payout',
+               'Bank Name',
+               'Account Number',
+               'IFSC Code',
+               'PAN',
+               'UAN'
+            ];
+
+            // 3. Map Rows
+            const rows = relevantHistory.map(h => {
+               const earningsMap = {};
+               (h.breakdown?.earnings || []).forEach(e => earningsMap[e.name] = e.value);
+               
+               const deductionsMap = {};
+               (h.breakdown?.deductions || []).forEach(d => deductionsMap[d.name] = d.value);
+
+               const ctcVal = h.user?.annualCTC ? (parseFloat(h.user.annualCTC) / 12) : (h.breakdown?.monthlyCTC || h.grossYield);
+
+               return [
+                  h.user?.name || h.employeeInfo?.name,
+                  h.user?.employeeId || h.employeeInfo?.employeeId,
+                  h.user?.department || h.employeeInfo?.department || 'Unassigned',
+                  `${h.month}/${h.year}`,
+                  safe(ctcVal),
+                  safe(h.grossYield || h.breakdown?.grossPay),
+                  ...sortedEarnings.map(name => safe(earningsMap[name] || 0)),
+                  safe(h.liability || h.breakdown?.totalDeductions),
+                  ...sortedDeductions.map(name => safe(deductionsMap[name] || 0)),
+                  safe(h.netPay || h.breakdown?.netPay),
+                  h.user?.bankName || h.bankDetails?.bankName || 'N/A',
+                  `'${h.user?.accountNumber || h.bankDetails?.accountNumber || 'N/A'}`, // Force text for Excel
+                  h.user?.ifscCode || h.bankDetails?.ifscCode || 'N/A',
+                  h.user?.pan || h.bankDetails?.pan || 'N/A',
+                  h.user?.uan || h.bankDetails?.uan || 'N/A'
+               ];
+            });
+
+            const csvContent = [
+               headers.join(','),
+               ...rows.map(row => row.map(cell => {
+                  const cellStr = String(cell === null || cell === undefined ? '' : cell);
+                  if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+                      return `"${cellStr.replace(/"/g, '""')}"`;
+                  }
+                  return cellStr;
+               }).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = `Payroll_Ledger_M${reportPeriod.month}_Y${reportPeriod.year}.csv`;
+            a.href = url; a.download = `Full_Payroll_Ledger_M${reportPeriod.month}_Y${reportPeriod.year}.csv`;
             a.click();
-            toast.success('Full Ledger Dispatched');
+            toast.success('Comprehensive Ledger Exported');
             return;
          }
 
          if (type === 'Tax') {
-            const taxHeaders = ['Resource', 'PAN Vector', 'Period', 'Total Gross', 'Total Deductions'];
-            const taxRows = history.filter(h => h.month === reportPeriod.month && h.year === reportPeriod.year).map(h => [h.user?.name, h.user?.pan || 'N/A', `${h.month}/${h.year}`, safe(h.breakdown?.earnings?.grossEarnings), safe(h.breakdown?.deductions?.totalDeductions)]);
-            if (!taxRows.length) return toast.error('No tax data for selected period');
+            const relevantHistory = history.filter(h => h.month === reportPeriod.month && h.year === reportPeriod.year);
+            if (!relevantHistory.length) return toast.error('No tax vectors for selected period');
+
+            const taxHeaders = ['Employee Name', 'PAN Number', 'Period', 'Total Gross', 'Statutory Deductions', 'Taxable Net'];
+            const taxRows = relevantHistory.map(h => [
+               h.user?.name || h.employeeInfo?.name, 
+               h.user?.pan || h.bankDetails?.pan || 'N/A', 
+               `${h.month}/${h.year}`, 
+               safe(h.grossYield || h.breakdown?.grossPay), 
+               safe(h.liability || h.breakdown?.totalDeductions),
+               safe((h.grossYield || h.breakdown?.grossPay) - (h.liability || h.breakdown?.totalDeductions))
+            ]);
+
             const csv = [taxHeaders.join(','), ...taxRows.map(r => r.join(','))].join('\n');
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = `Tax_Compliance_${new Date().toISOString().split('T')[0]}.csv`;
+            a.href = url; a.download = `Tax_Compliance_Report_${reportPeriod.month}_${reportPeriod.year}.csv`;
             a.click();
-            toast.success('Tax Analytics Exported');
+            toast.success('Tax Compliance Report Exported');
          }
-      } catch (err) { toast.error('Extraction Engine Error'); }
+      } catch (err) { 
+         console.error(err);
+         toast.error('Extraction Engine Error'); 
+      }
    };
 
    return (
@@ -3273,43 +3467,40 @@ export const PayrollReports = () => {
          description="Management dashboard for strategic financial oversight and compliance monitoring."
       >
          {/* 1. Dashboard Controls */}
-         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
-            <div className="flex flex-wrap items-center gap-3">
-               <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1">
+         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+            <div className="flex flex-wrap items-center gap-4">
+               <div className="flex items-center bg-slate-100/50 dark:bg-white/5 rounded-2xl p-1.5 backdrop-blur-sm">
                   {['line', 'bar', 'area'].map(type => (
-                     <button 
-                        key={type} 
-                        onClick={() => setChartType(type)} 
-                        className={`px-3 py-1 rounded-md text-[10px] font-black uppercase transition-all ${chartType === type ? 'bg-white shadow-sm text-indigo-600 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                     <button
+                        key={type}
+                        onClick={() => setChartType(type)}
+                        className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase transition-all duration-300 ${chartType === type ? 'bg-white dark:bg-slate-700 shadow-xl text-indigo-600 dark:text-indigo-400' : 'text-slate-400 hover:text-slate-600'}`}
                      >
                         {type}
                      </button>
                   ))}
                </div>
 
-               <select 
-                  value={timeRange} 
-                  onChange={e => setTimeRange(parseInt(e.target.value))} 
-                  className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase outline-none cursor-pointer"
+               <select
+                  value={timeRange}
+                  onChange={e => setTimeRange(parseInt(e.target.value))}
+                  className="bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl px-5 py-2.5 text-[10px] font-black uppercase outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500/20 transition-all"
                >
-                  <option value={3}>Last 3 Months</option>
-                  <option value={6}>Last 6 Months</option>
-                  <option value={12}>Last 12 Months</option>
+                  <option value={3}>3 Months</option>
+                  <option value={6}>6 Months</option>
+                  <option value={12}>12 Months</option>
                </select>
 
-               <div className="h-6 w-px bg-slate-200 mx-1" />
-
-               <div className="flex items-center gap-1.5">
+               <div className="flex items-center gap-2">
                   {[
                      { id: 'grossPay', label: 'Gross' },
                      { id: 'netPay', label: 'Net' },
-                     { id: 'deductions', label: 'Deductions' },
-                     { id: 'employees', label: 'Employees' }
+                     { id: 'employees', label: 'Staff' }
                   ].map(m => (
                      <button
                         key={m.id}
                         onClick={() => setSelectedMetric(m.id)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all border ${selectedMetric === m.id ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-transparent border-transparent text-slate-400 hover:text-slate-600'}`}
+                        className={`px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase transition-all ${selectedMetric === m.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white dark:bg-white/5 border border-transparent dark:border-[#333333] text-slate-400 hover:text-slate-600'}`}
                      >
                         {m.label}
                      </button>
@@ -3317,12 +3508,12 @@ export const PayrollReports = () => {
                </div>
             </div>
 
-            <div className="flex items-center gap-2">
-               <button onClick={() => downloadReport('Summary')} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all">
-                  <Download size={14} className="text-indigo-600" /> Print PDF
+            <div className="flex items-center gap-3">
+               <button onClick={() => downloadReport('Summary')} className="p-3 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/10 rounded-2xl transition-all">
+                  <Printer size={18} className="text-slate-400" />
                </button>
-               <button onClick={() => downloadReport('Export')} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-indigo-100">
-                  <FileSpreadsheet size={14} /> Export Excel
+               <button onClick={() => downloadReport('Export')} className="flex items-center gap-3 px-6 py-3 bg-slate-900 border border-slate-800 text-white dark:text-black dark:bg-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all hover:bg-black dark:hover:bg-gray-200 shadow-2xl">
+                  <FileSpreadsheet size={16} /> Data Export
                </button>
             </div>
          </div>
@@ -3330,67 +3521,64 @@ export const PayrollReports = () => {
          {/* 2. KPI Section */}
          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-10">
             {[
-               { label: 'Total Payroll Cost', value: `${currencySymbol}${formatCurrency(processedData.summary.totalCost)}`, sub: 'Current Month Gross', icon: Wallet, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+               { label: 'Total Payroll Cost', value: `${currencySymbol}${formatCurrency(processedData.summary.totalCost)}`, sub: 'Current Month Gross', icon: Wallet, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
 
-               { label: 'Avg Cost / Head', value: `${currencySymbol}${formatCurrency(processedData.summary.avgCost)}`, sub: 'Across Organization', icon: Calculator, color: 'text-blue-600', bg: 'bg-blue-50' },
+               { label: 'Avg Cost / Head', value: `${currencySymbol}${formatCurrency(processedData.summary.avgCost)}`, sub: 'Across Organization', icon: Calculator, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10' },
 
-               { label: 'Growth rate', value: `${processedData.summary.growth?.toFixed(1)}%`, sub: processedData.summary.growth >= 0 ? 'Increase vs Prev Month' : 'Decrease vs Prev Month', icon: processedData.summary.growth >= 0 ? TrendingUp : TrendingDown, color: processedData.summary.growth >= 0 ? 'text-emerald-600' : 'text-rose-600', bg: processedData.summary.growth >= 0 ? 'bg-emerald-50' : 'bg-rose-50' },
-               { label: 'Top Department', value: processedData.summary.highDept, sub: 'Highest Expenditure', icon: Building2, color: 'text-amber-600', bg: 'bg-amber-50' },
-               { label: 'Net/Gross Ratio', value: `${processedData.summary.netGrossRatio?.toFixed(1)}%`, sub: 'Efficiency Index', icon: Activity, color: 'text-purple-600', bg: 'bg-purple-50' },
+               { label: 'Growth rate', value: `${processedData.summary.growth?.toFixed(1)}%`, sub: processedData.summary.growth >= 0 ? 'Increase vs Prev Month' : 'Decrease vs Prev Month', icon: processedData.summary.growth >= 0 ? TrendingUp : TrendingDown, color: processedData.summary.growth >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400', bg: processedData.summary.growth >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-rose-50 dark:bg-rose-500/10' },
+               { label: 'Top Department', value: processedData.summary.highDept, sub: 'Highest Expenditure', icon: Building2, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10' },
+               { label: 'Net/Gross Ratio', value: `${processedData.summary.netGrossRatio?.toFixed(1)}%`, sub: 'Efficiency Index', icon: Activity, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-500/10' },
             ].map((kpi, i) => (
-               <div key={i} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+               <div key={i} className="bg-white dark:bg-[#111111] p-5 rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm hover:shadow-md transition-all group">
                   <div className={`p-2.5 w-fit rounded-xl ${kpi.bg} ${kpi.color} mb-4 group-hover:scale-110 transition-transform`}>
                      <kpi.icon size={18} />
                   </div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{kpi.label}</p>
-                  <h4 className="text-xl font-black text-slate-900 leading-none mb-1">{kpi.value}</h4>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase">{kpi.sub}</p>
+                  <p className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest mb-1">{kpi.label}</p>
+                  <h4 className="text-xl font-black text-slate-900 dark:text-white leading-none mb-1">{kpi.value}</h4>
+                  <p className="text-[9px] font-bold text-slate-400 dark:text-gray-500 uppercase">{kpi.sub}</p>
                </div>
             ))}
          </div>
 
          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 mb-10">
             {/* 3. Main Trend Chart */}
-            <div className="lg:col-span-8 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="lg:col-span-8 bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm">
                <div className="flex items-center justify-between mb-10">
                   <div>
-                     <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Financial Performance Trend</h3>
-                     <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Historical analysis of {selectedMetric} over {timeRange} months</p>
+                     <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Financial Performance Trend</h3>
+                     <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-1 uppercase">Historical analysis of {selectedMetric} over {timeRange} months</p>
                   </div>
-                  <button onClick={() => setSelectedMetric('netPay')} className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 transition-colors"><RefreshCw size={16}/></button>
+                  <button onClick={() => setSelectedMetric('netPay')} className="p-2 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-slate-400 transition-colors"><RefreshCw size={16} /></button>
                </div>
-               
+
                <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                      {chartType === 'bar' ? (
                         <BarChart data={processedData.trends}>
-                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                           <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
-                           <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => selectedMetric === 'employees' ? v : `${currencySymbol}${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
-                           <ReTooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontWeight: 800 }} />
-                           <Bar dataKey="value" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={40} />
+                           <XAxis dataKey="name" hide />
+                           <YAxis hide />
+                           <ReTooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)', fontWeight: 900 }} />
+                           <Bar dataKey="value" fill="#6366f1" radius={[12, 12, 12, 12]} barSize={24} />
                         </BarChart>
                      ) : chartType === 'line' ? (
                         <AreaChart data={processedData.trends}>
-                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                           <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
-                           <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => selectedMetric === 'employees' ? v : `${currencySymbol}${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
-                           <ReTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontWeight: 800 }} />
-                           <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={4} fill="transparent" />
+                           <XAxis dataKey="name" hide />
+                           <YAxis hide />
+                           <ReTooltip contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)', fontWeight: 900 }} />
+                           <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={5} fill="transparent" dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }} />
                         </AreaChart>
                      ) : (
                         <AreaChart data={processedData.trends}>
                            <defs>
                               <linearGradient id="primaryGradient" x1="0" y1="0" x2="0" y2="1">
-                                 <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
+                                 <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
                                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                               </linearGradient>
                            </defs>
-                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                           <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
-                           <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => selectedMetric === 'employees' ? v : `${currencySymbol}${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
-                           <ReTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontWeight: 800 }} />
-                           <Area type="monotone" dataKey="value" stroke="#6366f1" fillOpacity={1} fill="url(#primaryGradient)" strokeWidth={4} />
+                           <XAxis dataKey="name" hide />
+                           <YAxis hide />
+                           <ReTooltip contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)', fontWeight: 900 }} />
+                           <Area type="monotone" dataKey="value" stroke="#6366f1" fillOpacity={1} fill="url(#primaryGradient)" strokeWidth={5} dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }} />
                         </AreaChart>
                      )}
                   </ResponsiveContainer>
@@ -3398,21 +3586,21 @@ export const PayrollReports = () => {
             </div>
 
             {/* 4. Dept Pie Chart */}
-            <div className="lg:col-span-4 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="lg:col-span-4 bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm">
                <div className="mb-6">
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Cost by Department</h3>
-                  <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Organization-wide distribution</p>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Cost by Department</h3>
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-1 uppercase">Organization-wide distribution</p>
                </div>
-               
+
                <div className="h-64 w-full relative">
                   <ResponsiveContainer width="100%" height="100%">
                      <RePieChart>
-                        <Pie 
-                           data={processedData.depts} 
-                           innerRadius={60} 
-                           outerRadius={85} 
-                           paddingAngle={5} 
-                           dataKey="value" 
+                        <Pie
+                           data={processedData.depts}
+                           innerRadius={60}
+                           outerRadius={85}
+                           paddingAngle={5}
+                           dataKey="value"
                            stroke="none"
                            onClick={(data) => setTableFilter(data.name)}
                            className="cursor-pointer"
@@ -3424,24 +3612,24 @@ export const PayrollReports = () => {
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                      <div className="text-center">
-                        <p className="text-[10px] font-black text-slate-400 uppercase leading-none">Total</p>
-                        <p className="text-lg font-black text-slate-900 mt-1">{currencySymbol}{processedData.summary.totalCost > 1000 ? (processedData.summary.totalCost / 1000).toFixed(1) + 'k' : processedData.summary.totalCost}</p>
+                        <p className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase leading-none">Total</p>
+                        <p className="text-lg font-black text-slate-900 dark:text-white mt-1">{currencySymbol}{processedData.summary.totalCost > 1000 ? (processedData.summary.totalCost / 1000).toFixed(1) + 'k' : processedData.summary.totalCost}</p>
                      </div>
                   </div>
                </div>
 
                <div className="mt-6 space-y-2">
                   {processedData.depts.slice(0, 4).map((d, i) => (
-                     <div key={i} onClick={() => setTableFilter(d.name)} className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all ${tableFilter === d.name ? 'bg-slate-50 border border-slate-200' : 'hover:bg-slate-50 border border-transparent'}`}>
+                     <div key={i} onClick={() => setTableFilter(d.name)} className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all ${tableFilter === d.name ? 'bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-[#333333]' : 'hover:bg-slate-50 dark:hover:bg-white/5 border border-transparent'}`}>
                         <div className="flex items-center gap-2">
                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
-                           <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[100px]">{d.name}</span>
+                           <span className="text-[10px] font-black text-slate-600 dark:text-gray-400 uppercase truncate max-w-[100px]">{d.name}</span>
                         </div>
-                        <span className="text-[10px] font-bold text-slate-900">{((d.value / processedData.summary.totalCost) * 100).toFixed(1)}%</span>
+                        <span className="text-[10px] font-bold text-slate-900 dark:text-white">{((d.value / processedData.summary.totalCost) * 100).toFixed(1)}%</span>
                      </div>
                   ))}
                   {processedData.depts.length > 4 && (
-                     <button onClick={() => setTableFilter('All')} className="w-full py-2 text-[9px] font-black text-indigo-500 uppercase tracking-widest text-center hover:bg-indigo-50 rounded-lg transition-all">Show All Departments</button>
+                     <button onClick={() => setTableFilter('All')} className="w-full py-2 text-[9px] font-black text-indigo-500 uppercase tracking-widest text-center hover:bg-indigo-50 dark:hover:bg-white/5 rounded-lg transition-all">Show All Departments</button>
                   )}
                </div>
             </div>
@@ -3450,7 +3638,7 @@ export const PayrollReports = () => {
          <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
             {/* 5. Smart Insights Panel */}
             <div className="xl:col-span-4 bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden group">
-               <div className="absolute top-0 right-0 p-8 opacity-5 -translate-x-1/4 -translate-y-1/4"><PieChart size={180}/ ></div>
+               <div className="absolute top-0 right-0 p-8 opacity-5 -translate-x-1/4 -translate-y-1/4"><PieChart size={180} /></div>
                <div className="relative z-10 space-y-8">
                   <div>
                      <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Advanced Analytics</h3>
@@ -3461,7 +3649,7 @@ export const PayrollReports = () => {
                      {(processedData.insights || []).map((insight, idx) => (
                         <div key={idx} className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-all cursor-default">
                            <div className="flex items-center gap-3 mb-2">
-                              <div className={`p-1.5 ${insight.color} rounded-lg`}><insight.icon size={14}/></div>
+                              <div className={`p-1.5 ${insight.color} rounded-lg`}><insight.icon size={14} /></div>
                               <p className="text-[10px] font-black uppercase tracking-widest text-white/60">{insight.title}</p>
                            </div>
                            <p className="text-xs font-medium leading-relaxed">{insight.message}</p>
@@ -3474,19 +3662,19 @@ export const PayrollReports = () => {
             </div>
 
             {/* 6. Detailed Table */}
-            <div className="xl:col-span-8 bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-               <div className="p-8 border-b border-slate-50 flex justify-between items-center">
+            <div className="xl:col-span-8 bg-white dark:bg-[#111111] rounded-3xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden flex flex-col">
+               <div className="p-8 border-b border-slate-50 dark:border-white/5 flex justify-between items-center">
                   <div>
-                     <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Detail Transactional Ledger</h3>
-                     <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Filtering: {tableFilter === 'All' ? 'Complete Organization' : tableFilter}</p>
+                     <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Detail Transactional Ledger</h3>
+                     <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-1 uppercase">Filtering: {tableFilter === 'All' ? 'Complete Organization' : tableFilter}</p>
                   </div>
-                  {tableFilter !== 'All' && <button onClick={() => setTableFilter('All')} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-700">Clear Filter</button>}
+                  {tableFilter !== 'All' && <button onClick={() => setTableFilter('All')} className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest hover:text-indigo-700">Clear Filter</button>}
                </div>
-               
+
                <div className="overflow-x-auto flex-1">
                   <table className="w-full text-left">
                      <thead>
-                        <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                        <tr className="bg-slate-50/50 dark:bg-white/5 text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest border-b border-slate-100 dark:border-[#333333]">
                            <th className="px-8 py-5">Employee Context</th>
                            <th className="px-6 py-5">Department</th>
                            <th className="px-6 py-5 text-right">Gross Earnings</th>
@@ -3494,24 +3682,24 @@ export const PayrollReports = () => {
                            <th className="px-6 py-5 text-right">Net Payout</th>
                         </tr>
                      </thead>
-                     <tbody className="divide-y divide-slate-50">
+                     <tbody className="divide-y divide-slate-50 dark:divide-white/5">
                         {filteredTableData.length > 0 ? filteredTableData.slice(0, 10).map((h, i) => (
-                           <tr key={i} className="hover:bg-slate-50 transition-colors">
+                           <tr key={i} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                               <td className="px-8 py-4">
                                  <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-xs ring-2 ring-white shadow-sm">{(h.user?.name || h.employeeInfo?.name || '?')[0]}</div>
+                                    <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center font-bold text-xs ring-2 ring-white dark:ring-[#222] shadow-sm">{(h.user?.name || h.employeeInfo?.name || '?')[0]}</div>
                                     <div>
-                                       <p className="text-sm font-black text-slate-800 leading-none mb-1">{h.user?.name || h.employeeInfo?.name}</p>
-                                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{h.user?.employeeId || h.employeeInfo?.employeeId}</p>
+                                       <p className="text-sm font-black text-slate-800 dark:text-white leading-none mb-1">{h.user?.name || h.employeeInfo?.name}</p>
+                                       <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase tracking-tight">{h.user?.employeeId || h.employeeInfo?.employeeId}</p>
                                     </div>
                                  </div>
                               </td>
                               <td className="px-6 py-4">
-                                 <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest">{h.user?.department || h.employeeInfo?.department || 'Unassigned'}</span>
+                                 <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg text-[10px] font-black uppercase tracking-widest">{h.user?.department || h.employeeInfo?.department || 'Unassigned'}</span>
                               </td>
-                              <td className="px-6 py-4 text-right text-xs font-bold text-slate-600">{currencySymbol}{formatCurrency(safe(h.breakdown?.earnings?.grossEarnings))}</td>
-                              <td className="px-6 py-4 text-right text-xs font-bold text-rose-500">-{currencySymbol}{formatCurrency(safe(h.breakdown?.deductions?.totalDeductions))}</td>
-                              <td className="px-6 py-4 text-right text-sm font-black text-slate-900">{currencySymbol}{formatCurrency(safe(h.breakdown?.netPay))}</td>
+                              <td className="px-6 py-4 text-right text-xs font-bold text-slate-600 dark:text-gray-400">{currencySymbol}{formatCurrency(safe(h.grossYield || h.breakdown?.grossPay || h.breakdown?.earnings?.grossEarnings))}</td>
+                              <td className="px-6 py-4 text-right text-xs font-bold text-rose-500">-{currencySymbol}{formatCurrency(safe(h.liability || h.breakdown?.totalDeductions || h.breakdown?.deductions?.totalDeductions))}</td>
+                              <td className="px-6 py-4 text-right text-sm font-black text-slate-900 dark:text-white">{currencySymbol}{formatCurrency(safe(h.netPay || h.breakdown?.netPay))}</td>
                            </tr>
                         )) : (
                            <tr>
@@ -3523,8 +3711,8 @@ export const PayrollReports = () => {
                      </tbody>
                   </table>
                   {filteredTableData.length > 10 && (
-                     <div className="p-4 bg-slate-50/30 text-center border-t border-slate-50">
-                        <button className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-all">Showing top 10 records — View full audit in ledger</button>
+                     <div className="p-4 bg-slate-50/30 dark:bg-white/5 text-center border-t border-slate-50 dark:border-[#333333]">
+                        <button className="text-[9px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest hover:text-indigo-600 transition-all">Showing top 10 records — View full audit in ledger</button>
                      </div>
                   )}
                </div>
@@ -3532,23 +3720,23 @@ export const PayrollReports = () => {
          </div>
 
          {/* 7. Old Report Generation (Retained & Styled) */}
-         <div className="bg-white border-slate-100 border rounded-3xl p-10 mt-10 relative overflow-hidden group shadow-sm">
+         <div className="bg-white dark:bg-[#111111] border-slate-100 dark:border-[#333333] border rounded-3xl p-10 mt-10 relative overflow-hidden group shadow-sm">
             <div className="absolute top-0 right-0 p-12 opacity-5 translate-x-1/4 -translate-y-1/4 -rotate-12"><Archive size={200} /></div>
             <div className="flex flex-wrap items-center justify-between gap-10 relative z-10">
                <div className="flex items-center gap-6">
-                  <div className="w-16 h-16 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center border border-slate-100"><Archive size={28} /></div>
+                  <div className="w-16 h-16 bg-slate-50 dark:bg-white/5 text-slate-400 dark:text-gray-500 rounded-2xl flex items-center justify-center border border-slate-100 dark:border-[#333333]"><Archive size={28} /></div>
                   <div>
-                     <h3 className="text-lg font-black text-slate-900 uppercase tracking-widest leading-none">Report Archive Extraction</h3>
-                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">Generate point-in-time compliance artifacts</p>
+                     <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-widest leading-none">Report Archive Extraction</h3>
+                     <p className="text-xs font-bold text-slate-400 dark:text-gray-500 uppercase tracking-widest mt-2">Generate point-in-time compliance artifacts</p>
                   </div>
                </div>
                <div className="flex flex-wrap gap-3">
-                  <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
-                     <select value={reportPeriod.month} onChange={(e) => setReportPeriod({ ...reportPeriod, month: parseInt(e.target.value) })} className="px-6 py-2 bg-transparent text-xs font-black uppercase outline-none cursor-pointer border-r border-slate-100">
-                        {[...Array(12)].map((_, i) => <option key={i + 1} value={i + 1}>{new Date(2024, i).toLocaleString('default', { month: 'long' })}</option>)}
+                  <div className="flex items-center bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-xl p-1 shadow-sm">
+                     <select value={reportPeriod.month} onChange={(e) => setReportPeriod({ ...reportPeriod, month: parseInt(e.target.value) })} className="px-6 py-2 bg-transparent dark:text-white text-xs font-black uppercase outline-none cursor-pointer border-r border-slate-100 dark:border-[#333333]">
+                        {[...Array(12)].map((_, i) => <option key={i + 1} value={i + 1} className="dark:bg-[#111111]">{new Date(2024, i).toLocaleString('default', { month: 'long' })}</option>)}
                      </select>
-                     <select value={reportPeriod.year} onChange={(e) => setReportPeriod({ ...reportPeriod, year: parseInt(e.target.value) })} className="px-6 py-2 bg-transparent text-xs font-black uppercase outline-none cursor-pointer">
-                        {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+                     <select value={reportPeriod.year} onChange={(e) => setReportPeriod({ ...reportPeriod, year: parseInt(e.target.value) })} className="px-6 py-2 bg-transparent dark:text-white text-xs font-black uppercase outline-none cursor-pointer">
+                        {[2024, 2025, 2026].map(y => <option key={y} value={y} className="dark:bg-[#111111]">{y}</option>)}
                      </select>
                   </div>
                </div>
@@ -3556,12 +3744,12 @@ export const PayrollReports = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-12 relative z-10">
                {[
-                  { label: 'Executive Summary', type: 'Summary', icon: TrendingUp },
-                  { label: 'Dept Analysis', type: 'DeptAnalysis', icon: Users },
-                  { label: 'Tax Compliance', type: 'Tax', icon: Percent },
-                  { label: 'Full Ledger Export', type: 'Export', icon: FileText }
+                  // { label: 'Executive Summary', type: 'Summary', icon: TrendingUp },
+                  { label: 'Department Spend Analysis', type: 'DeptAnalysis', icon: Users },
+                  // { label: 'Tax Compliance', type: 'Tax', icon: Percent },
+                  { label: 'Detailed Payroll Ledger (All Data)', type: 'Export', icon: FileText }
                ].map((r, i) => (
-                  <button key={i} onClick={() => downloadReport(r.type)} className="p-6 bg-slate-50/50 border border-slate-100 rounded-2xl flex flex-col items-center gap-4 text-slate-600 hover:bg-white hover:text-indigo-600 hover:border-indigo-100 hover:shadow-lg hover:shadow-indigo-50 transition-all group/btn">
+                  <button key={i} onClick={() => downloadReport(r.type)} className="p-6 bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-[#333333] rounded-2xl flex flex-col items-center gap-4 text-slate-600 dark:text-gray-400 hover:bg-white dark:hover:bg-[#1a1a1a] hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-100 dark:hover:border-indigo-500/30 hover:shadow-lg hover:shadow-indigo-50 dark:hover:shadow-none transition-all group/btn">
                      <r.icon size={20} className="group-hover/btn:scale-110 " />
                      <span className="text-[10px] font-black uppercase tracking-widest">{r.label}</span>
                   </button>
@@ -3577,7 +3765,7 @@ export const BankTransferExport = () => {
       queryKey: ['settings'],
       queryFn: () => settingsAPI.getSettings().then(res => res.data.data)
    });
-   const currencySymbol = settings?.payroll?.currencySymbol || '₹';
+   const currencySymbol = settings?.organization?.currency ? getCurrencySymbol(settings.organization.currency) : (settings?.payroll?.currencySymbol || '₹');
 
    const [month, setMonth] = React.useState(new Date().getMonth() + 1);
    const [year, setYear] = React.useState(new Date().getFullYear());
@@ -3606,9 +3794,9 @@ export const BankTransferExport = () => {
    });
 
    const validatePayout = React.useCallback((h) => {
-      const bankName = h.user?.bankName || h.bankDetails?.bankName;
-      const accountNumber = h.user?.accountNumber || h.bankDetails?.accountNumber;
-      const ifsc = h.user?.ifscCode || h.bankDetails?.ifscCode;
+      const bankName = h.employee?.user?.bankName || h.bankDetails?.bankName;
+      const accountNumber = h.employee?.user?.accountNumber || h.bankDetails?.accountNumber;
+      const ifsc = h.employee?.user?.ifscCode || h.bankDetails?.ifscCode;
 
       if (bankName && accountNumber && ifsc) {
          return { type: 'Ready', label: 'Ready', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle2 };
@@ -3622,14 +3810,14 @@ export const BankTransferExport = () => {
    const filteredNodes = React.useMemo(() => {
       if (!history) return [];
       let nodes = history.filter(h => h.month === month && h.year === year && h.breakdown?.netPay > 0);
-      
+
       nodes = nodes.map(n => ({
          ...n,
          validation: validatePayout(n)
       }));
 
       if (bankFilter) {
-         nodes = nodes.filter(h => h.user?.bankName === bankFilter || h.bankDetails?.bankName === bankFilter);
+         nodes = nodes.filter(h => h.employee?.user?.bankName === bankFilter || h.bankDetails?.bankName === bankFilter);
       }
 
       if (statusFilter !== 'All') {
@@ -3653,10 +3841,10 @@ export const BankTransferExport = () => {
    const headers = ['Account Number', 'Beneficiary Name', 'Bank Name', 'IFSC', 'Amount', 'Description'];
    const previewRows = React.useMemo(() => {
       return filteredNodes.map(h => [
-         h.user?.accountNumber || h.bankDetails?.accountNumber || 'NOT-MAPPED',
-         h.user?.name,
-         h.user?.bankName || h.bankDetails?.bankName || 'NOT-MAPPED',
-         h.user?.ifscCode || h.bankDetails?.ifscCode || 'N/A',
+         h.employee?.user?.accountNumber || h.bankDetails?.accountNumber || 'NOT-MAPPED',
+         h.employee?.user?.name || h.employeeInfo?.name || 'Unknown',
+         h.employee?.user?.bankName || h.bankDetails?.bankName || 'NOT-MAPPED',
+         h.employee?.user?.ifscCode || h.bankDetails?.ifscCode || 'N/A',
          h.breakdown?.netPay,
          `Salary_${month}_${year}`
       ]);
@@ -3680,28 +3868,23 @@ export const BankTransferExport = () => {
    };
 
    return (
-      <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen">
+      <div className="p-8 space-y-8 bg-slate-50/50 dark:bg-black min-h-screen">
          {/* 🚀 Header Section */}
          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
-               <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-                  <Landmark className="text-indigo-600" size={28} />
+               <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
+                  <Landmark className="text-indigo-600 dark:text-indigo-400" size={28} />
                   Bank Clearing Export
                </h1>
                <p className="text-sm text-slate-500 font-medium">Generate and validate bank transfer files for salary payouts</p>
             </div>
 
             <div className="flex items-center gap-3">
-               <button 
-                  onClick={() => setStatusFilter('All')}
-                  className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
-               >
-                  Validate Data
-               </button>
-               <button 
+
+               <button
                   onClick={() => setIsPreviewOpen(true)}
                   disabled={!filteredNodes.length}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold transition-all shadow-md shadow-indigo-200 disabled:opacity-50"
+                  className="px-4 py-2 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 text-white rounded-lg text-sm font-bold transition-all shadow-md shadow-indigo-200 dark:shadow-none disabled:opacity-50"
                >
                   Generate File
                </button>
@@ -3717,20 +3900,20 @@ export const BankTransferExport = () => {
                { id: 'Pending', label: 'Pending Bank Info', val: stats.pendingCount, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', sub: 'Incomplete Records' },
                { id: 'Error', label: 'Failed Validations', val: stats.errorCount, icon: ShieldAlert, color: 'text-rose-600', bg: 'bg-rose-50', sub: 'Missing All Details' }
             ].map((kpi, i) => (
-               <div 
-                  key={i} 
+               <div
+                  key={i}
                   onClick={() => setStatusFilter(kpi.id)}
-                  className={`bg-white p-5 rounded-2xl border ${statusFilter === kpi.id ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-100'} shadow-sm hover:shadow-md transition-all group cursor-pointer`}
+                  className={`bg-white dark:bg-[#111111] p-5 rounded-2xl border ${statusFilter === kpi.id ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-100 dark:border-[#333333]'} shadow-sm hover:shadow-md transition-all group cursor-pointer`}
                >
                   <div className="flex justify-between items-start mb-4">
                      <div className={`p-3 rounded-xl ${kpi.bg} ${kpi.color} group-hover:scale-110 transition-transform`}>
                         <kpi.icon size={22} />
                      </div>
-                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded">Real-time</span>
+                     <span className="text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest bg-slate-50 dark:bg-white/5 px-2 py-1 rounded">Real-time</span>
                   </div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{kpi.label}</p>
-                  <h3 className="text-2xl font-black text-slate-900 mt-1">{kpi.val}</h3>
-                  <p className="text-[10px] font-medium text-slate-400 mt-1">{kpi.sub}</p>
+                  <p className="text-xs font-bold text-slate-400 dark:text-gray-500 uppercase tracking-wider">{kpi.label}</p>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{kpi.val}</h3>
+                  <p className="text-[10px] font-medium text-slate-400 dark:text-gray-500 mt-1">{kpi.sub}</p>
                </div>
             ))}
          </div>
@@ -3738,34 +3921,34 @@ export const BankTransferExport = () => {
          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* 📋 Employee Table & Filters */}
             <div className="lg:col-span-12 space-y-6">
-               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+               <div className="bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden">
                   {/* 🔍 Filter Bar */}
-                  <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex flex-wrap items-center justify-between gap-6">
+                  <div className="p-6 border-b border-slate-50 dark:border-white/5 bg-slate-50/30 dark:bg-white/5 flex flex-wrap items-center justify-between gap-6">
                      <div className="flex items-center gap-4">
-                        <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
-                           <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="bg-transparent px-3 py-1.5 text-xs font-bold outline-none cursor-pointer border-r border-slate-100">
-                              {[...Array(12)].map((_, i) => <option key={i + 1} value={i + 1}>{new Date(2024, i).toLocaleString('default', { month: 'short' })}</option>)}
+                        <div className="flex items-center bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-lg p-1 shadow-sm">
+                           <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="bg-transparent dark:text-white px-3 py-1.5 text-xs font-bold outline-none cursor-pointer border-r border-slate-100 dark:border-[#333333]">
+                              {[...Array(12)].map((_, i) => <option key={i + 1} value={i + 1} className="dark:bg-[#111111]">{new Date(2024, i).toLocaleString('default', { month: 'short' })}</option>)}
                            </select>
-                           <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="bg-transparent px-3 py-1.5 text-xs font-bold outline-none cursor-pointer">
-                              {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+                           <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="bg-transparent dark:text-white px-3 py-1.5 text-xs font-bold outline-none cursor-pointer">
+                              {[2024, 2025, 2026].map(y => <option key={y} value={y} className="dark:bg-[#111111]">{y}</option>)}
                            </select>
                         </div>
 
-                        <div className="flex items-center bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+                        <div className="flex items-center bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-lg px-3 py-1.5 shadow-sm">
                            <BankIcon size={14} className="text-slate-400 mr-2" />
-                           <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)} className="bg-transparent text-xs font-bold text-slate-600 outline-none cursor-pointer">
-                              <option value="">All Banks</option>
-                              {uniqueBanks.map(b => <option key={b} value={b}>{b}</option>)}
+                           <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)} className="bg-transparent dark:text-white text-xs font-bold text-slate-600 outline-none cursor-pointer">
+                              <option value="" className="dark:bg-[#111111]">All Banks</option>
+                              {uniqueBanks.map(b => <option key={b} value={b} className="dark:bg-[#111111]">{b}</option>)}
                            </select>
                         </div>
 
-                        <div className="flex items-center bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+                        <div className="flex items-center bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-lg px-3 py-1.5 shadow-sm">
                            <Filter size={14} className="text-slate-400 mr-2" />
-                           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="bg-transparent text-xs font-bold text-slate-600 outline-none cursor-pointer">
-                              <option value="All">All Statuses</option>
-                              <option value="Ready">Ready</option>
-                              <option value="Pending">Pending</option>
-                              <option value="Error">Error</option>
+                           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="bg-transparent dark:text-white text-xs font-bold text-slate-600 outline-none cursor-pointer">
+                              <option value="All" className="dark:bg-[#111111]">All Statuses</option>
+                              <option value="Ready" className="dark:bg-[#111111]">Ready</option>
+                              <option value="Pending" className="dark:bg-[#111111]">Pending</option>
+                              <option value="Error" className="dark:bg-[#111111]">Error</option>
                            </select>
                         </div>
                      </div>
@@ -3779,56 +3962,51 @@ export const BankTransferExport = () => {
                   <div className="overflow-x-auto">
                      <table className="w-full text-left">
                         <thead>
-                           <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
-                              <th className="px-8 py-4">Employee</th>
+                           <tr className="bg-slate-50/50 dark:bg-white/5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 dark:border-[#333333]">
+                              <th className="px-8 py-4">Employee Name</th>
+                              <th className="px-8 py-4">Employee ID</th>
                               <th className="px-8 py-4">Bank Details</th>
                               <th className="px-8 py-4 text-right">Net Pay</th>
                               <th className="px-8 py-4 text-center">Status</th>
-                              <th className="px-8 py-4 text-right">Actions</th>
                            </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-50">
+                        <tbody className="divide-y divide-slate-50 dark:divide-white/5">
                            {filteredNodes.length > 0 ? filteredNodes.map((h, i) => (
-                              <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
+                              <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group">
                                  <td className="px-8 py-4">
                                     <div className="flex items-center gap-3">
-                                       <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs font-black shadow-inner">
-                                          {h.user?.name?.charAt(0)}
-                                       </div>
-                                       <div>
-                                          <p className="font-bold text-slate-800 text-sm">{h.user?.name}</p>
-                                          <p className="text-[10px] font-bold text-slate-400 uppercase">#{h.user?.employeeId}</p>
-                                       </div>
+                                       <div className="w-10 h-10 rounded-full bg-slate-900 dark:bg-indigo-500 flex items-center justify-center text-white text-xs font-black shadow-inner">
+                                          {(h.employee?.user?.name || h.employeeInfo?.name || 'E')[0]}
+                                        </div>
+                                        <p className="font-bold text-slate-800 dark:text-white text-sm">{h.employee?.user?.name || h.employeeInfo?.name}</p>
                                     </div>
                                  </td>
                                  <td className="px-8 py-4">
-                                    <p className="text-sm font-bold text-slate-700">{h.user?.bankName || h.bankDetails?.bankName || 'NOT MAPPED'}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase">#{h.employee?.employeeCode || h.employeeInfo?.employeeId}</p>
+                                 </td>
+                                 <td className="px-8 py-4">
+                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{h.employee?.user?.bankName || h.bankDetails?.bankName || 'NOT MAPPED'}</p>
                                     <div className="flex items-center gap-3 mt-1">
-                                       <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase">ACC: {h.user?.accountNumber || h.bankDetails?.accountNumber || 'N/A'}</span>
-                                       <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase">IFSC: {h.user?.ifscCode || h.bankDetails?.ifscCode || 'N/A'}</span>
+                                       <span className="text-[10px] font-bold text-slate-400 dark:text-gray-500 bg-slate-100 dark:bg-[#1a1a1a] px-1.5 py-0.5 rounded uppercase">ACC: {h.employee?.user?.accountNumber || h.bankDetails?.accountNumber || 'N/A'}</span>
+                                       <span className="text-[10px] font-bold text-slate-400 dark:text-gray-500 bg-slate-100 dark:bg-[#1a1a1a] px-1.5 py-0.5 rounded uppercase">IFSC: {h.employee?.user?.ifscCode || h.bankDetails?.ifscCode || 'N/A'}</span>
                                     </div>
                                  </td>
                                  <td className="px-8 py-4 text-right">
-                                    <p className="font-black text-slate-900 text-sm">{currencySymbol}{formatCurrency(h.breakdown?.netPay)}</p>
+                                    <p className="font-black text-slate-900 dark:text-white text-sm">{currencySymbol}{formatCurrency(h.breakdown?.netPay)}</p>
 
-                                    <p className="text-[10px] font-bold text-slate-400">Regular Payout</p>
+                                    <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500">Regular Payout</p>
                                  </td>
                                  <td className="px-8 py-4 text-center">
                                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${h.validation.bg} ${h.validation.color}`}>
                                        {h.validation.label}
                                     </span>
                                  </td>
-                                 <td className="px-8 py-4 text-right">
-                                    <button className="text-slate-400 hover:text-indigo-600 transition-colors">
-                                       <Edit3 size={16} />
-                                    </button>
-                                 </td>
                               </tr>
                            )) : (
                               <tr>
                                  <td colSpan={5} className="px-8 py-20 text-center">
                                     <div className="flex flex-col items-center gap-3">
-                                       <div className="p-4 bg-slate-50 rounded-full text-slate-300">
+                                       <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-full text-slate-300 dark:text-gray-600">
                                           <Search size={32} />
                                        </div>
                                        <p className="text-sm font-bold text-slate-400">No payout records match your current selection</p>
@@ -3841,27 +4019,27 @@ export const BankTransferExport = () => {
                   </div>
 
                   {/* 📤 Export Status Bar */}
-                  <div className="p-6 bg-slate-900 flex flex-col md:flex-row items-center justify-between gap-6">
+                  <div className="p-6 bg-slate-900 dark:bg-[#1a1a1a] flex flex-col md:flex-row items-center justify-between gap-6">
                      <div className="flex items-center gap-6">
                         <div className="flex flex-col">
                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Ready to Disburse</span>
                            <h4 className="text-white font-bold">{stats.readyCount} Employees</h4>
                         </div>
                         <div className="h-8 w-px bg-white/10 hidden md:block" />
-                        <div className="flex flex-col">
+                        {/* <div className="flex flex-col">
                            <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Issues Found</span>
                            <h4 className="text-white font-bold">{stats.pendingCount + stats.errorCount} Records</h4>
-                        </div>
+                        </div> */}
                      </div>
 
                      <div className="flex items-center gap-3 w-full md:w-auto">
-                        <button className="flex-1 md:flex-none px-6 py-2 border border-white/20 text-white rounded-lg text-xs font-bold hover:bg-white/5 transition-all uppercase tracking-widest">
+                        {/* <button className="flex-1 md:flex-none px-6 py-2 border border-white/20 text-white rounded-lg text-xs font-bold hover:bg-white/5 transition-all uppercase tracking-widest">
                            Fix Issues
-                        </button>
-                        <button 
+                        </button> */}
+                        <button
                            onClick={() => setIsPreviewOpen(true)}
                            disabled={!filteredNodes.length}
-                           className="flex-1 md:flex-none px-6 py-2 bg-indigo-500 text-white rounded-lg text-xs font-bold hover:bg-indigo-600 transition-all uppercase tracking-widest shadow-lg shadow-indigo-500/20 disabled:opacity-30"
+                           className="flex-1 md:flex-none px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold transition-all uppercase tracking-widest shadow-lg shadow-indigo-500/20 dark:shadow-none disabled:opacity-30"
                         >
                            Preview & Export
                         </button>
@@ -3879,30 +4057,30 @@ export const BankTransferExport = () => {
             maxWidth="4xl"
          >
             <div className="p-6 space-y-6">
-               <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl flex gap-3">
+               <div className="p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-xl flex gap-3">
                   <AlertCircle size={20} className="text-amber-600 shrink-0 mt-0.5" />
                   <div>
-                     <p className="text-sm font-bold text-amber-800 uppercase tracking-tight">Safety Verification</p>
-                     <p className="text-xs font-medium text-amber-700/80 mt-1">
+                     <p className="text-sm font-bold text-amber-800 dark:text-amber-400 uppercase tracking-tight">Safety Verification</p>
+                     <p className="text-xs font-medium text-amber-700/80 dark:text-amber-500/70 mt-1">
                         Please review the payout records below. Once generated, this file will serve as the official bank transfer instruction.
                      </p>
                   </div>
                </div>
 
-               <div className="border border-slate-100 rounded-xl overflow-hidden max-h-[400px] overflow-y-auto">
+               <div className="border border-slate-100 dark:border-[#333333] rounded-xl overflow-hidden max-h-[400px] overflow-y-auto">
                   <table className="w-full text-left text-xs">
-                     <thead className="sticky top-0 bg-slate-50 border-b border-slate-100">
+                     <thead className="sticky top-0 bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">
                         <tr>
                            {headers.map((h, idx) => (
-                              <th key={idx} className="px-4 py-3 font-black text-slate-400 uppercase tracking-wider">{h}</th>
+                              <th key={idx} className="px-4 py-3 font-black text-slate-400 dark:text-gray-500 uppercase tracking-wider">{h}</th>
                            ))}
                         </tr>
                      </thead>
-                     <tbody className="divide-y divide-slate-50 italic">
+                     <tbody className="divide-y divide-slate-50 dark:divide-white/5 italic">
                         {previewRows.map((row, idx) => (
-                           <tr key={idx} className="hover:bg-slate-50/50">
+                           <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-white/5">
                               {row.map((cell, cidx) => (
-                                 <td key={cidx} className="px-4 py-3 text-slate-600 font-medium">
+                                 <td key={cidx} className="px-4 py-3 text-slate-600 dark:text-slate-300 font-medium">
                                     {typeof cell === 'number' ? `${currencySymbol}${formatCurrency(cell)}` : cell}
                                  </td>
 
@@ -3914,15 +4092,15 @@ export const BankTransferExport = () => {
                </div>
 
                <div className="flex justify-end gap-3 pt-4">
-                  <button 
+                  <button
                      onClick={() => setIsPreviewOpen(false)}
-                     className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all"
+                     className="px-6 py-2.5 bg-slate-100 dark:bg-[#333333] text-slate-600 dark:text-slate-300 rounded-xl font-bold text-sm hover:bg-slate-200 dark:hover:bg-[#444444] transition-all"
                   >
                      Discard
                   </button>
-                  <button 
+                  <button
                      onClick={() => setIsConfirmOpen(true)}
-                     className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 flex items-center gap-2"
+                     className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 dark:shadow-none flex items-center gap-2"
                   >
                      <Download size={18} /> Generate Final CSV
                   </button>
@@ -3980,15 +4158,15 @@ export const HourManagement = () => {
          title="Hour Management"
          description="Manage hourly rates for employees under the Hourly Rate payroll policy."
       >
-         <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden animate-fade-in">
+         <div className="bg-white dark:bg-[#111111] rounded-xl border border-gray-100 dark:border-[#333333] shadow-sm overflow-hidden animate-fade-in">
             <table className="w-full text-left border-collapse">
                <thead>
-                  <tr className="bg-gray-50 dark:bg-white/2 border-b border-gray-100 dark:border-white/5">
-                     <th className="px-8 py-6 text-sm font-semibold text-gray-500  ">Employee ID</th>
-                     <th className="px-8 py-6 text-sm font-semibold text-gray-500  ">Name</th>
-                     <th className="px-8 py-6 text-sm font-semibold text-gray-500  ">Designation</th>
-                     <th className="px-8 py-6 text-sm font-semibold text-gray-500  ">Role</th>
-                     <th className="px-8 py-6 text-sm font-semibold text-gray-500  ">Hour Rate</th>
+                  <tr className="bg-gray-50 dark:bg-white/5 border-b border-gray-100 dark:border-[#333333]">
+                     <th className="px-8 py-6 text-sm font-semibold text-gray-500 dark:text-gray-400">Employee ID</th>
+                     <th className="px-8 py-6 text-sm font-semibold text-gray-500 dark:text-gray-400">Name</th>
+                     <th className="px-8 py-6 text-sm font-semibold text-gray-500 dark:text-gray-400">Designation</th>
+                     <th className="px-8 py-6 text-sm font-semibold text-gray-500 dark:text-gray-400">Role</th>
+                     <th className="px-8 py-6 text-sm font-semibold text-gray-500 dark:text-gray-400">Hour Rate</th>
                   </tr>
                </thead>
                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -3996,27 +4174,27 @@ export const HourManagement = () => {
                      <tr><td colSpan="5" className="px-8 py-24 text-center">
                         <div className="flex flex-col items-center gap-4">
                            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                           <p className="font-semibold text-gray-500   text-xs">Architecting Roster...</p>
+                           <p className="font-semibold text-gray-500 dark:text-gray-400 text-xs">Architecting Roster...</p>
                         </div>
                      </td></tr>
                   ) : hourData?.map((u, i) => (
-                     <tr key={i} className="hover:bg-gray-50 dark:hover:bg-white/2 transition-all group">
-                        <td className="px-8 py-6 font-mono text-sm font-medium text-gray-900 dark:text-gray-900  tracking-tight">{u.employeeId}</td>
+                     <tr key={i} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-all group">
+                        <td className="px-8 py-6 font-mono text-sm font-medium text-gray-900 dark:text-white tracking-tight">{u.employeeId}</td>
                         <td className="px-8 py-6">
                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-black/80 rounded-xl flex items-center justify-center text-gray-900 text-xs font-semibold shadow-sm">
+                              <div className="w-10 h-10 bg-black/80 dark:bg-indigo-500/20 rounded-xl flex items-center justify-center text-white dark:text-indigo-400 text-xs font-semibold shadow-sm">
                                  {u.name.charAt(0)}
                               </div>
-                              <span className="font-medium text-gray-900 dark:text-gray-900">{u.name}</span>
+                              <span className="font-medium text-gray-900 dark:text-white">{u.name}</span>
                            </div>
                         </td>
-                        <td className="px-8 py-6 text-xs font-medium text-gray-500  ">{u.designation || 'Trainee'}</td>
+                        <td className="px-8 py-6 text-xs font-medium text-gray-500 dark:text-gray-400">{u.designation || 'Trainee'}</td>
                         <td className="px-8 py-6">
-                           <span className="px-3 py-1.5 bg-primary-50 dark:bg-primary-500/10 text-primary-600 rounded-xl text-sm font-semibold   border border-primary-500/20">{u.role}</span>
+                           <span className="px-3 py-1.5 bg-primary-50 dark:bg-primary-500/10 text-primary-600 dark:text-primary-400 rounded-xl text-sm font-semibold border border-primary-500/20">{u.role}</span>
                         </td>
                         <td className="px-8 py-6">
                            <div className="flex items-center gap-2">
-                              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-green-50 text-green-700">
+                              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-green-700 dark:text-emerald-400">
                                  <Wallet size={16} />
                               </div>
                               <span className="text-xl font-semibold text-gray-900 dark:text-gray-900">{currencySymbol}{u.hourRate || '0.00'}</span>

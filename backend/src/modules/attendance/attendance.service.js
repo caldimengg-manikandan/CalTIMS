@@ -1,73 +1,108 @@
-'use strict';
-
-const AttendanceLog = require('./attendance.model');
-const User = require('../users/user.model');
+const { prisma } = require('../../config/database');
 const AppError = require('../../shared/utils/AppError');
-const Settings = require('../settings/settings.model');
+const { enforceOrg } = require('../../shared/utils/prismaHelper');
 
 const attendanceService = {
   /**
    * Synchronize logs from a daemon or direct push.
-   * Expects an array of logs: [{ employeeId, timestamp, type, organizationId }]
+   * We map raw logs (Check-In/Out) to the daily Attendance record.
    */
   async syncLogs(logs, globalOrganizationId = null) {
-    const results = {
-      received: logs.length,
-      created: 0,
-      updated: 0,
-      errors: 0
-    };
+    const results = { received: logs.length, created: 0, updated: 0, errors: 0 };
 
     for (const log of logs) {
       try {
         const orgId = log.organizationId || globalOrganizationId;
-        if (!orgId) {
-          console.warn(`[Attendance] Missing organizationId for log:`, log);
-          results.errors++;
-          continue;
-        }
+        if (!orgId) { results.errors++; continue; }
 
-        const user = await User.findOne({ employeeId: log.employeeId, organizationId: orgId });
-        if (!user) {
-          console.warn(`[Attendance] User not found for employeeId: ${log.employeeId}`);
+        const success = await this.syncLogEntry(log, orgId);
+        if (success) {
+          results.created++; // Incremented even if it was an update for simplicity
+        } else {
           results.errors++;
-          continue;
         }
-
-        const timestamp = new Date(log.timestamp);
-        
-        // Upsert log to avoid duplicates
-        await AttendanceLog.findOneAndUpdate(
-          { userId: user._id, timestamp, type: log.type },
-          { 
-            userId: user._id, 
-            employeeId: log.employeeId, 
-            timestamp, 
-            type: log.type,
-            organizationId: orgId,
-            rawLog: log.raw || {}
-          },
-          { upsert: true, new: true }
-        );
-        results.created++;
       } catch (err) {
-        console.error(`[Attendance] Sync error for log:`, log, err.message);
         results.errors++;
       }
     }
-
     return results;
   },
 
   /**
-   * Get attendance for a user in a date range
+   * Refined sync logic using findFirst to avoid duplicates on the same workDate
    */
-  async getAttendance(userId, from, to, organizationId) {
-    return await AttendanceLog.find({
-      userId,
-      organizationId,
-      timestamp: { $gte: new Date(from), $lte: new Date(to) }
-    }).sort({ timestamp: 1 });
+  async syncLogEntry(log, orgId) {
+     // Find employee by code (hard-scoped)
+     const employee = await prisma.employee.findUnique({ 
+        where: { 
+          organizationId_employeeCode: { 
+            employeeCode: log.employeeId.toString(), 
+            organizationId: orgId 
+          } 
+        } 
+     });
+     if (!employee) return false;
+
+     const ts = new Date(log.timestamp);
+     const workDate = new Date(ts);
+     workDate.setHours(0,0,0,0);
+
+     // Find existing record for this employee and date
+     const existing = await prisma.attendance.findFirst({
+        where: { 
+          employeeId: employee.id, 
+          workDate,
+          organizationId: orgId,
+          isDeleted: false
+        }
+     });
+
+     const type = (log.type || 'IN').toUpperCase();
+     const data = {};
+     if (type === 'IN' || type === 'CHKIN') data.checkIn = ts;
+     else if (type === 'OUT' || type === 'CHKOUT') data.checkOut = ts;
+
+     if (existing) {
+        // Hard isolation in update
+        await prisma.attendance.update({ 
+           where: { id_organizationId: { id: existing.id, organizationId: orgId } }, 
+           data 
+        });
+     } else {
+        await prisma.attendance.create({ 
+           data: { ...data, employeeId: employee.id, organizationId: orgId, workDate } 
+        });
+     }
+     return true;
+  },
+
+  /**
+   * Fetch attendance for a date range
+   */
+  async getAttendance(userIdOrEmployeeId, from, to, organizationId) {
+    const employee = await prisma.employee.findFirst({
+       where: { 
+         OR: [
+           { id: userIdOrEmployeeId }, 
+           { userId: userIdOrEmployeeId }
+         ],
+         organizationId,
+         isDeleted: false
+       }
+    });
+    
+    if (!employee) return [];
+
+    const scopedQuery = enforceOrg({
+      where: {
+        employeeId: employee.id,
+        workDate: { gte: new Date(from), lte: new Date(to) }
+      },
+      include: { employee: { include: { user: { select: { name: true } } } } },
+      orderBy: { workDate: 'asc' }
+    }, organizationId);
+
+    return await prisma.attendance.findMany(scopedQuery);
   }
 };
 

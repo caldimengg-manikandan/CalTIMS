@@ -13,7 +13,7 @@ router.use(authenticate);
 /**
  * Test connection to HikCentral
  */
-router.post('/test', checkPermission('manageSettings'), asyncHandler(async (req, res) => {
+router.post('/test', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
   const result = await hikcentralService.testConnection(req.body);
   if (result.success) {
     ApiResponse.success(res, { message: result.message, data: result.data });
@@ -25,7 +25,7 @@ router.post('/test', checkPermission('manageSettings'), asyncHandler(async (req,
 /**
  * Manual trigger sync for HikCentral
  */
-router.post('/sync', checkPermission('manageSettings'), asyncHandler(async (req, res) => {
+router.post('/sync', checkPermission('Settings', 'General', 'edit'), asyncHandler(async (req, res) => {
   const results = await hikcentralService.syncAll();
   ApiResponse.success(res, { message: 'Manual sync for HikCentral completed', data: results });
 }));

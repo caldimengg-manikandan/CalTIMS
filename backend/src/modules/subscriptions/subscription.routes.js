@@ -10,5 +10,6 @@ const { authenticate } = require('../../middleware/auth.middleware');
 
 router.post('/upgrade', subscriptionController.upgrade);
 router.get('/current', subscriptionController.getCurrent);
+router.get('/history', subscriptionController.getHistory);
 
 module.exports = router;

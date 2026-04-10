@@ -1,49 +1,67 @@
 'use strict';
 
-const Notification = require('./notification.model');
+const { prisma } = require('../../config/database');
+const socketService = require('../../shared/services/socket.service');
 
 const notificationService = {
-  async create({ userId, type, title, message, refId = null, refModel = null, organizationId }) {
+  async create({ userId, type, title, message, refId = null, refModel = null, organizationId, link = null }) {
     if (!organizationId) {
       console.warn(`[NotificationService] Missing organizationId for notification to user ${userId}`);
     }
-    return Notification.create({ userId, type, title, message, refId, refModel, organizationId });
+    const notification = await prisma.notification.create({
+      data: {
+        userId,
+        organizationId: organizationId || '',
+        title: title || type,
+        message,
+        isRead: false,
+        link: link || (refId ? `/${(refModel || '').toLowerCase()}s/${refId}` : null),
+      },
+    });
+
+    // Real-time delivery via Socket.io
+    socketService.emit('notification', notification, { room: `user_${userId}` });
+
+    return notification;
   },
 
   async getForUser(userId, query = {}, organizationId) {
     const limit = Math.min(parseInt(query.limit) || 20, 5000);
     const page = parseInt(query.page) || 1;
     const skip = (page - 1) * limit;
-    const filter = { userId, organizationId };
-    if (query.unreadOnly === 'true') filter.isRead = false;
+
+    const where = { userId, organizationId };
+    if (query.unreadOnly === 'true') where.isRead = false;
 
     const [notifications, total, unreadCount] = await Promise.all([
-      Notification.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      Notification.countDocuments(filter),
-      Notification.countDocuments({ userId, organizationId, isRead: false }),
+      prisma.notification.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      prisma.notification.count({ where }),
+      prisma.notification.count({ where: { userId, organizationId, isRead: false } }),
     ]);
 
     return { notifications, total, unreadCount, page, limit };
   },
 
   async markRead(id, userId, organizationId) {
-    return Notification.findOneAndUpdate(
-      { _id: id, userId, organizationId },
-      { isRead: true },
-      { new: true }
-    );
+    return prisma.notification.updateMany({
+      where: { id, userId, organizationId },
+      data: { isRead: true },
+    });
   },
 
   async markAllRead(userId, organizationId) {
-    return Notification.updateMany({ userId, isRead: false, organizationId }, { isRead: true });
+    return prisma.notification.updateMany({
+      where: { userId, organizationId, isRead: false },
+      data: { isRead: true },
+    });
   },
 
   async getUnreadCount(userId, organizationId) {
-    return Notification.countDocuments({ userId, isRead: false, organizationId });
+    return prisma.notification.count({ where: { userId, organizationId, isRead: false } });
   },
 
   async clearAll(userId, organizationId) {
-    return Notification.deleteMany({ userId, organizationId });
+    return prisma.notification.deleteMany({ where: { userId, organizationId } });
   },
 };
 

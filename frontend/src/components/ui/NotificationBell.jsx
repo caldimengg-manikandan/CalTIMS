@@ -1,23 +1,41 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bell, CheckCheck, X, Calendar, Clock, AlertCircle, Trash2, Ticket, MessageSquare, CheckCircle } from 'lucide-react'
 import { notificationAPI } from '@/services/endpoints'
 import { formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
+import { useSocket } from '@/hooks/useSocket'
+import { useAuthStore } from '@/store/authStore'
 
 const typeIcons = {
+    // Leaves
+    LEAVE_APPLIED: { icon: Calendar, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-black' },
     leave_applied: { icon: Calendar, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-black' },
+    LEAVE_APPROVED: { icon: Calendar, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
     leave_approved: { icon: Calendar, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
+    LEAVE_REJECTED: { icon: Calendar, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-black' },
     leave_rejected: { icon: Calendar, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-black' },
+    LEAVE_CANCELLED: { icon: Calendar, color: 'text-slate-400', bg: 'bg-slate-50 dark:bg-black' },
     leave_cancelled: { icon: Calendar, color: 'text-slate-400', bg: 'bg-slate-50 dark:bg-black' },
+    // Timesheets
+    TIMESHEET_SUBMITTED: { icon: Clock, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-black' },
     timesheet_submitted: { icon: Clock, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-black' },
+    TIMESHEET_APPROVED: { icon: Clock, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
     timesheet_approved: { icon: Clock, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
+    TIMESHEET_REJECTED: { icon: Clock, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-black' },
     timesheet_rejected: { icon: Clock, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-black' },
+    // Incidents
+    INCIDENT_CREATED: { icon: Ticket, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-black' },
     incident_created: { icon: Ticket, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-black' },
+    INCIDENT_UPDATED: { icon: Ticket, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-black' },
     incident_updated: { icon: Ticket, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-black' },
+    INCIDENT_RESPONSE: { icon: MessageSquare, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-black' },
     incident_response: { icon: MessageSquare, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-black' },
+    INCIDENT_RESOLVED: { icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
     incident_resolved: { icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-black' },
+    // Projects
+    PROJECT_ALLOCATED: { icon: CheckCircle, color: 'text-primary-500', bg: 'bg-primary-50 dark:bg-black' },
 }
 
 function NotificationItem({ notif, onRead, onClose }) {
@@ -28,35 +46,47 @@ function NotificationItem({ notif, onRead, onClose }) {
     const handleClick = () => {
         // Mark as read if not already
         if (!notif.isRead) {
-            onRead(notif._id)
+            onRead(notif.id || notif._id)
         }
 
         // Navigate based on type
-        switch (notif.type) {
-            case 'leave_applied':
-            case 'leave_approved':
-            case 'leave_rejected':
-            case 'leave_cancelled':
+        const type = notif.type?.toUpperCase();
+        switch (type) {
+            case 'LEAVE_APPLIED':
+            case 'LEAVE_APPROVED':
+            case 'LEAVE_REJECTED':
+            case 'LEAVE_CANCELLED':
                 navigate('/leaves')
                 break
-            case 'timesheet_submitted':
+            case 'TIMESHEET_SUBMITTED':
                 navigate('/timesheets/manage')
                 break
-            case 'timesheet_approved':
-            case 'timesheet_rejected':
+            case 'TIMESHEET_APPROVED':
+            case 'TIMESHEET_REJECTED':
                 navigate('/timesheets/history')
                 break
-            case 'incident_created':
-            case 'incident_updated':
-            case 'incident_response':
-            case 'incident_resolved':
-                if (notif.refId) {
-                    navigate(`/incidents/${notif.refId}`)
-                } else {
-                    navigate('/incidents')
-                }
+            case 'INCIDENT_CREATED':
+            case 'INCIDENT_UPDATED':
+            case 'INCIDENT_RESPONSE':
+            case 'INCIDENT_RESOLVED':
+                if (notif.refId) navigate(`/incidents/${notif.refId}`)
+                else navigate('/incidents')
+                break
+            case 'PROJECT_ALLOCATED':
+                navigate('/projects')
                 break
             default:
+                if (notif.link) {
+                    let cleanLink = notif.link.replace(/^\/app/, '');
+                    // Handle legacy links that might have pointed to ID-based routes that don't exist
+                    if (cleanLink.startsWith('/timesheets/') && !cleanLink.includes('/history') && !cleanLink.includes('/manage')) {
+                        cleanLink = '/timesheets/manage';
+                    }
+                    if (cleanLink.startsWith('/leaves/') && !cleanLink.includes('/manage')) {
+                        cleanLink = '/leaves';
+                    }
+                    navigate(cleanLink);
+                }
                 break
         }
 
@@ -96,6 +126,22 @@ export default function NotificationBell() {
     const dropdownRef = useRef(null)
     const queryClient = useQueryClient()
 
+    // Real-time listener
+    const userId = useAuthStore(s => s.user?.id)
+
+    const handleNewNotification = useCallback((notification) => {
+        // Show standard success toast instead of custom bell notification
+        toast.success(notification.title || notification.message || 'New notification');
+
+        // Refresh count and list
+        queryClient.invalidateQueries({ queryKey: ['notif-unread-count'] })
+        if (open) {
+            queryClient.invalidateQueries({ queryKey: ['notifications'] })
+        }
+    }, [queryClient, open]);
+    
+    useSocket('notification', handleNewNotification);
+
     // Poll unread count every 5s for on-time updates
     const { data: countData } = useQuery({
         queryKey: ['notif-unread-count'],
@@ -114,7 +160,38 @@ export default function NotificationBell() {
 
     const markReadMutation = useMutation({
         mutationFn: (id) => notificationAPI.markRead(id),
-        onSuccess: () => {
+        onMutate: async (id) => {
+            // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+            await queryClient.cancelQueries({ queryKey: ['notifications'] })
+            await queryClient.cancelQueries({ queryKey: ['notif-unread-count'] })
+
+            // Snapshot the previous value
+            const previousNotifs = queryClient.getQueryData(['notifications'])
+            const previousCount = queryClient.getQueryData(['notif-unread-count'])
+
+            // Optimistically update to the new value
+            if (previousNotifs) {
+                queryClient.setQueryData(['notifications'], {
+                    ...previousNotifs,
+                    notifications: previousNotifs.notifications.map(n =>
+                        (n.id === id || n._id === id) ? { ...n, isRead: true } : n
+                    )
+                })
+            }
+            if (previousCount) {
+                queryClient.setQueryData(['notif-unread-count'], {
+                    ...previousCount,
+                    count: Math.max(0, previousCount.count - 1)
+                })
+            }
+
+            return { previousNotifs, previousCount }
+        },
+        onError: (err, id, context) => {
+            queryClient.setQueryData(['notifications'], context.previousNotifs)
+            queryClient.setQueryData(['notif-unread-count'], context.previousCount)
+        },
+        onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ['notifications'] })
             queryClient.invalidateQueries({ queryKey: ['notif-unread-count'] })
         },
@@ -122,7 +199,28 @@ export default function NotificationBell() {
 
     const markAllMutation = useMutation({
         mutationFn: () => notificationAPI.markAllRead(),
-        onSuccess: () => {
+        onMutate: async () => {
+            await queryClient.cancelQueries({ queryKey: ['notifications'] })
+            await queryClient.cancelQueries({ queryKey: ['notif-unread-count'] })
+
+            const previousNotifs = queryClient.getQueryData(['notifications'])
+            const previousCount = queryClient.getQueryData(['notif-unread-count'])
+
+            if (previousNotifs) {
+                queryClient.setQueryData(['notifications'], {
+                    ...previousNotifs,
+                    notifications: previousNotifs.notifications.map(n => ({ ...n, isRead: true }))
+                })
+            }
+            queryClient.setQueryData(['notif-unread-count'], { count: 0 })
+
+            return { previousNotifs, previousCount }
+        },
+        onError: (err, variables, context) => {
+            queryClient.setQueryData(['notifications'], context.previousNotifs)
+            queryClient.setQueryData(['notif-unread-count'], context.previousCount)
+        },
+        onSettled: () => {
             toast.success('All notifications marked as read')
             queryClient.invalidateQueries({ queryKey: ['notifications'] })
             queryClient.invalidateQueries({ queryKey: ['notif-unread-count'] })
@@ -232,7 +330,7 @@ export default function NotificationBell() {
                         ) : (
                             notifications.map(n => (
                                 <NotificationItem
-                                    key={n._id}
+                                    key={n.id || n._id}
                                     notif={n}
                                     onRead={(id) => markReadMutation.mutate(id)}
                                     onClose={() => setOpen(false)}

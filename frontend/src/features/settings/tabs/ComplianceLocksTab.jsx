@@ -44,9 +44,19 @@ export default function ComplianceLocksTab() {
 
     return (
         <div className="space-y-8 pb-10">
-            <div>
-                <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Compliance & Data Integrity</h2>
-                <p className="text-sm text-slate-500 font-medium">Enforce regulatory boundaries and historical data preservation</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Compliance & Data Integrity</h2>
+                    <p className="text-sm text-slate-500 font-medium">Enforce regulatory boundaries and historical data preservation</p>
+                </div>
+                <button
+                    onClick={() => saveMutation.mutate()}
+                    disabled={saveMutation.isPending}
+                    className="flex items-center gap-3 px-8 py-3 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black uppercase tracking-widest shadow-lg hover:scale-105 active:scale-95 transition-all disabled:opacity-40"
+                >
+                    {saveMutation.isPending ? <Spinner size="sm" /> : <Save size={18} />}
+                    Save Changes
+                </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -62,7 +72,7 @@ export default function ComplianceLocksTab() {
                                     max="31"
                                     className="input w-24 h-11 text-center font-bold text-lg"
                                     value={compliance.timesheetFreezeDay}
-                                    onChange={e => upd('timesheetFreezeDay', parseInt(e.target.value))}
+                                    onChange={e => upd('timesheetFreezeDay', parseInt(e.target.value) || 1)}
                                 />
                                 <div className="flex-1">
                                     <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Locks Historical Entries</p>
@@ -105,7 +115,7 @@ export default function ComplianceLocksTab() {
                                     type="number"
                                     className="input w-24 h-11 text-center font-bold text-lg"
                                     value={compliance.auditLogRetentionDays}
-                                    onChange={e => upd('auditLogRetentionDays', parseInt(e.target.value))}
+                                    onChange={e => upd('auditLogRetentionDays', parseInt(e.target.value) || 0)}
                                 />
                                 <div className="flex-1">
                                     <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Auto-Purge Cycles</p>
@@ -115,31 +125,8 @@ export default function ComplianceLocksTab() {
                                 </div>
                             </div>
                         </div>
-
-                        <div className="p-5 rounded-[2rem] btn-primary text-white shadow-xl shadow-primary/20">
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="p-2 rounded-xl bg-white/20">
-                                    <FileLock size={20} />
-                                </div>
-                                <p className="text-xs font-black uppercase tracking-widest">Enterprise Shield</p>
-                            </div>
-                            <p className="text-xs font-medium leading-relaxed opacity-90">
-                                These settings are legally binding for ISO-27001 compliance. Any modifications are instantly recorded in the global audit trail.
-                            </p>
-                        </div>
                     </div>
                 </SectionCard>
-            </div>
-
-            <div className="sticky bottom-4 z-20 flex justify-end">
-                <button
-                    onClick={() => saveMutation.mutate()}
-                    disabled={saveMutation.isPending}
-                    className="flex items-center gap-3 px-8 py-4 rounded-2xl btn-primary hover:btn-primary hover:bg-primary-700 text-white font-black uppercase tracking-widest shadow-xl shadow-primary/25 transition-all active:scale-95 disabled:opacity-70"
-                >
-                    {saveMutation.isPending ? <Spinner size="sm" color="white" /> : <Save size={18} />}
-                    Enforce Policy
-                </button>
             </div>
         </div>
     )

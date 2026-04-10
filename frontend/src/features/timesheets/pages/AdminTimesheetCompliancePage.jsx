@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { timesheetAPI, projectAPI, settingsAPI } from '@/services/endpoints'
+import { timesheetAPI, projectAPI, settingsAPI, taskAPI } from '@/services/endpoints'
 import { format, startOfWeek, subDays, addDays } from 'date-fns'
 import toast from 'react-hot-toast'
 import PageHeader from '@/components/ui/PageHeader'
@@ -47,7 +47,26 @@ export default function AdminTimesheetCompliancePage() {
         queryKey: ['settings', 'timesheet'],
         queryFn: () => settingsAPI.getTimesheetSettings().then(r => r.data.data),
     })
-    const TASK_TYPES = tsSettings?.taskCategories || ['Select Task', 'Development', 'Bug Fixing', 'Design', 'Meeting', 'Testing']
+    
+    // Fetch projects assigned to the selected user
+    const { data: userProjects } = useQuery({
+        queryKey: ['projects', 'assigned', selectedUser?.id || selectedUser?._id],
+        queryFn: () => projectAPI.getAll({ status: 'active', assignedOnly: true, userId: selectedUser?.id || selectedUser?._id }).then(r => r.data.data),
+        enabled: !!selectedUser,
+    })
+
+    // Fetch tasks assigned to the selected user (or all tasks for admins)
+    const { data: userTasks } = useQuery({
+        queryKey: ['tasks', 'all-for-admin-fill', selectedUser?.id || selectedUser?._id],
+        queryFn: () => taskAPI.getAll({ 
+            isActive: true, 
+            assignedOnly: false, // Admin fill should see all possible tasks for the project
+            organizationId: selectedUser?.organizationId 
+        }).then(r => r.data.data),
+        enabled: !!selectedUser,
+    })
+
+    const TASK_TYPES = tsSettings?.taskCategories || ['Development', 'Bug Fixing', 'Design', 'Meeting', 'Testing']
 
     // Mutations
     const fillMutation = useMutation({
@@ -84,7 +103,7 @@ export default function AdminTimesheetCompliancePage() {
 
         if (payloadRows.length === 0) return toast.error('Please add at least one valid project row.')
 
-        fillMutation.mutate({ targetUserId: selectedUser._id, rows: payloadRows })
+        fillMutation.mutate({ targetUserId: selectedUser.id || selectedUser._id, rows: payloadRows })
     }
 
     return (
@@ -99,7 +118,7 @@ export default function AdminTimesheetCompliancePage() {
                 {/* Controls */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-4 bg-white dark:bg-black px-4 py-3 rounded-xl shadow-sm border border-slate-100 dark:border-white">
-                        <button onClick={() => setCurrentDate(subDays(currentDate, 7))} className="p-1.5 hover:bg-slate-50 rounded-lg">
+                        <button onClick={() => setCurrentDate(subDays(currentDate, 7))} className="p-1.5 hover:bg-slate-50 dark:hover:bg-white/10 rounded-lg">
                             <ChevronLeft size={20} className="text-slate-600" />
                         </button>
                         <div className="flex items-center gap-2">
@@ -109,7 +128,7 @@ export default function AdminTimesheetCompliancePage() {
                         <button
                             onClick={() => setCurrentDate(addDays(currentDate, 7))}
                             disabled={startOfWeek(addDays(currentDate, 7), { weekStartsOn }) > startOfWeek(new Date(), { weekStartsOn })}
-                            className={`p-1.5 rounded-lg ${startOfWeek(addDays(currentDate, 7), { weekStartsOn }) > startOfWeek(new Date(), { weekStartsOn }) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50'}`}
+                            className={`p-1.5 rounded-lg ${startOfWeek(addDays(currentDate, 7), { weekStartsOn }) > startOfWeek(new Date(), { weekStartsOn }) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-white/10'}`}
                         >
                             <ChevronRight size={20} className="text-slate-600" />
                         </button>
@@ -131,7 +150,7 @@ export default function AdminTimesheetCompliancePage() {
 
                 {/* List */}
                 <div className="bg-white dark:bg-black rounded-xl shadow-sm border border-slate-200 dark:border-white overflow-hidden flex flex-col min-h-0">
-                    {isLoading ? (
+                    {isLoading && !complianceData?.length ? (
                         <div className="p-10 flex justify-center"><Spinner /></div>
                     ) : (
                         <div className="table-wrapper scroll-v-adaptive rounded-none border-0 shadow-none">
@@ -148,10 +167,10 @@ export default function AdminTimesheetCompliancePage() {
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-white text-sm">
                                     {complianceData?.map((item) => (
-                                        <tr key={item.user._id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
-                                            <td className="px-6 py-4 text-slate-500 font-mono text-xs">{item.user.employeeId}</td>
-                                            <td className="px-6 py-4 font-medium">{item.user.name}</td>
-                                            <td className="px-6 py-4 text-slate-600">{item.user.department || '-'}</td>
+                                        <tr key={item.user?.id || item.user?._id || item.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
+                                            <td className="px-6 py-4 text-slate-500 font-mono text-xs">{item.user?.employeeId}</td>
+                                            <td className="px-6 py-4 font-medium">{item.user?.name}</td>
+                                            <td className="px-6 py-4 text-slate-600">{item.user?.department || '-'}</td>
                                             <td className="px-6 py-4">
                                                 {item.status === 'missing' && <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs font-bold uppercase">Missing</span>}
                                                 {item.status === 'frozen' && <span className="bg-rose-100 text-rose-700 px-2 py-1 rounded-md text-xs font-bold uppercase flex items-center gap-1 w-max"><AlertTriangle size={12} />Frozen</span>}
@@ -165,7 +184,7 @@ export default function AdminTimesheetCompliancePage() {
                                                 {['missing', 'frozen'].includes(item.status) && (
                                                     <button
                                                         onClick={() => handleOpenModal(item)}
-                                                        className="flex items-center gap-1.5 text-primary hover:text-indigo-800 font-semibold text-xs bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+                                                        className="flex items-center gap-1.5 text-primary dark:text-primary-400 hover:text-indigo-800 dark:hover:text-primary-300 font-semibold text-xs bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 px-3 py-1.5 rounded-lg transition-colors"
                                                     >
                                                         <Edit3 size={14} /> Fill Timesheet
                                                     </button>
@@ -236,7 +255,7 @@ export default function AdminTimesheetCompliancePage() {
                                                         className="w-full border-slate-300 dark:border-slate-700 rounded-lg text-sm bg-transparent"
                                                     >
                                                         <option value="">Select Project</option>
-                                                        {projects?.map(p => <option key={p._id} value={p._id}>{p.code} - {p.name}</option>)}
+                                                        {userProjects?.map(p => <option key={p.id || p._id} value={p.id || p._id}>{p.code} - {p.name}</option>)}
                                                     </select>
                                                 </td>
                                                 <td className="py-2 pr-4">
@@ -249,27 +268,66 @@ export default function AdminTimesheetCompliancePage() {
                                                         }}
                                                         className="w-full border-slate-300 dark:border-slate-700 rounded-lg text-sm bg-transparent"
                                                     >
-                                                        {TASK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                        <option value="">Select Task</option>
+                                                        {/* Project specific tasks (now fetched for all for admins) */}
+                                                         {row.projectId && userTasks?.filter(t => (t.projectId?.id || t.projectId?._id || t.projectId) === row.projectId).map(t => (
+                                                             <option key={t.id || t._id} value={t.name}>{t.name}</option>
+                                                         ))}
+ 
+                                                         {/* Show categories as fallback or additional options */}
+                                                         {(() => {
+                                                             const projectTasks = userTasks?.filter(t => (t.projectId?.id || t.projectId?._id || t.projectId) === row.projectId) || [];
+                                                             const hasProjectTasks = projectTasks.length > 0;
+                                                             
+                                                             // Find current project object to check isolation setting
+                                                             const projectObj = row.projectId ? userProjects?.find(p => (p.id || p._id) === row.projectId) : null;
+                                                             const isIsolated = projectObj?.onlyProjectTasks;
+
+                                                             // If not isolated OR if isolated but has no tasks, show global categories
+                                                             if (!isIsolated || !hasProjectTasks) {
+                                                                 return TASK_TYPES.map(t => <option key={t} value={t}>{t}</option>);
+                                                             }
+                                                             return null;
+                                                         })()}
                                                     </select>
                                                 </td>
-                                                {weekDays.map((d, dIndex) => (
-                                                    <td key={dIndex} className="py-2 px-1">
+                                                {weekDays.map((d, dIndex) => {
+                                                    // Compute project start date constraint
+                                                    const projectObj = row.projectId
+                                                        ? userProjects?.find(p => (p.id || p._id) === row.projectId)
+                                                        : null;
+                                                    const projectStartDate = projectObj?.startDate ? new Date(projectObj.startDate) : null;
+                                                    if (projectStartDate) projectStartDate.setHours(0, 0, 0, 0);
+                                                    const cellDay = new Date(d); cellDay.setHours(0, 0, 0, 0);
+                                                    const isBeforeStart = !!(projectStartDate && cellDay < projectStartDate);
+
+                                                    return (
+                                                    <td key={dIndex} className={`py-2 px-1 ${isBeforeStart ? 'opacity-30' : ''}`} title={isBeforeStart ? `Project starts on ${format(projectStartDate, 'MMM d, yyyy')}` : ''}>
                                                         <input
                                                             type="text"
                                                             value={row.dayHours[dIndex].split(':')[0]}
+                                                            disabled={isBeforeStart}
+                                                            onFocus={e => e.target.select()}
                                                             onChange={e => {
                                                                 const val = e.target.value.replace(/\D/g, '');
                                                                 const newRows = [...rows];
                                                                 const m = newRows[rIndex].dayHours[dIndex].split(':')[1] || '00';
-                                                                newRows[rIndex].dayHours[dIndex] = `${val.padStart(2, '0')}:${m} `;
+                                                                newRows[rIndex].dayHours[dIndex] = `${val}:${m.trim()}`;
                                                                 setRows(newRows);
                                                             }}
-                                                            className="w-full text-center border-slate-300 dark:border-slate-700 rounded-md text-sm py-1 bg-transparent"
-                                                            placeholder="00"
+                                                            onBlur={() => {
+                                                                const newRows = [...rows];
+                                                                const [h, m] = newRows[rIndex].dayHours[dIndex].split(':');
+                                                                newRows[rIndex].dayHours[dIndex] = `${(h || '0').padStart(2, '0')}:${(m || '00')}`;
+                                                                setRows(newRows);
+                                                            }}
+                                                            className={`w-full text-center border-slate-300 dark:border-slate-700 rounded-md text-sm py-1 bg-transparent transition-all focus:ring-2 focus:ring-primary/20 focus:border-primary ${isBeforeStart ? 'cursor-not-allowed bg-slate-100' : ''}`}
+                                                            placeholder={isBeforeStart ? '—' : '00'}
                                                             maxLength={2}
                                                         />
                                                     </td>
-                                                ))}
+                                                    );
+                                                })}
                                             </tr>
                                         ))}
                                     </tbody>
@@ -283,7 +341,7 @@ export default function AdminTimesheetCompliancePage() {
                             </div>
 
                             <div className="p-6 border-t border-slate-100 dark:border-white bg-slate-50 dark:bg-black flex justify-end gap-3">
-                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 font-semibold hover:bg-slate-200 rounded-xl transition-colors">Cancel</button>
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 dark:text-slate-400 font-semibold hover:bg-slate-200 dark:hover:bg-white/10 rounded-xl transition-colors">Cancel</button>
                                 <button
                                     onClick={handleSaveAdminFill}
                                     disabled={fillMutation.isPending}
