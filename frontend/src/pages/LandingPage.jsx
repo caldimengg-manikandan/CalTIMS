@@ -1,509 +1,997 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence, useInView } from 'framer-motion';
 import {
-  Check,
-  ArrowRight,
-  Play,
-  Clock,
-  Shield,
-  BarChart3,
-  Users,
-  Zap,
-  X,
-  ChevronRight,
-  TrendingUp,
-  FileText,
-  Calendar,
-  Lock
+  Clock, ArrowRight, Check, Users, FileText, BarChart3,
+  Calendar, ChevronDown, LogIn, UserPlus, Menu, X,
+  Shield, Zap, TrendingUp, CheckCircle, Star,
+  Timer, Briefcase, UserCheck, PlayCircle, Award,
+  ChevronRight, Lock, Globe, Cpu, PieChart, Bell, Settings
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Container, SectionHeader, FeatureCard, StepIcon, Badge } from './LandingComponents';
+import { useSettingsStore } from '@/store/settingsStore';
+import { useAuthStore } from '@/store/authStore';
+import { PLAN_FEATURES } from '@/constants/plans';
+import { useThemeStore } from '@/store/themeStore';
 
-const LandingPage = () => {
-  const navigate = useNavigate();
+// ── Pricing reference (non-hardcoded business logic — UI labels only) ─────────
+const PLAN_PRICES = {
+  TRIAL: { amount: '$0',  suffix: '',         tagline: 'Free forever' },
+  BASIC: { amount: '$29', suffix: '/ month',  tagline: 'For growing teams' },
+  PRO:   { amount: '$99', suffix: '/ month',  tagline: 'For scaling companies' },
+};
+
+const FEATURE_LABELS = {
+  timesheets:       'Timesheet Tracking',
+  reports:          'Standard Reports',
+  advanced_reports: 'Advanced Analytics',
+  analytics:        'Dashboard Analytics',
+  support:          'Help & Support',
+  payroll:          'Payroll Processing',
+  leave_management: 'Leave Management',
+  payslips:         'Payslip Generation',
+  audit_logs:       'Audit Logs',
+  ai:               'AI Assistance',
+};
+
+const NAV_LINKS = [
+  { href: '#features',     label: 'Features' },
+  { href: '#how-it-works', label: 'How it works' },
+  { href: '#pricing',      label: 'Pricing' },
+  { href: '#faq',          label: 'FAQ' },
+];
+
+const FAQS = [
+  {
+    q: 'How does the pricing work?',
+    a: 'Start free with our Trial plan — no credit card required. Upgrade to Basic or Pro as your team grows. All plans are billed monthly with no hidden fees or long-term commitments.',
+  },
+  {
+    q: 'Do you offer a free trial?',
+    a: 'Yes. The Trial plan is completely free for up to 10 employees and gives you full access to core features including timesheets, reports, leave management, and payroll.',
+  },
+  {
+    q: 'Can managers approve timesheets?',
+    a: 'Absolutely. CalTIMS has a built-in approval workflow — employees submit their hours, and managers receive notifications to approve or reject directly from the dashboard.',
+  },
+  {
+    q: 'Is payroll processed inside CalTIMS?',
+    a: 'Yes. The Pro and Trial plans include full payroll processing — calculations, payslip generation, and bank-export-ready reports all linked to your approved timesheet data.',
+  },
+  {
+    q: 'Is there a limit on employees?',
+    a: 'Trial supports up to 10 employees, Basic up to 50, and Pro up to 1,000. You can upgrade your plan at any time from account settings without losing any data.',
+  },
+  {
+    q: 'How secure is my data?',
+    a: 'CalTIMS uses encrypted storage, role-based access control, and comprehensive audit logs to ensure your workforce data is always protected and compliant.',
+  },
+];
+
+// ── Animation helpers ─────────────────────────────────────────────────────────
+const FadeIn = ({ children, delay = 0, className = '', direction = 'up' }) => {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: '-40px' });
+  const variants = {
+    hidden: {
+      opacity: 0,
+      y: direction === 'up' ? 24 : direction === 'down' ? -24 : 0,
+      x: direction === 'left' ? 28 : direction === 'right' ? -28 : 0,
+    },
+    visible: { opacity: 1, y: 0, x: 0 },
+  };
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full bg-white/80 backdrop-blur-md z-50 border-b border-slate-100">
-        <Container className="h-20 flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold text-2xl text-indigo-600 tracking-tight">
-            <Clock className="w-8 h-8" />
-            <span>CalTIMS</span>
-          </div>
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600">
-            <a href="#problem" className="hover:text-indigo-600 transition-colors">Problem</a>
-            <a href="#timesheet" className="hover:text-indigo-600 transition-colors">Timesheets</a>
-            <a href="#payroll" className="hover:text-indigo-600 transition-colors">Payroll</a>
-            <a href="#enterprise" className="hover:text-indigo-600 transition-colors">Enterprise</a>
-          </div>
-          <div className="flex items-center gap-4">
-            <Button onClick={() => navigate('/login')} variant="ghost" className="hidden sm:flex">Login</Button>
-            <Button onClick={() => navigate('/signup')}>Start Free</Button>
-          </div>
-        </Container>
-      </nav>
+    <motion.div
+      ref={ref}
+      variants={variants}
+      initial="hidden"
+      animate={inView ? 'visible' : 'hidden'}
+      transition={{ duration: 0.52, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+};
 
-      <main className="pt-20">
-        {/* HERO SECTION */}
-        <section className="pt-20 pb-32 overflow-hidden">
-          <Container>
-            <div className="flex flex-col items-center text-center">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
-              >
-                <Badge>Revolutionizing Workforce Management</Badge>
-              </motion.div>
+const SectionLabel = ({ children, color = 'text-gray-400' }) => (
+  <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.15em] ${color} mb-3`}>
+    <span className="w-4 h-px bg-current opacity-60" />
+    {children}
+    <span className="w-4 h-px bg-current opacity-60" />
+  </span>
+);
 
-              <motion.h1
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1, duration: 0.5 }}
-                className="text-5xl md:text-7xl font-bold mb-8 tracking-tight max-w-4xl leading-[1.1]"
-              >
-                Track Work. Run Payroll. <br />
-                <span className="text-indigo-600">No Confusion.</span>
-              </motion.h1>
+const VideoPlayer = ({ className = '' }) => (
+  <div className={`relative rounded-3xl overflow-hidden border border-gray-200/80 bg-gray-950 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.18)] ${className}`}>
+    <div className="absolute top-0 left-0 right-0 h-10 bg-gray-100/90 flex items-center gap-1.5 px-4 z-10 backdrop-blur-sm border-b border-gray-200/60">
+      {['bg-red-400', 'bg-amber-400', 'bg-emerald-400'].map((c) => (
+        <span key={c} className={`w-3 h-3 rounded-full ${c}`} />
+      ))}
+      <span className="ml-3 text-[12px] font-medium text-gray-400">CalTIMS — Time & Workforce Management</span>
+    </div>
+    <div className="pt-10 aspect-video">
+      <video
+        src="/caltims/assets/images/vid_2.mp4"
+        autoPlay
+        muted
+        loop
+        controls
+        playsInline
+        className="w-full h-full object-cover scale-105 origin-center"
+      />
+    </div>
+  </div>
+);
 
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2, duration: 0.5 }}
-                className="text-xl text-slate-600 mb-12 max-w-2xl leading-relaxed"
-              >
-                Manage timesheets, approvals, and payroll in one simple system.
-                Built for teams that value clarity over complexity.
-              </motion.p>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3, duration: 0.5 }}
-                className="flex flex-col sm:flex-row gap-4 mb-20"
-              >
-                <Button onClick={() => navigate('/signup')} className="px-10 h-14 text-lg">Start Free</Button>
-                <Button variant="secondary" className="px-10 h-14 text-lg">
-                  <Play size={18} className="fill-current" />
-                  See Demo
-                </Button>
-              </motion.div>
-
-              {/* Mock Dashboard Preview */}
-              <motion.div
-                initial={{ opacity: 0, y: 40 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5, duration: 0.8 }}
-                className="relative w-full max-w-5xl group"
-              >
-                <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
-                <div className="relative bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden aspect-[16/10] md:aspect-[16/9]">
-                  {/* Mock Sidebar */}
-                  <div className="flex h-full">
-                    <div className="w-16 md:w-64 border-r border-slate-100 bg-slate-50 hidden md:block p-6">
-                      <div className="flex items-center gap-3 mb-10">
-                        <div className="w-8 h-8 bg-indigo-600 rounded-lg shrink-0"></div>
-                        <div className="font-bold">CalTIMS</div>
-                      </div>
-                      <div className="space-y-4">
-                        {[1, 2, 3, 4, 5].map(i => (
-                          <div key={i} className={`h-8 rounded-lg w-full ${i === 2 ? 'bg-indigo-50 border border-indigo-100' : 'bg-slate-200/50'}`}></div>
-                        ))}
-                      </div>
-                    </div>
-                    {/* Mock Main Content */}
-                    <div className="flex-1 p-4 md:p-8 overflow-hidden bg-white">
-                      <div className="flex justify-between items-end mb-8">
-                        <div className="space-y-2">
-                          <div className="h-4 w-24 bg-slate-100 rounded-full"></div>
-                          <div className="h-8 w-48 bg-slate-200 rounded-lg"></div>
-                        </div>
-                        <div className="h-10 w-32 bg-indigo-600 rounded-lg"></div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                        {[1, 2, 3].map(i => (
-                          <div key={i} className="h-24 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
-                            <div className="h-3 w-16 bg-slate-200 rounded-full mb-3"></div>
-                            <div className="h-6 w-24 bg-slate-300 rounded-full"></div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="bg-slate-50 rounded-xl border border-slate-100 h-64 p-6">
-                        <div className="flex gap-4 mb-6">
-                          {[1, 2, 3, 4, 5, 6, 7].map(i => (
-                            <div key={i} className="flex-1 space-y-2">
-                              <div className="h-2 w-full bg-slate-200 rounded-full"></div>
-                              <div className={`w-full rounded-lg ${i === 3 ? 'h-32 bg-indigo-400' : 'h-24 bg-slate-200'}`}></div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </Container>
-        </section>
-
-        {/* PROBLEM SECTION */}
-        <section id="problem" className="py-32 bg-slate-50">
-          <Container>
-            <div className="grid md:grid-cols-2 gap-20 items-center">
-              <div>
-                <Badge>The Old Way</Badge>
-                <h2 className="text-4xl font-bold mb-6 text-slate-900 tracking-tight leading-tight">
-                  Still managing work hours <br />in Excel?
-                </h2>
-                <ul className="space-y-6">
-                  <li className="flex items-start gap-4">
-                    <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 mt-1">
-                      <X size={14} strokeWidth={3} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900">Employees forget to update time</h4>
-                      <p className="text-slate-600">Excel sheets stay blank until the last minute, leading to guesses and memory loss.</p>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-4">
-                    <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 mt-1">
-                      <X size={14} strokeWidth={3} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900">Managers don’t know what is approved</h4>
-                      <p className="text-slate-600">Endless email threads and messy spreadsheets make approvals a nightmare.</p>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-4">
-                    <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 mt-1">
-                      <X size={14} strokeWidth={3} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900">Payroll calculations go wrong</h4>
-                      <p className="text-slate-600">Manual entry errors lead to overpayments, underpayments, and legal risks.</p>
-                    </div>
-                  </li>
-                </ul>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-0 bg-red-500/10 blur-3xl rounded-full"></div>
-                <div className="relative bg-white p-8 rounded-2xl shadow-xl border border-slate-200 opacity-80 rotate-1">
-                  <div className="text-xs font-mono text-slate-400 mb-4 border-b pb-2">payroll_final_v2_final.xlsx</div>
-                  <div className="space-y-3">
-                    {[1, 2, 3, 4, 5, 6].map(i => (
-                      <div key={i} className="flex gap-2">
-                        <div className="h-6 w-20 bg-slate-100 rounded"></div>
-                        <div className="h-6 w-32 bg-slate-50 rounded"></div>
-                        <div className={`h-6 flex-1 rounded ${i === 3 ? 'bg-red-50 text-red-500 text-[10px] px-2 flex items-center' : 'bg-slate-50'}`}>
-                          {i === 3 && "#REF!"}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Container>
-        </section>
-
-        {/* SOLUTION SECTION (TIMESHEET FIRST) */}
-        <section id="timesheet" className="py-32">
-          <Container>
-            <SectionHeader
-              title="Simple Timesheet That Just Works"
-              subtitle="The core of our platform is simplicity. We've removed the friction from time entry so your team can focus on their actual work."
-            />
-
-            <div className="grid md:grid-cols-3 gap-8">
-              <FeatureCard
-                icon={Clock}
-                title="Daily Time Entry"
-                description="Smart forms that remember common projects and tasks. Log hours in seconds on any device."
-              />
-              <FeatureCard
-                icon={Zap}
-                title="Instant Approvals"
-                description="One-click approvals for managers. No more email follow-ups or manual verification."
-                delay={0.1}
-              />
-              <FeatureCard
-                icon={BarChart3}
-                title="Project Tracking"
-                description="See exactly where the time goes. Real-time insights into work distribution and efficiency."
-                delay={0.2}
-              />
-            </div>
-
-            <div className="mt-24 p-12 bg-indigo-600 rounded-3xl relative overflow-hidden group">
-              <div className="absolute right-0 top-0 w-1/2 h-full bg-indigo-500/30 -skew-x-12 translate-x-1/4 group-hover:translate-x-0 transition-transform duration-1000"></div>
-              <div className="relative max-w-xl">
-                <h3 className="text-3xl font-bold text-white mb-6">Designed for real work.</h3>
-                <p className="text-indigo-100 text-lg mb-8 leading-relaxed">
-                  "We looked at 10 different systems. CalTIMS was the only one that didn't feel like a 20-year-old database. Our employees actually love using it."
-                </p>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-white/20"></div>
-                  <div>
-                    <div className="font-bold text-white">Sarah Jenkins</div>
-                    <div className="text-indigo-200 text-sm">HR Director at TechScale</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Container>
-        </section>
-
-        {/* VISUAL FLOW */}
-        <section className="py-32 border-y border-slate-100 bg-slate-50/50">
-          <Container>
-            <SectionHeader title="No confusion. Every step is clear." />
-            <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-4 relative">
-              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-slate-200 -z-10 hidden md:block"></div>
-
-              <div className="flex flex-col items-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm w-full max-w-[200px] z-10">
-                <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mb-4">
-                  <Users size={24} />
-                </div>
-                <div className="font-bold underline decoration-indigo-200 decoration-4 underline-offset-4">Employee</div>
-              </div>
-
-              <ChevronRight className="text-slate-300 hidden md:block" />
-
-              <div className="flex flex-col items-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm w-full max-w-[200px] z-10">
-                <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mb-4">
-                  <Shield size={24} />
-                </div>
-                <div className="font-bold underline decoration-indigo-200 decoration-4 underline-offset-4">Manager</div>
-              </div>
-
-              <ChevronRight className="text-slate-300 hidden md:block" />
-
-              <div className="flex flex-col items-center p-6 bg-indigo-600 rounded-2xl border border-indigo-700 shadow-lg w-full max-w-[200px] z-10 text-white">
-                <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white mb-4">
-                  <Check size={24} />
-                </div>
-                <div className="font-bold">Approved</div>
-              </div>
-
-              <ChevronRight className="text-slate-300 hidden md:block" />
-
-              <div className="flex flex-col items-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm w-full max-w-[200px] z-10">
-                <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 mb-4">
-                  <Zap size={24} />
-                </div>
-                <div className="font-bold underline decoration-emerald-200 decoration-4 underline-offset-4">Ready!</div>
-              </div>
-            </div>
-          </Container>
-        </section>
-
-        {/* PAYROLL SECTION */}
-        <section id="payroll" className="py-32 overflow-hidden">
-          <Container>
-            <div className="grid md:grid-cols-2 gap-20 items-center">
-              <div className="order-2 md:order-1 relative">
-                <div className="absolute inset-0 bg-indigo-500/5 blur-3xl rounded-full"></div>
-                {/* Mock Payslip Card */}
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  className="bg-white border border-slate-200 rounded-2xl shadow-2xl p-8 max-w-sm mx-auto relative z-10"
-                >
-                  <div className="flex justify-between items-start mb-8">
-                    <div className="h-6 w-24 bg-indigo-600 rounded"></div>
-                    <div className="text-[10px] text-slate-400 text-right">MARCH 2026</div>
-                  </div>
-                  <div className="space-y-4 mb-8">
-                    <div className="flex justify-between">
-                      <div className="h-3 w-32 bg-slate-100 rounded"></div>
-                      <div className="h-3 w-16 bg-slate-200 rounded"></div>
-                    </div>
-                    <div className="flex justify-between">
-                      <div className="h-3 w-28 bg-slate-100 rounded"></div>
-                      <div className="h-3 w-12 bg-slate-200 rounded"></div>
-                    </div>
-                    <div className="border-t border-slate-100 pt-4 flex justify-between">
-                      <span className="text-sm font-bold">Total Earnings</span>
-                      <span className="text-sm font-bold">$4,500.00</span>
-                    </div>
-                  </div>
-                  <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0">
-                      <Check size={20} />
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Payment Released</div>
-                      <div className="text-sm font-bold text-emerald-900">Available to Download</div>
-                    </div>
-                  </div>
-                </motion.div>
-                {/* Decoration */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[140%] h-[140%] -z-10 bg-[radial-gradient(circle,rgba(79,70,229,0.05)_0%,transparent_70%)]"></div>
-              </div>
-              <div className="order-1 md:order-2">
-                <Badge>Automated Payroll</Badge>
-                <h2 className="text-4xl font-bold mb-6 text-slate-900 tracking-tight leading-tight">
-                  Payroll Without Mistakes
-                </h2>
-                <p className="text-lg text-slate-600 mb-10 leading-relaxed">
-                  Once the timesheet is approved, payroll is ready. Our system handles calculations, deductions, and tax compliance automatically.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
-                  {[
-                    "Auto salary calculation",
-                    "LOP handled automatically",
-                    "Overtime included",
-                    "One-click payslips",
-                    "Compliance ready",
-                    "Detailed reporting"
-                  ].map((feature, i) => (
-                    <div key={i} className="flex items-center gap-3 text-slate-700">
-                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                        <Check size={12} strokeWidth={3} />
-                      </div>
-                      <span className="font-medium">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Container>
-        </section>
-
-        {/* FULL SYSTEM STORY */}
-        <section className="py-24 bg-slate-900 text-white overflow-hidden relative">
-          <div className="absolute top-0 right-0 w-1/2 h-full bg-indigo-500/5 rotate-12 translate-x-1/4"></div>
-          <Container>
-            <div className="text-center mb-20">
-              <h2 className="text-3xl font-bold mb-4">Complete Workforce Lifecycle</h2>
-              <p className="text-slate-400">From the first minute logged to the final report generated.</p>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-4 text-sm font-bold">
-              <div className="px-6 py-4 rounded-xl bg-slate-800 border border-slate-700">Timesheet</div>
-              <ArrowRight className="text-slate-700" size={16} />
-              <div className="px-6 py-4 rounded-xl bg-slate-800 border border-slate-700">Approval</div>
-              <ArrowRight className="text-slate-700" size={16} />
-              <div className="px-6 py-4 rounded-xl bg-indigo-600 border border-indigo-500">Payroll</div>
-              <ArrowRight className="text-slate-700" size={16} />
-              <div className="px-6 py-4 rounded-xl bg-slate-800 border border-slate-700">Payslip</div>
-              <ArrowRight className="text-slate-700" size={16} />
-              <div className="px-6 py-4 rounded-xl bg-slate-800 border border-slate-700">Reports</div>
-            </div>
-          </Container>
-        </section>
-
-        {/* TRUST / ENTERPRISE SECTION */}
-        <section id="enterprise" className="py-32">
-          <Container>
-            <SectionHeader
-              title="Built for the Enterprise"
-              subtitle="Security, governance, and audit-ready systems. We handle the heavy lifting of compliance so you don't have to."
-            />
-
-            <div className="grid md:grid-cols-4 gap-8">
-              <div className="text-center p-6">
-                <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mx-auto mb-6">
-                  <Lock size={32} />
-                </div>
-                <h3 className="font-bold mb-2">Role-based Access</h3>
-                <p className="text-sm text-slate-500">Fine-grained permissions for HR, Finance, and Admins.</p>
-              </div>
-              <div className="text-center p-6">
-                <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mx-auto mb-6">
-                  <Shield size={32} />
-                </div>
-                <h3 className="font-bold mb-2">Audit Logs</h3>
-                <p className="text-sm text-slate-500">Full traceability for every change made in the system.</p>
-              </div>
-              <div className="text-center p-6">
-                <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mx-auto mb-6">
-                  <Zap size={32} />
-                </div>
-                <h3 className="font-bold mb-2">Real-time Data</h3>
-                <p className="text-sm text-slate-500">Sync across all modules without delays or manual imports.</p>
-              </div>
-              <div className="text-center p-6">
-                <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mx-auto mb-6">
-                  <BarChart3 size={32} />
-                </div>
-                <h3 className="font-bold mb-2">Secure Data</h3>
-                <p className="text-sm text-slate-500">Enterprise-grade encryption and cloud security.</p>
-              </div>
-            </div>
-          </Container>
-        </section>
-
-        {/* WHY USERS CHOOSE US */}
-        <section className="py-32 bg-slate-50">
-          <Container>
-            <div className="max-w-4xl mx-auto">
-              <div className="bg-white rounded-3xl p-12 border border-slate-200 shadow-xl">
-                <h2 className="text-3xl font-bold mb-10 text-center">Why teams love CalTIMS</h2>
-                <div className="grid sm:grid-cols-2 gap-8">
-                  {[
-                    { title: "Easy to use", desc: "No training required. Intuitive UI." },
-                    { title: "Saves time", desc: "Automate 50+ hours of HR admin monthly." },
-                    { title: "No manual errors", desc: "Digital verification at every step." },
-                    { title: "Clear process", desc: "Employees always know their status." },
-                    { title: "Works for any team", desc: "Scales from 10 to 1,000 employees." },
-                    { title: "Premium Support", desc: "24/7 dedicated account management." }
-                  ].map((item, i) => (
-                    <div key={i} className="flex gap-4">
-                      <div className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 mt-1">
-                        <Check size={14} />
-                      </div>
-                      <div>
-                        <p className="font-bold text-slate-900 mb-1">{item.title}</p>
-                        <p className="text-sm text-slate-500">{item.desc}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Container>
-        </section>
-
-        {/* FINAL CTA */}
-        <section className="py-40 bg-indigo-600 text-white relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent)] opacity-50"></div>
-          <Container className="text-center relative z-10">
-            <h2 className="text-4xl md:text-6xl font-bold mb-8 tracking-tight">
-              Start managing your <br />team better today.
-            </h2>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button onClick={() => navigate('/signup')} className="bg-dark text-indigo-600 hover:bg-dark-900 border-white px-12 h-16 text-xl">
-                Get Started
-              </Button>
-            </div>
-          </Container>
-          <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-indigo-300 via-white to-purple-300 opacity-20"></div>
-        </section>
-      </main>
-
-      <footer className="py-20 border-t border-slate-100 bg-white">
-        <Container>
-          <div className="flex flex-col md:flex-row justify-between items-center gap-10">
-            <div>
-              <div className="flex items-center gap-2 font-bold text-xl text-indigo-600 mb-4">
-                <Clock className="w-6 h-6" />
-                <span>CalTIMS</span>
-              </div>
-              <p className="text-slate-400 text-sm">© 2026 CalTIMS Inc. All rights reserved.</p>
-            </div>
-            <div className="flex gap-8 text-sm text-slate-600">
-              <a href="#" className="hover:text-indigo-600">Privacy Policy</a>
-              <a href="#" className="hover:text-indigo-600">Terms of Service</a>
-              <a href="#" className="hover:text-indigo-600">Security</a>
-              <a href="#" className="hover:text-indigo-600">Twitter</a>
-            </div>
-          </div>
-        </Container>
-      </footer>
+// ── Animated counter ──────────────────────────────────────────────────────────
+const AnimatedStat = ({ value, suffix, label }) => {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true });
+  return (
+    <div ref={ref} className="text-center">
+      <motion.div
+        className="text-3xl font-extrabold text-gray-900 tracking-tight"
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={inView ? { opacity: 1, scale: 1 } : {}}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+      >
+        {value}{suffix}
+      </motion.div>
+      <p className="text-xs text-gray-500 font-medium mt-1">{label}</p>
     </div>
   );
 };
 
-export default LandingPage;
+// ── Main Component ────────────────────────────────────────────────────────────
+export default function LandingPage() {
+  const navigate = useNavigate();
+
+  const general     = useSettingsStore((s) => s.general);
+  const companyName = general?.branding?.organizationName || general?.organization?.companyName || 'CalTIMS';
+  const logoUrl     = general?.branding?.logoUrl;
+  const { applyTheme } = useThemeStore();
+
+  const { isAuthenticated, subscription } = useAuthStore();
+  const currentPlan = subscription?.planType || null;
+
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [activeFaq,  setActiveFaq]  = useState(null);
+  const [scrolled,   setScrolled]   = useState(false);
+
+  useEffect(() => {
+    if (general?.branding) {
+      applyTheme(false); // If there are branding elements
+      useThemeStore.getState().syncFromBranding(general.branding);
+    } else {
+      applyTheme(false);
+    }
+    const fn = () => setScrolled(window.scrollY > 16);
+    window.addEventListener('scroll', fn, { passive: true });
+    return () => window.removeEventListener('scroll', fn);
+  }, [applyTheme, general?.branding]);
+
+  // Build plan tiers from PLAN_FEATURES (dynamic — no hardcoded data)
+  const pricingTiers = Object.keys(PLAN_FEATURES).map((key) => ({
+    key,
+    name:        key.charAt(0) + key.slice(1).toLowerCase(),
+    price:       PLAN_PRICES[key]?.amount  ?? 'Custom',
+    suffix:      PLAN_PRICES[key]?.suffix  ?? '',
+    tagline:     PLAN_PRICES[key]?.tagline ?? '',
+    features:    Object.entries(PLAN_FEATURES[key])
+                   .filter(([k, v]) => v === true && k !== 'maxEmployees')
+                   .map(([k]) => FEATURE_LABELS[k] ?? k.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())),
+    limit:       `Up to ${PLAN_FEATURES[key].maxEmployees} employees`,
+    recommended: key === 'PRO',
+  }));
+
+  return (
+    <div className="min-h-screen bg-white font-sans text-gray-900 antialiased selection:bg-gray-900 selection:text-white">
+
+      {/* ── NAVBAR ──────────────────────────────────────────────────────────── */}
+      <header
+        className={`sticky top-0 z-50 w-full transition-all duration-300 ${
+          scrolled
+            ? 'bg-white/98 backdrop-blur-md shadow-[0_1px_0_0_#e5e7eb]'
+            : 'bg-white/95 backdrop-blur-sm border-b border-transparent'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 h-[62px] flex items-center justify-between">
+          {/* Logo + Nav */}
+          <div className="flex items-center gap-10">
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="flex items-center gap-2.5 focus:outline-none group"
+              aria-label="Go to top"
+            >
+              {logoUrl ? (
+                <img src={logoUrl} alt={companyName} className="h-7 object-contain" />
+              ) : (
+                <>
+                  <span className="w-8 h-8 bg-gray-900 rounded-[9px] flex items-center justify-center shadow-sm group-hover:bg-gray-800 transition-colors">
+                    <Clock className="w-4 h-4 text-white" />
+                  </span>
+                  <span className="text-[15px] font-bold text-gray-900 tracking-tight">{companyName}</span>
+                </>
+              )}
+            </button>
+
+            <nav className="hidden md:flex items-center gap-0.5">
+              {NAV_LINKS.map(({ href, label }) => (
+                <a
+                  key={href}
+                  href={href}
+                  className="px-3.5 py-2 text-[13.5px] font-medium text-gray-500 hover:text-gray-900 rounded-lg hover:bg-gray-50 transition-all duration-150"
+                >
+                  {label}
+                </a>
+              ))}
+            </nav>
+          </div>
+
+          {/* CTA buttons */}
+          <div className="hidden md:flex items-center gap-2">
+            <button
+              id="nav-login-btn"
+              onClick={() => navigate('/login')}
+              className="px-4 py-2 text-[13.5px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-all"
+            >
+              Log in
+            </button>
+            <button
+              id="nav-signup-btn"
+              onClick={() => navigate('/signup')}
+              className="px-5 py-2.5 text-[14px] font-semibold bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] rounded-lg transition-all shadow-sm hover:shadow-md hover:-translate-y-px active:scale-[0.97]"
+              style={{ '--tw-bg-opacity': 1 }}
+            >
+              Get started free
+            </button>
+          </div>
+
+          {/* Mobile hamburger */}
+          <button
+            className="md:hidden p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label="Toggle menu"
+          >
+            {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+
+        {/* Mobile menu */}
+        <AnimatePresence>
+          {mobileOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              className="md:hidden border-t border-gray-100 bg-white overflow-hidden"
+            >
+              <div className="px-5 py-4 space-y-1">
+                {NAV_LINKS.map(({ href, label }) => (
+                  <a
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg"
+                  >
+                    {label}
+                  </a>
+                ))}
+                <div className="pt-3 border-t border-gray-100 mt-2 flex flex-col gap-2">
+                  <button
+                    onClick={() => navigate('/login')}
+                    className="w-full py-2.5 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    Log in
+                  </button>
+                  <button
+                    onClick={() => navigate('/signup')}
+                    className="w-full py-3 text-[15px] font-semibold text-white bg-[var(--color-primary)] rounded-xl hover:bg-[var(--color-primary-hover)] transition-colors"
+                  >
+                    Get started free
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </header>
+
+      <main>
+
+        {/* ── 1. HERO ──────────────────────────────────────────────────────── */}
+        <section className="relative overflow-hidden">
+          {/* Subtle background texture */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_#f1f5f9_0%,_transparent_60%)] pointer-events-none" />
+          <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-blue-50/40 via-transparent to-transparent rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative max-w-7xl mx-auto px-5 sm:px-8 pt-16 pb-20 md:pt-24 md:pb-28 grid lg:grid-cols-2 gap-14 items-center">
+            {/* Text column */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              className="flex flex-col gap-7"
+            >
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 self-start bg-white border border-gray-200 text-gray-600 text-[11.5px] font-semibold px-3.5 py-1.5 rounded-full shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Enterprise-grade workforce management
+              </div>
+
+              <div className="space-y-6">
+                <h1 className="text-[48px] sm:text-[60px] lg:text-[68px] font-extrabold tracking-[-0.03em] text-gray-900 leading-[1.05]">
+                  Effortless Time<br className="hidden sm:block" /> Tracking for<br className="hidden sm:block" />
+                  <span className="text-[var(--color-primary)]"> Modern Teams</span>
+                </h1>
+                <p className="text-[18px] sm:text-[20px] text-gray-500 leading-[1.7] max-w-[520px]">
+                  Track employee work hours, manage projects, and automate payroll with precision — all from one unified platform.
+                </p>
+              </div>
+
+              {/* CTA buttons */}
+              <div className="flex flex-wrap gap-3">
+                <button
+                  id="hero-get-started-btn"
+                  onClick={() => navigate('/signup')}
+                  className="inline-flex items-center gap-2 px-8 h-14 bg-[var(--color-primary)] text-white text-[15px] font-semibold rounded-xl hover:bg-[var(--color-primary-hover)] active:scale-[0.97] transition-all shadow-sm hover:shadow-md"
+                >
+                  Get started free <ArrowRight size={18} className="mt-px" />
+                </button>
+                <button
+                  id="hero-login-btn"
+                  onClick={() => navigate('/login')}
+                  className="inline-flex items-center gap-2 px-6 h-12 border border-gray-200 bg-white text-gray-700 text-[14px] font-semibold rounded-xl hover:border-gray-300 hover:bg-gray-50 active:scale-[0.97] transition-all"
+                >
+                  <LogIn size={15} /> Log in
+                </button>
+              </div>
+
+              {/* Social proof micro-copy */}
+              <div className="flex flex-wrap items-center gap-4 text-[12px] text-gray-400 font-medium pt-1">
+                {['No credit card required', 'Free plan available', 'Setup in minutes'].map((t) => (
+                  <span key={t} className="flex items-center gap-1.5">
+                    <CheckCircle size={12} className="text-emerald-500" /> {t}
+                  </span>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Video column */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full xl:ml-8"
+            >
+              <div className="relative group">
+                {/* Glow behind video */}
+                <div className="absolute -inset-6 bg-gradient-to-br from-blue-50 via-violet-50/20 to-transparent rounded-3xl blur-3xl -z-10 opacity-70" />
+                <div className="transition-transform duration-500 ease-out group-hover:scale-[1.015]">
+                  <VideoPlayer />
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* ── 2. TRUST / VALUE STRIP ─────────────────────────────────────────── */}
+        <section className="border-y border-gray-100 bg-gray-50/80">
+          <div className="max-w-7xl mx-auto px-5 sm:px-8 py-5">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-5 sm:gap-10">
+              <span className="text-gray-300 font-semibold uppercase text-[10px] tracking-[0.18em] shrink-0">
+                Trusted for workforce management
+              </span>
+              <div className="flex flex-wrap justify-center items-center gap-x-8 gap-y-3">
+                {[
+                  { icon: Timer,      label: 'Accurate time tracking'   },
+                  { icon: TrendingUp, label: 'Real-time insights'       },
+                  { icon: Shield,     label: 'Enterprise security'      },
+                  { icon: Zap,        label: 'Instant payroll runs'     },
+                  { icon: Globe,      label: 'Role-based access control' },
+                ].map(({ icon: Icon, label }) => (
+                  <span key={label} className="flex items-center gap-2 text-[13px] text-gray-500 font-medium">
+                    <Icon size={14} className="text-gray-400" /> {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── 3. FEATURES (ALTERNATING LAYOUT) ─────────────────────────────── */}
+        <section id="features">
+
+          {/* ── Feature 1: Track Time ─── */}
+          <div className="max-w-7xl mx-auto px-5 sm:px-8 py-20 lg:py-28 grid lg:grid-cols-2 gap-14 lg:gap-20 items-center">
+            <FadeIn direction="right">
+              <SectionLabel>Time Tracking</SectionLabel>
+              <h2 className="text-[30px] sm:text-[34px] font-bold text-gray-900 mb-4 leading-tight tracking-tight">
+                Track Time — Effortlessly
+              </h2>
+              <p className="text-[15.5px] text-gray-500 leading-[1.75] mb-6 max-w-[460px]">
+                Give your employees a simple, intuitive interface to log their daily work hours from anywhere — desktop or mobile. CalTIMS captures every minute accurately, from clock-in to clock-out, so you never miss billable time or compliance windows.
+              </p>
+              <ul className="space-y-3">
+                {[
+                  'One-click timesheet entry',
+                  'Project and task-level tracking',
+                  'Manager approval workflows',
+                  'Overtime detection and alerts',
+                ].map((f) => (
+                  <li key={f} className="flex items-center gap-3 text-[13.5px] text-gray-700 font-medium">
+                    <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 shadow-sm shadow-emerald-200">
+                      <Check size={11} className="text-white" />
+                    </span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </FadeIn>
+
+            <FadeIn direction="left" delay={0.1}>
+              <div className="relative rounded-2xl overflow-hidden border border-gray-100 shadow-[0_20px_50px_rgba(0,0,0,0.1)] group">
+                <div className="absolute inset-0 bg-gray-900/5 group-hover:bg-transparent transition-colors duration-300 z-10 pointer-events-none" />
+                <img
+                  src="/caltims/assets/images/timesheet.png"
+                  alt="Timesheet Entry Interface showing week view and project selection"
+                  className="w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700 ease-out"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = 'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=2670&auto=format&fit=crop';
+                  }}
+                />
+              </div>
+            </FadeIn>
+          </div>
+
+          {/* ── Feature 2: Manage Teams ─── */}
+          <div className="bg-gray-50/80 border-y border-gray-100">
+            <div className="max-w-7xl mx-auto px-5 sm:px-8 py-20 lg:py-28 grid lg:grid-cols-2 gap-14 lg:gap-20 items-center">
+              <FadeIn direction="right" delay={0.05}>
+                <div className="relative rounded-2xl overflow-hidden border border-gray-100 shadow-[0_20px_50px_rgba(0,0,0,0.1)] group">
+                  <div className="absolute inset-0 bg-gray-900/5 group-hover:bg-transparent transition-colors duration-300 z-10 pointer-events-none" />
+                  <img
+                    src="/caltims/assets/images/dashboard.png"
+                    alt="CalTIMS Dashboard showing personalized KPI widgets, active staff, and pending approvals"
+                    className="w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700 ease-out"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2670&auto=format&fit=crop';
+                    }}
+                  />
+                </div>
+              </FadeIn>
+
+              <FadeIn direction="left" delay={0.1}>
+                <SectionLabel>Team & Project Management</SectionLabel>
+                <h2 className="text-[30px] sm:text-[34px] font-bold text-gray-900 mb-4 leading-tight tracking-tight">
+                  Manage Teams<br /> & Projects
+                </h2>
+                <p className="text-[15.5px] text-gray-500 leading-[1.75] mb-6 max-w-[460px]">
+                  Organize your workforce into teams, assign projects, and track progress in real time. CalTIMS gives managers full visibility into who's working on what — so resources are always optimally allocated and deadlines are never missed.
+                </p>
+                <ul className="space-y-3">
+                  {[
+                    'Personalized management dashboard',
+                    'At-a-glance pending compliance approvals',
+                    'Real-time active staff visibility',
+                    'Visualized hourly productivity trends',
+                  ].map((f) => (
+                    <li key={f} className="flex items-center gap-3 text-[13.5px] text-gray-700 font-medium">
+                      <span className="w-5 h-5 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
+                        <Check size={11} className="text-blue-600" />
+                      </span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </FadeIn>
+            </div>
+          </div>
+
+          {/* ── Feature 3: Automate Payroll ─── */}
+          <div className="max-w-7xl mx-auto px-5 sm:px-8 py-20 lg:py-28 grid lg:grid-cols-2 gap-14 lg:gap-20 items-center">
+            <FadeIn direction="right">
+              <SectionLabel>Payroll Automation</SectionLabel>
+              <h2 className="text-[30px] sm:text-[34px] font-bold text-gray-900 mb-4 leading-tight tracking-tight">
+                Automate Payroll —<br /> End to End
+              </h2>
+              <p className="text-[15.5px] text-gray-500 leading-[1.75] mb-6 max-w-[460px]">
+                Once timesheets are approved, payroll runs itself. CalTIMS automatically calculates gross pay, deductions, taxes, and net salary — then generates professional payslips ready for distribution. Eliminate manual spreadsheets and payroll errors for good.
+              </p>
+              <ul className="space-y-3">
+                {[
+                  'Linked to approved timesheets',
+                  'Automated tax & deduction calculation',
+                  'One-click payslip generation',
+                  'Bank-export ready reports',
+                ].map((f) => (
+                  <li key={f} className="flex items-center gap-3 text-[13.5px] text-gray-700 font-medium">
+                    <span className="w-5 h-5 rounded-full bg-violet-50 flex items-center justify-center flex-shrink-0">
+                      <Check size={11} className="text-violet-600" />
+                    </span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </FadeIn>
+
+            <FadeIn direction="left" delay={0.1}>
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-[0_8px_30px_rgba(0,0,0,0.06)] space-y-3">
+                <div className="flex items-center justify-between pb-3 border-b border-gray-50">
+                  <div>
+                    <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-widest">Payroll Run</p>
+                    <p className="text-[13.5px] font-bold text-gray-900 mt-0.5">April 2026</p>
+                  </div>
+                  <span className="text-[11px] bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-full border border-emerald-100">Processed ✓</span>
+                </div>
+                {[
+                  { name: 'Alice Johnson', role: 'Engineer',   net: '$4,200', status: 'Paid' },
+                  { name: 'Bob Smith',     role: 'Designer',   net: '$3,800', status: 'Paid' },
+                  { name: 'Carol White',   role: 'Manager',    net: '$5,100', status: 'Paid' },
+                ].map(({ name, role, net, status }) => (
+                  <div key={name} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-[11px] font-bold text-gray-600">{name[0]}</div>
+                      <div>
+                        <p className="text-[12.5px] font-semibold text-gray-800">{name}</p>
+                        <p className="text-[11px] text-gray-400">{role}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[13px] font-bold text-gray-900">{net}</p>
+                      <p className="text-[10px] text-emerald-600 font-semibold">{status}</p>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-4 py-2.5 bg-gray-900 rounded-xl">
+                  <span className="text-[12px] font-semibold text-gray-400">Total disbursed</span>
+                  <span className="text-[14px] font-extrabold text-white">$13,100</span>
+                </div>
+              </div>
+            </FadeIn>
+          </div>
+        </section>
+
+        {/* ── 4. USE CASES ────────────────────────────────────────────────────── */}
+        <section className="bg-gray-50/80 border-y border-gray-100">
+          <div className="max-w-7xl mx-auto px-5 sm:px-8 py-20 lg:py-24">
+            <FadeIn className="text-center max-w-xl mx-auto mb-14">
+              <SectionLabel>Built for everyone</SectionLabel>
+              <h2 className="text-[30px] sm:text-[36px] font-bold text-gray-900 mb-3 tracking-tight">Who uses {companyName}?</h2>
+              <p className="text-[15.5px] text-gray-500 leading-[1.7]">
+                Whether you're in HR, leading a team, or clocking in daily — CalTIMS works for you.
+              </p>
+            </FadeIn>
+
+            <div className="grid md:grid-cols-3 gap-5">
+              {[
+                {
+                  icon: UserCheck,
+                  title: 'HR Teams',
+                  color: 'text-violet-600',
+                  iconBg: 'bg-violet-50',
+                  borderAccent: 'border-violet-100 hover:border-violet-200',
+                  desc: 'Centralize employee records, manage leave policies, and generate compliance reports with zero manual effort. CalTIMS gives HR full control over the workforce lifecycle — from onboarding to payroll.',
+                  benefits: ['Employee records', 'Leave management', 'Compliance reports'],
+                },
+                {
+                  icon: Briefcase,
+                  title: 'Managers',
+                  color: 'text-blue-600',
+                  iconBg: 'bg-blue-50',
+                  borderAccent: 'border-blue-100 hover:border-blue-200',
+                  desc: 'Review and approve timesheets, monitor project progress, and keep your team on track — all from a single, clean dashboard. Spot issues before they become costly delays.',
+                  benefits: ['Timesheet approvals', 'Project monitoring', 'Team visibility'],
+                },
+                {
+                  icon: Timer,
+                  title: 'Employees',
+                  color: 'text-emerald-600',
+                  iconBg: 'bg-emerald-50',
+                  borderAccent: 'border-emerald-100 hover:border-emerald-200',
+                  desc: 'Log hours in seconds, request leave, and download your payslip without chasing anyone. CalTIMS puts employees in control of their own time and information.',
+                  benefits: ['Clock-in/out', 'Leave requests', 'Payslip access'],
+                },
+              ].map(({ icon: Icon, title, color, iconBg, borderAccent, desc, benefits }, i) => (
+                <FadeIn key={title} delay={i * 0.1}>
+                  <div className={`bg-white p-7 rounded-2xl border ${borderAccent} shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 h-full flex flex-col`}>
+                    <div className={`w-12 h-12 ${iconBg} rounded-xl flex items-center justify-center ${color} mb-5`}>
+                      <Icon size={24} />
+                    </div>
+                    <h3 className="text-[16px] font-bold text-gray-900 mb-3">{title}</h3>
+                    <p className="text-[13.5px] text-gray-500 leading-[1.75] mb-5 flex-1">{desc}</p>
+                    <ul className="space-y-2 border-t border-gray-50 pt-4">
+                      {benefits.map((b) => (
+                        <li key={b} className={`flex items-center gap-2 text-[12.5px] ${color} font-semibold`}>
+                          <ChevronRight size={12} /> {b}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </FadeIn>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── 5. HOW IT WORKS ─────────────────────────────────────────────────── */}
+        <section id="how-it-works">
+          <div className="max-w-7xl mx-auto px-5 sm:px-8 py-20 lg:py-28">
+            <FadeIn className="text-center max-w-xl mx-auto mb-16">
+              <SectionLabel>Simple workflow</SectionLabel>
+              <h2 className="text-[30px] sm:text-[36px] font-bold text-gray-900 mb-3 tracking-tight">
+                How {companyName} works
+              </h2>
+              <p className="text-[15.5px] text-gray-500 leading-[1.7]">
+                Three steps from sign-up to payroll. No training required.
+              </p>
+            </FadeIn>
+
+            <div className="grid md:grid-cols-3 gap-8 relative">
+              {/* Connector line */}
+              <div className="hidden md:block absolute top-9 left-[calc(16.7%+28px)] right-[calc(16.7%+28px)] h-px bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200" />
+
+              {[
+                {
+                  icon: Timer,
+                  step: '01',
+                  title: 'Log Work Hours',
+                  desc: 'Employees submit their daily or weekly hours through a clean, simple interface. CalTIMS ensures every minute is captured accurately across devices.',
+                  color: 'bg-blue-600',
+                },
+                {
+                  icon: CheckCircle,
+                  step: '02',
+                  title: 'Manage Approvals',
+                  desc: 'Managers receive instant notifications and approve or reject timesheets with one click. Full history and comment trail kept automatically.',
+                  color: 'bg-violet-600',
+                },
+                {
+                  icon: FileText,
+                  step: '03',
+                  title: 'Generate Payroll',
+                  desc: 'Approved hours feed directly into payroll. Salary calculations, deductions, and payslips are generated automatically — no spreadsheets.',
+                  color: 'bg-emerald-600',
+                },
+              ].map(({ icon: Icon, step, title, desc, color }, i) => (
+                <FadeIn key={step} delay={i * 0.14} className="flex flex-col items-center text-center">
+                  <div className="relative mb-6 z-10">
+                    <div className={`w-[60px] h-[60px] rounded-full ${color} text-white flex items-center justify-center ring-8 ring-white shadow-lg`}>
+                      <Icon size={22} />
+                    </div>
+                    <span className="absolute -top-1 -right-1 text-[10px] font-black text-gray-500 bg-white border border-gray-200 rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+                      {i + 1}
+                    </span>
+                  </div>
+                  <h3 className="text-[16px] font-bold text-gray-900 mb-2">{title}</h3>
+                  <p className="text-[13.5px] text-gray-500 leading-[1.75] max-w-[240px]">{desc}</p>
+                </FadeIn>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── 6. DEMO VIDEO HIGHLIGHT ──────────────────────────────────────────── */}
+        <section className="bg-gray-950">
+          <div className="max-w-5xl mx-auto px-5 sm:px-8 py-20 lg:py-28">
+            <FadeIn className="text-center mb-10">
+              <div className="inline-flex items-center gap-2 text-gray-400 text-[12.5px] font-semibold mb-4 uppercase tracking-widest">
+                <PlayCircle size={14} className="text-gray-500" /> Product demo
+              </div>
+              <h2 className="text-[28px] sm:text-[36px] font-bold text-white mb-3 tracking-tight">
+                See {companyName} in action
+              </h2>
+              <p className="text-[15px] text-gray-400 max-w-md mx-auto leading-[1.7]">
+                Watch how teams use CalTIMS to track time, manage projects, and run payroll — all in one place.
+              </p>
+            </FadeIn>
+            <FadeIn delay={0.1} className="max-w-4xl mx-auto">
+              <VideoPlayer className="shadow-[0_40px_80px_rgba(0,0,0,0.4)]" />
+            </FadeIn>
+            {/* CTA below video */}
+            <FadeIn delay={0.2} className="text-center mt-10">
+              <button
+                onClick={() => navigate('/signup')}
+                className="inline-flex items-center gap-2 px-8 h-14 bg-[var(--color-primary)] text-white text-[15px] font-semibold rounded-xl hover:bg-[var(--color-primary-hover)] active:scale-[0.97] transition-all"
+              >
+                Try it yourself <ArrowRight size={15} />
+              </button>
+            </FadeIn>
+          </div>
+        </section>
+
+        {/* ── 7. PRICING ──────────────────────────────────────────────────────── */}
+        <section id="pricing">
+          <div className="max-w-7xl mx-auto px-5 sm:px-8 py-20 lg:py-28">
+            <FadeIn className="text-center max-w-xl mx-auto mb-4">
+              <SectionLabel>Pricing</SectionLabel>
+              <h2 className="text-[30px] sm:text-[36px] font-bold text-gray-900 mb-3 tracking-tight">
+                Simple, transparent pricing
+              </h2>
+              <p className="text-[15.5px] text-gray-500">Start free. Scale as your team grows. No surprises.</p>
+            </FadeIn>
+
+            {/* Current plan badge (dynamic, only shown when authenticated) */}
+            {isAuthenticated && currentPlan && (
+              <FadeIn className="flex justify-center mt-6 mb-2">
+                <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-[13px] font-semibold px-4 py-2 rounded-full border border-emerald-200">
+                  <Check size={13} /> You're on: {currentPlan.charAt(0) + currentPlan.slice(1).toLowerCase()} plan
+                </div>
+              </FadeIn>
+            )}
+
+            <div className="grid md:grid-cols-3 gap-5 items-start mt-12">
+              {pricingTiers.map((tier, i) => {
+                const isActive = isAuthenticated && currentPlan === tier.key;
+                return (
+                  <FadeIn key={tier.key} delay={i * 0.1}>
+                    <div
+                      className={`relative bg-white rounded-2xl border flex flex-col transition-all duration-300 overflow-hidden ${
+                        tier.recommended
+                          ? 'border-gray-900 shadow-[0_20px_50px_rgba(0,0,0,0.12)] ring-1 ring-gray-900 md:scale-[1.025]'
+                          : 'border-gray-200 shadow-sm hover:shadow-xl hover:-translate-y-1'
+                      }`}
+                    >
+                      {/* Most popular banner */}
+                      {tier.recommended && (
+                        <div className="bg-[var(--color-primary)] text-white text-[11px] font-bold px-4 py-2.5 text-center uppercase tracking-widest">
+                          ★ Most Popular
+                        </div>
+                      )}
+
+                      <div className="p-8 flex flex-col flex-1">
+                        {/* Active badge */}
+                        {isActive && (
+                          <div className="absolute top-4 right-4 bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-100 flex items-center gap-1">
+                            <Check size={9} /> Active
+                          </div>
+                        )}
+
+                        <div className="mb-6">
+                          <p className="text-[12px] font-bold text-gray-400 uppercase tracking-widest mb-2">{tier.name}</p>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[42px] font-extrabold tracking-tight text-gray-900">{tier.price}</span>
+                            {tier.suffix && <span className="text-gray-400 text-[13px] font-medium">{tier.suffix}</span>}
+                          </div>
+                          <p className="text-[12px] text-gray-400 mt-1 font-medium">{tier.tagline}</p>
+                          <div className="mt-3 inline-flex items-center gap-1.5 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-lg">
+                            <Users size={11} className="text-gray-400" />
+                            <span className="text-[11.5px] text-gray-600 font-semibold">{tier.limit}</span>
+                          </div>
+                        </div>
+
+                        <ul className="space-y-2.5 flex-1 mb-8">
+                          {tier.features.map((f) => (
+                            <li key={f} className="flex items-center gap-2.5 text-[13px] text-gray-700">
+                              <Check size={13} className="text-gray-900 shrink-0" /> {f}
+                            </li>
+                          ))}
+                        </ul>
+
+                        <button
+                          id={`pricing-cta-${tier.key.toLowerCase()}`}
+                          onClick={() => navigate(isActive ? '/settings' : '/signup')}
+                          className={`w-full h-13 rounded-xl font-semibold text-[15px] transition-all active:scale-[0.97] ${
+                            tier.recommended
+                              ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] shadow-sm'
+                              : 'bg-white border border-gray-200 text-gray-900 hover:bg-gray-50 hover:border-gray-300'
+                          }`}
+                        >
+                          {isActive ? 'Manage Plan' : tier.key === 'TRIAL' ? 'Start free' : `Get ${tier.name}`}
+                        </button>
+                      </div>
+                    </div>
+                  </FadeIn>
+                );
+              })}
+            </div>
+
+            {/* Bottom note */}
+            <FadeIn className="text-center mt-8">
+              <p className="text-[12px] text-gray-400 font-medium">
+                All plans include a 14-day free trial · No credit card required · Cancel anytime
+              </p>
+            </FadeIn>
+          </div>
+        </section>
+
+        {/* ── 8. BENEFITS SECTION ──────────────────────────────────────────────── */}
+        <section className="bg-gray-50/80 border-y border-gray-100">
+          <div className="max-w-7xl mx-auto px-5 sm:px-8 py-20 lg:py-24">
+            <FadeIn className="text-center max-w-xl mx-auto mb-14">
+              <SectionLabel>Why CalTIMS</SectionLabel>
+              <h2 className="text-[30px] sm:text-[36px] font-bold text-gray-900 mb-3 tracking-tight">
+                Real outcomes for your business
+              </h2>
+              <p className="text-[15.5px] text-gray-500 leading-[1.7]">
+                CalTIMS isn't just software — it's a systematic improvement to how your organisation runs.
+              </p>
+            </FadeIn>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {[
+                {
+                  icon: Zap,
+                  color: 'text-amber-600',
+                  iconBg: 'bg-amber-50',
+                  border: 'hover:border-amber-200',
+                  title: 'Save Time',
+                  desc: 'Eliminate manual data entry, chasing approvals, and spreadsheet errors. What used to take hours now takes minutes — freeing your team to focus on high-value work instead of administrative overhead.',
+                  stat: '80%', statLabel: 'less admin time reported',
+                },
+                {
+                  icon: BarChart3,
+                  color: 'text-blue-600',
+                  iconBg: 'bg-blue-50',
+                  border: 'hover:border-blue-200',
+                  title: 'Reduce Manual Work',
+                  desc: 'Automate the entire workflow from timesheet submission to payslip distribution. CalTIMS handles the repetitive tasks so your HR and finance teams never have to again.',
+                  stat: '3x', statLabel: 'faster payroll processing',
+                },
+                {
+                  icon: Award,
+                  color: 'text-violet-600',
+                  iconBg: 'bg-violet-50',
+                  border: 'hover:border-violet-200',
+                  title: 'Improve Accuracy',
+                  desc: 'Calculations are always correct. Approved hours feed directly into payroll with no rounding errors, missing entries, or compliance gaps — giving you confidence in every single run.',
+                  stat: '99.9%', statLabel: 'payroll accuracy rate',
+                },
+              ].map(({ icon: Icon, color, iconBg, border, title, desc, stat, statLabel }, i) => (
+                <FadeIn key={title} delay={i * 0.1}>
+                  <div className={`bg-white p-7 rounded-2xl border border-gray-100 ${border} shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 h-full flex flex-col`}>
+                    <div className={`w-12 h-12 ${iconBg} rounded-xl flex items-center justify-center ${color} mb-5`}>
+                      <Icon size={24} />
+                    </div>
+                    <h3 className="text-[16px] font-bold text-gray-900 mb-3">{title}</h3>
+                    <p className="text-[13.5px] text-gray-500 leading-[1.75] flex-1">{desc}</p>
+                    <div className={`mt-6 pt-5 border-t border-gray-50`}>
+                      <span className={`text-[28px] font-extrabold ${color} tracking-tight`}>{stat}</span>
+                      <p className="text-[12px] text-gray-400 font-medium mt-0.5">{statLabel}</p>
+                    </div>
+                  </div>
+                </FadeIn>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── 9. FAQ ───────────────────────────────────────────────────────────── */}
+        <section id="faq">
+          <div className="max-w-2xl mx-auto px-5 sm:px-8 py-20 lg:py-28">
+            <FadeIn className="text-center mb-12">
+              <SectionLabel>FAQ</SectionLabel>
+              <h2 className="text-[30px] sm:text-[36px] font-bold text-gray-900 mb-3 tracking-tight">
+                Frequently asked questions
+              </h2>
+              <p className="text-[15.5px] text-gray-500">Everything you need to know before getting started.</p>
+            </FadeIn>
+
+            <div className="space-y-2">
+              {FAQS.map(({ q, a }, i) => (
+                <FadeIn key={i} delay={i * 0.04}>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden bg-white hover:border-gray-300 transition-colors">
+                    <button
+                      className="w-full flex items-center justify-between px-6 py-4.5 text-left hover:bg-gray-50/80 transition-colors focus:outline-none"
+                      style={{ paddingTop: '16px', paddingBottom: '16px' }}
+                      onClick={() => setActiveFaq(activeFaq === i ? null : i)}
+                    >
+                      <span className="font-semibold text-gray-900 text-[13.5px] pr-6 leading-snug">{q}</span>
+                      <span className={`flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center transition-all duration-200 ${activeFaq === i ? 'bg-gray-900' : ''}`}>
+                        <ChevronDown size={13} className={`transition-transform duration-200 ${activeFaq === i ? 'rotate-180 text-white' : 'text-gray-500'}`} />
+                      </span>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {activeFaq === i && (
+                        <motion.div
+                          key="ans"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.22, ease: 'easeOut' }}
+                          className="overflow-hidden"
+                        >
+                          <p className="px-6 pb-5 text-[13.5px] text-gray-500 leading-[1.75] border-t border-gray-50 pt-3">{a}</p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </FadeIn>
+              ))}
+            </div>
+
+            <FadeIn delay={0.2} className="text-center mt-8">
+              <p className="text-[13px] text-gray-400">
+                Still have questions?{' '}
+                <a href="mailto:support@caltims.com" className="text-gray-700 font-semibold hover:underline">
+                  Contact support →
+                </a>
+              </p>
+            </FadeIn>
+          </div>
+        </section>
+
+        {/* ── 10. FINAL CTA ────────────────────────────────────────────────────── */}
+        <section className="bg-gray-50 border-t border-gray-100">
+          <div className="max-w-4xl mx-auto px-5 sm:px-8 py-24 lg:py-28 text-center">
+            <FadeIn>
+              <div className="inline-flex items-center gap-2 bg-white text-gray-500 text-[11.5px] font-semibold px-3.5 py-1.5 rounded-full border border-gray-200 shadow-sm mb-8">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Ready to get started?
+              </div>
+
+              <h2 className="text-[36px] sm:text-[44px] font-extrabold tracking-tight text-gray-900 mb-5 leading-[1.08]">
+                Start managing your<br className="hidden sm:block" /> workforce smarter
+              </h2>
+              <p className="text-[17px] text-gray-500 mb-10 max-w-lg mx-auto leading-[1.7]">
+                Join teams already using {companyName} to save time, run payroll, and stay organised.
+              </p>
+
+              <div className="flex flex-col sm:flex-row justify-center gap-3">
+                <button
+                  id="cta-get-started-btn"
+                  onClick={() => navigate('/signup')}
+                  className="inline-flex items-center justify-center gap-2 px-8 h-14 bg-[var(--color-primary)] text-white text-[15px] font-semibold rounded-xl hover:bg-[var(--color-primary-hover)] active:scale-[0.97] transition-all shadow-sm hover:shadow-md"
+                  style={{ height: '56px' }}
+                >
+                  <UserPlus size={18} /> Get started free
+                </button>
+                <button
+                  id="cta-login-btn"
+                  onClick={() => navigate('/login')}
+                  className="inline-flex items-center justify-center gap-2 px-8 h-14 border border-gray-200 bg-white text-gray-700 text-[15px] font-semibold rounded-xl hover:bg-white hover:border-gray-300 active:scale-[0.97] transition-all"
+                  style={{ height: '56px' }}
+                >
+                  <LogIn size={18} /> Log in
+                </button>
+              </div>
+
+              <p className="text-[12px] text-gray-400 mt-6 font-medium">
+                No credit card required · Free plan available · Setup in under 5 minutes
+              </p>
+            </FadeIn>
+          </div>
+        </section>
+
+      </main>
+
+      {/* ── FOOTER ──────────────────────────────────────────────────────────── */}
+      <footer className="bg-white border-t border-gray-100">
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 py-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-5 text-[13px] text-gray-400">
+            {/* Brand */}
+            <div className="flex items-center gap-2 font-semibold text-gray-600">
+              {logoUrl ? (
+                <img src={logoUrl} alt={companyName} className="h-5 object-contain" />
+              ) : (
+                <>
+                  <span className="w-6 h-6 bg-gray-900 rounded-md flex items-center justify-center">
+                    <Clock size={12} className="text-white" />
+                  </span>
+                  {companyName}
+                </>
+              )}
+            </div>
+
+            {/* Copyright */}
+            <span className="text-gray-400">
+              © {new Date().getFullYear()} {companyName}. All rights reserved.
+            </span>
+
+            {/* Links */}
+            <div className="flex items-center gap-6 font-medium">
+              {['Privacy', 'Terms', 'Contact'].map((l) => (
+                <a key={l} href="#" className="hover:text-gray-700 transition-colors">
+                  {l}
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}

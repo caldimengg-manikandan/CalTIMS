@@ -14,9 +14,10 @@ export default defineConfig({
     port: 3000,
     host: true,
     proxy: {
-      '/api': {
+      '/caltims/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/caltims\/api/, '/api'),
       },
     },
   },

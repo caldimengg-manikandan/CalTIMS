@@ -246,8 +246,6 @@ export default function App() {
                         <AppLayout />
                     </ProtectedRoute>
                 }>
-                    <Route index element={user?.role === 'super_admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />} />
-                    <Route path="/" element={user?.role === 'super_admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard" element={<PageSuspense><DashboardPage /></PageSuspense>} />
                     <Route path="/profile" element={<PageSuspense><ProfilePage /></PageSuspense>} />
                     <Route path="/timesheets" element={<PageSuspense><TimesheetEntry /></PageSuspense>} />

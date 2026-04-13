@@ -72,105 +72,98 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="w-full max-w-xl mx-auto space-y-12">
+        <div className="w-full">
             <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="space-y-10"
+                transition={{ duration: 0.4 }}
+                className="w-full bg-white border border-slate-200 rounded-2xl p-8 shadow-sm"
             >
-                <div className="space-y-8">
-                    <div className="space-y-3">
-                        <h2 className="text-5xl font-black text-slate-800 dark:text-white tracking-tight">Sign In</h2>
-                        <div className="h-2 w-16 btn-primary rounded-full" />
+                <div className="space-y-6">
+                    <div className="space-y-2 text-center">
+                        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Welcome back</h2>
+                        <p className="text-sm text-slate-500 font-medium">Please enter your details to sign in.</p>
                     </div>
 
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                         <button 
                             type="button"
                             onClick={handleSocialLogin}
-                            className="w-full h-16 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-2xl font-black text-base uppercase tracking-widest shadow-xl shadow-primary-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-4 disabled:opacity-70 group"
+                            className="w-full h-11 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
                         >
-                            <div className="bg-white p-1.5 rounded-lg">
-                                <GoogleIcon />
-                            </div>
+                            <GoogleIcon />
                             <span>Continue with Google</span>
                         </button>
 
                         <div className="relative flex items-center py-2">
-                            <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
-                            <span className="flex-shrink mx-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] relative top-[1px]">OR USE YOUR WORK ACCOUNT</span>
-                            <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
+                            <div className="flex-grow border-t border-slate-100"></div>
+                            <span className="flex-shrink mx-4 text-xs font-medium text-slate-400">or sign in with email</span>
+                            <div className="flex-grow border-t border-slate-100"></div>
                         </div>
                     </div>
-                </div>
 
-                <form onSubmit={handleSubmit(login)} className="space-y-6">
-                    <div className="space-y-2 group">
-                        <label className="block text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 group-focus-within:text-primary-500 transition-colors">Work Email</label>
-                        <div className="relative">
-                            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
-                            <input
-                                {...register('email')}
-                                type="email"
-                                className={`w-full h-16 pl-14 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 rounded-2xl text-base font-bold placeholder:text-slate-400 focus:ring-2 focus:ring-primary-500 transition-all ${errors.email ? 'border-red-500 ring-2 ring-red-500/20' : ''}`}
-                                placeholder="name@company.com"
-                            />
+                    <form onSubmit={handleSubmit(login)} className="space-y-5">
+                        <div className="space-y-1.5 group">
+                            <label className="block text-sm font-semibold text-slate-700">Email address</label>
+                            <div className="relative">
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-black transition-colors" size={18} />
+                                <input
+                                    {...register('email')}
+                                    type="email"
+                                    className={`w-full h-11 pl-10 pr-4 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-black/5 focus:border-black transition-all outline-none ${errors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : ''}`}
+                                    placeholder="name@company.com"
+                                />
+                            </div>
+                            {errors.email && <p className="text-xs text-red-500 font-medium ml-1 mt-1">{errors.email.message}</p>}
                         </div>
-                        {errors.email && <p className="text-xs text-red-500 font-bold ml-2 mt-1">{errors.email.message}</p>}
-                    </div>
 
-                    <div className="space-y-2 group">
-                        <div className="flex justify-between items-center mb-1">
-                            <label className="block text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 group-focus-within:text-primary-500 transition-colors">Password</label>
-                            <Link to="/forgot-password" size={16} className="text-xs font-black text-primary hover:text-primary-700 uppercase tracking-wider transition-colors">
-                                Forgot?
-                            </Link>
+                        <div className="space-y-1.5 group">
+                            <div className="flex justify-between items-center">
+                                <label className="block text-sm font-semibold text-slate-700">Password</label>
+                                <Link to="/forgot-password" size={16} className="text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors">
+                                    Forgot password?
+                                </Link>
+                            </div>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-black transition-colors" size={18} />
+                                <input
+                                    {...register('password')}
+                                    type={showPassword ? 'text' : 'password'}
+                                    className={`w-full h-11 pl-10 pr-10 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-black/5 focus:border-black transition-all outline-none ${errors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : ''}`}
+                                    placeholder="••••••••"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
+                            {errors.password && <p className="text-xs text-red-500 font-medium ml-1 mt-1">{errors.password.message}</p>}
                         </div>
-                        <div className="relative">
-                            <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
-                            <input
-                                {...register('password')}
-                                type={showPassword ? 'text' : 'password'}
-                                className={`w-full h-16 pl-14 pr-14 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 rounded-2xl text-base font-bold placeholder:text-slate-400 focus:ring-2 focus:ring-primary-500 transition-all ${errors.password ? 'border-red-500 ring-2 ring-red-500/20' : ''}`}
-                                placeholder="••••••••"
-                            />
+
+                        <div className="pt-2">
                             <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary-500 transition-colors"
+                                type="submit"
+                                disabled={isPending}
+                                className="w-full h-11 bg-black text-white hover:bg-slate-800 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
                             >
-                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                {isPending ? <Spinner size="sm" color="white" /> : (
+                                    <span>Sign in</span>
+                                )}
                             </button>
                         </div>
-                        {errors.password && <p className="text-xs text-red-500 font-bold ml-2 mt-1">{errors.password.message}</p>}
-                    </div>
-
-                    <div className="pt-6">
-                        <button
-                            type="submit"
-                            disabled={isPending}
-                            className="w-full h-16 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-2xl font-black text-base uppercase tracking-widest shadow-xl shadow-primary-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-4 disabled:opacity-70"
-                        >
-                            {isPending ? <Spinner size="sm" color="white" /> : (
-                                <>
-                                    <span>Sign In to Portal</span>
-                                    <ChevronRight size={22} />
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </form>
-
-                <div className="pt-8 border-t border-slate-100 dark:border-slate-800 text-center space-y-4">
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                        New organization? <Link to="/signup" className="text-primary-600 font-bold hover:underline">Start 28-day free trial</Link>
-                    </p>
-                    <p className="text-xs font-medium text-slate-400 dark:text-slate-500 italic">
-                        Securing workforce productivity in real-time.
-                    </p>
+                    </form>
                 </div>
             </motion.div>
+            
+            <div className="mt-6 text-center">
+                <p className="text-sm text-slate-600 font-medium">
+                    Don't have an account?{' '}
+                    <Link to="/signup" className="text-slate-900 hover:text-indigo-600 transition-colors font-bold">Sign up</Link>
+                </p>
+            </div>
         </div>
     )
 }
