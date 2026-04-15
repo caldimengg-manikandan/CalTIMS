@@ -7,6 +7,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, Mail, Lock, Building2, User, Phone, CheckCircle2 } from 'lucide-react'
 import { authAPI } from '@/services/endpoints'
 import { useAuthStore } from '@/store/authStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import Spinner from '@/components/ui/Spinner'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
@@ -32,6 +33,9 @@ const GoogleIcon = () => (
 export default function SignupPage() {
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
+  const general = useSettingsStore((s) => s.general)
+  const companyName = general?.branding?.organizationName || general?.organization?.companyName || 'CalTIMS'
+  
   const [showPassword, setShowPassword] = React.useState(false)
   const [emailSent, setEmailSent] = React.useState(false)
   const [emailVerified, setEmailVerified] = React.useState(false)
