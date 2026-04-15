@@ -159,6 +159,21 @@ export default function LandingPage() {
   const [activeFaq,  setActiveFaq]  = useState(null);
   const [scrolled,   setScrolled]   = useState(false);
 
+  const [showTime, setShowTime] = useState(false);
+  const [timeString, setTimeString] = useState('');
+
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      setTimeString(`${h}:${m}`);
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const { mode, setMode } = useThemeStore();
 
   useEffect(() => {
@@ -203,15 +218,32 @@ export default function LandingPage() {
           <div className="flex items-center gap-10">
             <button
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="flex items-center gap-2.5 focus:outline-none group"
+              className="flex items-center gap-2.5 focus:outline-none group relative"
+              onMouseEnter={() => setShowTime(true)}
+              onMouseLeave={() => setShowTime(false)}
               aria-label="Go to top"
             >
               {logoUrl ? (
                 <img src={logoUrl} alt={companyName} className="h-7 object-contain" />
               ) : (
                 <>
-                  <span className="w-8 h-8 bg-[var(--color-primary)] rounded-[9px] flex items-center justify-center shadow-sm hover:bg-[var(--color-primary-hover)] transition-colors">
-                    <Clock className="w-4 h-4 text-white" />
+                  <span className="w-8 h-8 bg-[var(--color-primary)] rounded-[9px] flex items-center justify-center shadow-sm hover:bg-[var(--color-primary-hover)] transition-all duration-300 overflow-hidden">
+                    {showTime ? (
+                      <motion.span 
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        className="text-[9px] font-black text-white tabular-nums"
+                      >
+                        {timeString}
+                      </motion.span>
+                    ) : (
+                      <motion.div
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                      >
+                        <Clock className="w-4 h-4 text-white" />
+                      </motion.div>
+                    )}
                   </span>
                   <span className="text-[15px] font-bold text-gray-900 dark:text-white tracking-tight">{companyName}</span>
                 </>
