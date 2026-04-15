@@ -30,7 +30,7 @@ jobs:
             # Backend setup
             echo "🔧 Setting up backend..."
             cd backend
-            npm install --production
+            npm install
             npx prisma generate
             cd ..
 
