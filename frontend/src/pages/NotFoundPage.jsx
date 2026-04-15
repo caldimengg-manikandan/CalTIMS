@@ -2,6 +2,8 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { Home } from 'lucide-react'
 
+//loga
+
 export default function NotFoundPage() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center bg-surface-50 dark:bg-black">
