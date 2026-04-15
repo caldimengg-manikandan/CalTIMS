@@ -1,17 +1,101 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { userAPI, auditAPI } from '@/services/endpoints'
+import { useAuthStore } from '@/store/authStore'
 import StatusBadge from '@/components/ui/StatusBadge'
 import Spinner from '@/components/ui/Spinner'
 import PageHeader from '@/components/ui/PageHeader'
 import {
     Search, UserPlus, SlidersHorizontal, Download, Eye, EyeOff, UserX, UserCheck,
     X, Save, ChevronDown, Pencil, Trash2, Mail, Phone, Building2,
-    Briefcase, CalendarDays, ShieldCheck, History
+    Briefcase, CalendarDays, ShieldCheck, History, Crown, Zap, Lock
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import Pagination from '@/components/ui/Pagination'
+
+const TRIAL_EMPLOYEE_LIMIT = 10
+
+/* ─── Trial Limit Upgrade Modal ──────────────────────────────── */
+function TrialLimitModal({ open, onClose, current, limit }) {
+    const navigate = useNavigate()
+    if (!open) return null
+    const pct = Math.min((current / limit) * 100, 100)
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)' }}
+            onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+        >
+            <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                {/* Gradient header */}
+                <div className="relative px-6 pt-8 pb-6 text-center" style={{ background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 50%,#a855f7 100%)' }}>
+                    <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 80%,#fff 0%,transparent 60%)' }} />
+                    <div className="relative">
+                        <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mx-auto mb-3 shadow-lg">
+                            <Crown size={32} className="text-yellow-300" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-white">Employee Limit Reached</h2>
+                        <p className="text-purple-200 text-sm mt-1">Your Trial plan allows up to {limit} employees</p>
+                    </div>
+                </div>
+
+                <div className="px-6 py-5 space-y-5">
+                    {/* Usage bar */}
+                    <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">Current Usage</span>
+                            <span className="font-bold text-red-500">{current} / {limit}</span>
+                        </div>
+                        <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                                className="h-full rounded-full transition-all"
+                                style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#f97316,#ef4444)' }}
+                            />
+                        </div>
+                        <p className="text-xs text-slate-400">You've reached the maximum employees for the Trial plan.</p>
+                    </div>
+
+                    {/* Pro features list */}
+                    <div className="space-y-2">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Upgrade to Pro & unlock</p>
+                        {[
+                            'Unlimited employees',
+                            'Advanced payroll & compliance reports',
+                            'Priority email & chat support',
+                            'Custom roles & permissions',
+                        ].map(f => (
+                            <div key={f} className="flex items-center gap-2.5">
+                                <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg,#6366f1,#a855f7)' }}>
+                                    <Zap size={11} className="text-white" />
+                                </div>
+                                <span className="text-sm text-slate-700 dark:text-slate-300">{f}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-3 pt-1">
+                        <button
+                            onClick={onClose}
+                            className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-bold transition-all"
+                        >
+                            Maybe Later
+                        </button>
+                        <button
+                            onClick={() => { onClose(); navigate('/settings?tab=subscription') }}
+                            className="flex-[2] h-11 rounded-xl text-sm font-bold text-white shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                            style={{ background: 'linear-gradient(135deg,#6366f1,#a855f7)' }}
+                        >
+                            <Crown size={16} className="text-yellow-300" /> Upgrade to Pro
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
 
 const INITIAL_FORM = {
     name: '', email: '', password: '', role: '',
@@ -279,6 +363,9 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
 
 /* ─── Main Page ──────────────────────────────────────────────── */
 export default function EmployeesPage() {
+    const isTrial = useAuthStore(s => s.isTrial())
+    const user = useAuthStore(s => s.user)
+
     const [search, setSearch] = useState('')
     const [role, setRole] = useState('')
     const [status, setStatus] = useState('')
@@ -297,6 +384,7 @@ export default function EmployeesPage() {
     const [viewEmp, setViewEmp] = useState(null)      // employee object for view
     const [deleteEmp, setDeleteEmp] = useState(null)  // employee object for delete confirm
     const [showHistory, setShowHistory] = useState(false) // toggle history view
+    const [showTrialLimit, setShowTrialLimit] = useState(false)
 
     const [addForm, setAddForm] = useState(INITIAL_FORM)
     const [editForm, setEditForm] = useState(INITIAL_FORM)
@@ -763,9 +851,22 @@ export default function EmployeesPage() {
                             <Download size={15} /> Export CSV
                         </button>
 
-                        {/* Add */}
-                        <button onClick={() => { setAddForm(INITIAL_FORM); setAddOpen(true) }} className="btn-primary h-9 text-sm px-4">
-                            <UserPlus size={15} /> Add Employee
+                        {/* Add — gated by Trial limit */}
+                        <button
+                            onClick={() => {
+                                const totalCount = allEmployees?.length ?? 0
+                                if (isTrial && !user?.isOwner && totalCount >= TRIAL_EMPLOYEE_LIMIT) {
+                                    setShowTrialLimit(true)
+                                    return
+                                }
+                                setAddForm(INITIAL_FORM)
+                                setAddOpen(true)
+                            }}
+                            className="btn-primary h-9 text-sm px-4 flex items-center gap-2"
+                        >
+                            {isTrial && !user?.isOwner && (allEmployees?.length ?? 0) >= TRIAL_EMPLOYEE_LIMIT
+                                ? <><Lock size={14} /> Add Employee</>
+                                : <><UserPlus size={15} /> Add Employee</>}
                         </button>
                     </div>
                 </div>
@@ -990,6 +1091,14 @@ export default function EmployeesPage() {
                     </button>
                 </div>
             </Modal>
-        </div >
+
+            {/* Trial limit upgrade modal */}
+            <TrialLimitModal
+                open={showTrialLimit}
+                onClose={() => setShowTrialLimit(false)}
+                current={allEmployees?.length ?? 0}
+                limit={TRIAL_EMPLOYEE_LIMIT}
+            />
+        </div>
     )
 }

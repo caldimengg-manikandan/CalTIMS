@@ -127,7 +127,29 @@ export default function IncidentList() {
     const data = activeTab === 'incidents' ? incidentsQuery.data : supportQuery.data;
     const isLoading = activeTab === 'incidents' ? incidentsQuery.isLoading : supportQuery.isLoading;
 
-    const listItems = data?.data || [];
+    const listItems = (data?.data || []).map((item, index) => {
+        if (activeTab === 'support') {
+            // Create a sequential display ID: SUP-0001, SUP-0002 etc.
+            // Using the total count and index to make it look like a series
+            const total = data?.total || (data?.data || []).length;
+            const serial = (total - index).toString().padStart(4, '0');
+            
+            return {
+                ...item,
+                ticketId: `SUP-${serial}`,
+                name: item.employee?.user?.name || 'Anonymous User',
+                email: item.employee?.user?.email || 'N/A',
+                issueType: item.category || 'General Issue',
+                message: item.description || '',
+                responses: (item.comments || []).map(c => ({
+                    ...c,
+                    message: c.message || c.content,
+                    sender: (c.user?.role === 'admin' || c.user?.role === 'owner') ? 'admin' : 'user'
+                }))
+            };
+        }
+        return item;
+    });
 
     return (
         <ProGuard
@@ -135,9 +157,9 @@ export default function IncidentList() {
             subtitle="Centralized incident tracking and support tickets are available in the Enterprise Pro tier. Connect with your team efficiently."
             icon={AlertCircle}
         >
-            <div className="h-[calc(100vh-160px)] flex flex-col gap-4 animate-fade-in overflow-hidden">
+            <div className="min-h-[calc(100vh-160px)] flex flex-col gap-4 animate-fade-in">
                 <PageHeader title={isAdmin ? "Help & Support Center" : "My Incidents"}>
-                    {!isAdmin && (
+                    {activeTab === 'incidents' && (
                         <button
                             onClick={() => setIsCreateModalOpen(true)}
                             className="flex items-center gap-2 px-6 py-2.5 btn-primary hover:bg-primary-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
@@ -287,7 +309,7 @@ export default function IncidentList() {
                                                             <p className="text-sm font-black text-slate-800 dark:text-white truncate">
                                                                 {activeTab === 'incidents' ? item.title : item.name}
                                                             </p>
-                                                            <p className="text-[10px] font-bold text-slate-400 truncate tracking-tight uppercase">
+                                                            <p className="text-[10px] font-bold text-slate-400 truncate tracking-tight">
                                                                 {activeTab === 'incidents' ? item.description : item.email}
                                                             </p>
                                                         </div>

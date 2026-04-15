@@ -1197,9 +1197,9 @@ export default function TimesheetEntryPage() {
                                                         const projectTasks = allTasks?.filter(t => (t.projectId?.id || t.projectId?._id || t.projectId) === row.projectId) || [];
                                                         const hasProjectTasks = projectTasks.length > 0;
 
-                                                        const isAdmin = ['admin', 'super_admin', 'owner'].includes(user?.role?.toLowerCase());
-                                                        // Show global if: not isolated OR (isolated but no tasks found) OR (is admin/owner)
-                                                        const showGlobal = !projectObj || !projectObj.onlyProjectTasks || !hasProjectTasks || isAdmin;
+                                                        // If the project has custom tasks defined, ONLY show those tasks.
+                                                        // Otherwise, fallback to the global generic task list.
+                                                        const showGlobal = !hasProjectTasks;
 
                                                         if (showGlobal) {
                                                             return (tsSettings?.taskCategories || DEFAULT_TASK_TYPES.filter(t => !['Select Task', 'Leave', 'Holiday'].includes(t)))

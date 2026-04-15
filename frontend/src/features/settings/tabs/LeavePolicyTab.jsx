@@ -60,14 +60,18 @@ export default function LeavePolicyTab() {
     })
 
     const handleAddLeave = () => {
+        const id = `lt-${Date.now()}`
         const newLeave = {
-            id: `lt-${Date.now()}`,
+            id,
             name: 'New Leave Type',
             category: 'General',
             days: 5,
             description: 'Custom leave category'
         }
         setLeaveTypes([...leaveTypes, newLeave])
+        setTimeout(() => {
+            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 100)
     }
 
     const updateLeave = (id, updates) => {
@@ -152,7 +156,7 @@ export default function LeavePolicyTab() {
                             {leaveTypes.map((leave) => {
                                 const Icon = CATEGORY_ICONS[leave.category] || Briefcase
                                 return (
-                                    <div key={leave.id} className="group relative bg-slate-50/50 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 border border-transparent hover:border-slate-200 dark:hover:border-white/10 rounded-3xl p-6 transition-all">
+                                    <div key={leave.id} id={leave.id} className="group relative bg-slate-50/50 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 border border-transparent hover:border-slate-200 dark:hover:border-white/10 rounded-3xl p-6 transition-all">
                                         <div className="flex flex-col md:flex-row md:items-center gap-6">
                                             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border ${CATEGORY_STYLES[leave.category]}`}>
                                                 <Icon size={20} />

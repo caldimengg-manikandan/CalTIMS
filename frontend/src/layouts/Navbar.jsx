@@ -219,7 +219,7 @@ export default function Navbar() {
                 ref={panelRef}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
-                className={`fixed top-[58px] right-4 z-50 w-72 bg-white dark:bg-[#0f1a2e] rounded-xl shadow-[0_8px_32px_-4px_rgb(0_0_0/0.18)] border border-slate-100 dark:border-slate-700/60 transition-all duration-200 origin-top-right ${profileOpen
+                className={`fixed top-[58px] right-4 z-[100] w-72 bg-white dark:bg-[#0f1a2e] rounded-xl shadow-[0_8px_32px_-4px_rgb(0_0_0/0.18)] border border-slate-100 dark:border-slate-700/60 transition-all duration-200 origin-top-right ${profileOpen
                     ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
                     : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
                     }`}

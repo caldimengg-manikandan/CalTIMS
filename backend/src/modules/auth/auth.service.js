@@ -8,6 +8,7 @@ const AppError = require('../../shared/utils/AppError');
 const { logActivity } = require('../../shared/utils/activityLogger');
 const logger = require('../../shared/utils/logger');
 const { ROLES } = require('../../constants');
+const otpService = require('../../shared/services/otp.service');
 
 const generateTokens = (userId, role) => {
   const accessToken = jwt.sign({ sub: userId, role }, process.env.JWT_ACCESS_SECRET, {
@@ -167,7 +168,10 @@ const authService = {
   /**
    * Register — create org + user + trial
    */
-  async register({ email, password, name, organizationName, phoneNumber, ipAddress, deviceFingerprint }) {
+  async register({ email, password, name, organizationName, phoneNumber, ipAddress, deviceFingerprint, otp }) {
+    // Verify Email OTP
+    await otpService.verifyOTP(email, otp);
+
     const [existingEmail, existingPhone, existingOrg, existingTrial] = await Promise.all([
       prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } }),
       phoneNumber ? prisma.user.findFirst({ where: { phoneNumber } }) : null,
@@ -232,6 +236,9 @@ const authService = {
       },
       include: { roleRef: true },
     });
+
+    // Cleanup OTP
+    await otpService.deleteOTP(email);
 
     // Employee code
     await prisma.employee.create({
@@ -362,6 +369,14 @@ const authService = {
     await logActivity({ userId: freshUser.id, organizationId: freshUser.organizationId, action: 'LOGIN', req });
 
     return { accessToken, refreshToken, user: formatUser(freshUser) };
+  },
+
+  async sendVerificationOTP(email) {
+    return await otpService.sendOTP(email, 'Signup Verification');
+  },
+
+  async verifyVerificationOTP(email, otp) {
+    return await otpService.verifyOTP(email, otp);
   },
 };
 

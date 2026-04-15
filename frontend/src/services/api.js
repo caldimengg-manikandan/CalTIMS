@@ -24,7 +24,7 @@ api.interceptors.request.use(
     }
 
     // Skip warning for public routes
-    const publicRoutes = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password', '/health'];
+    const publicRoutes = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password', '/health', '/auth/send-verification-otp', '/auth/verify-verification-otp'];
     const isPublic = publicRoutes.some(route => config.url?.includes(route));
 
     if (token) {

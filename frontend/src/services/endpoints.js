@@ -10,6 +10,8 @@ export const authAPI = {
   resetPassword: (token, data) => api.post(`/auth/reset-password/${token}`, data),
   socialLogin: (data) => api.post('/auth/social-login', data, { skipToast: true }),
   completeOnboarding: (data) => api.post('/auth/onboarding', data),
+  sendVerificationOTP: (email) => api.post('/auth/send-verification-otp', { email }),
+  verifyVerificationOTP: (email, otp) => api.post('/auth/verify-verification-otp', { email, otp }),
 }
 
 export const userAPI = {
@@ -256,6 +258,7 @@ export const adminAPI = {
 
 export const subscriptionAPI = {
   getCurrent: (config = {}) => api.get('/subscriptions/current', config),
+  getHistory: (params) => api.get('/subscriptions/history', { params }),
   upgrade: (data) => api.post('/subscriptions/upgrade', data),
 }
 

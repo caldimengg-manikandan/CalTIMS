@@ -140,6 +140,7 @@ app.use('/api/v1', generalLimiter);
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/payroll', financeLimiter);
 app.use('/api/v1/reports', financeLimiter);
+app.use('/api/v1/support', supportRoutes);
 
 // Apply protection to all subsequent routes
 app.use('/api/v1', authenticate, checkSubscription);
@@ -158,7 +159,6 @@ app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/report-schedules', reportScheduleRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/incidents', incidentRoutes);
-app.use('/api/v1/support', supportRoutes);
 app.use('/api/v1/audit', auditRoutes);
 app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/payroll', require('./modules/payroll/payroll.routes'));

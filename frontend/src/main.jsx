@@ -26,7 +26,7 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
-        <BrowserRouter basename="/caltims">
+        <BrowserRouter basename={import.meta.env.VITE_ROUTER_BASENAME || ""}>
             <QueryClientProvider client={queryClient}>
                 <App />
             </QueryClientProvider>

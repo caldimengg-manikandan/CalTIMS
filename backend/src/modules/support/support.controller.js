@@ -58,7 +58,7 @@ const trackTickets = async (req, res, next) => {
 const getTickets = async (req, res, next) => {
     try {
         const organizationId = req.organizationId;
-        const result = await supportService.getAllTickets(req.query, organizationId, req.user?._id, req.user?.role);
+        const result = await supportService.getAllTickets(req.query, organizationId, req.user?._id, req.user?.role, req.user?.permissions);
         res.status(200).json({
             success: true,
             data: result.tickets,

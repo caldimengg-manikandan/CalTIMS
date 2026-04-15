@@ -16,6 +16,7 @@ const registerSchema = Joi.object({
   phoneNumber: Joi.string().pattern(/^\d{10}$/).trim().required().messages({
     'string.pattern.base': 'Phone number must be exactly 10 digits',
   }),
+  otp: Joi.string().length(6).required(),
 });
 
 const changePasswordSchema = Joi.object({

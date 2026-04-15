@@ -53,11 +53,11 @@ export default function SupportTicketDetail({ ticket, onBack }) {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Content */}
-                {/* <div className="lg:col-span-2 space-y-8"> */}
-                {/* Ticket Header */}
-                <div className="bg-white dark:bg-white/5 p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 space-y-4 shadow-sm">
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm font-black text-primary bg-indigo-50 px-3 py-1 rounded-xl uppercase tracking-widest">{ticket.ticketId}</span>
+                <div className="lg:col-span-2 space-y-8">
+                    {/* Ticket Header */}
+                    <div className="bg-white dark:bg-white/5 p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 space-y-4 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm font-black text-primary bg-indigo-50 px-3 py-1 rounded-xl uppercase tracking-widest">{ticket.ticketId}</span>
                         <div className="flex items-center gap-2 text-slate-400">
                             <Clock size={14} />
                             <span className="text-[10px] font-bold uppercase">{format(new Date(ticket.createdAt), 'MMM d, yyyy HH:mm')}</span>
@@ -101,7 +101,7 @@ export default function SupportTicketDetail({ ticket, onBack }) {
                     {ticket.status !== 'Closed' && (
                         <form onSubmit={handleReply} className="relative group">
                             <textarea
-                                className="w-full bg-white dark:bg-white/5 border-2 border-slate-100 focus:border-primary outline-none rounded-[2rem] px-8 py-6 text-sm font-medium transition-all shadow-sm pr-20 resize-none"
+                                className="w-full bg-white dark:bg-white/5 border border-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none rounded-[2rem] px-8 py-6 text-sm font-medium transition-all shadow-sm pr-20 resize-none"
                                 placeholder="Type your professional response..."
                                 rows={3}
                                 value={replyMessage}
@@ -117,7 +117,7 @@ export default function SupportTicketDetail({ ticket, onBack }) {
                         </form>
                     )}
                 </div>
-                {/* </div> */}
+                </div>
 
                 {/* Sidebar Info */}
                 <div className="space-y-6">

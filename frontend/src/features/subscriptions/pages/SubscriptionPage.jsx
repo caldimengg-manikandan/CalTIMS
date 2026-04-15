@@ -10,7 +10,7 @@ import { useAuthStore } from '@/store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import UpgradeContactModal from '../components/UpgradeContactModal';
 import { useQuery } from '@tanstack/react-query';
-import { settingsAPI } from '@/services/endpoints';
+import { settingsAPI, subscriptionAPI } from '@/services/endpoints';
 import { getCurrencySymbol } from '@/utils/formatters';
 import '../SubscriptionStyles.css';
 
@@ -42,8 +42,8 @@ const SubscriptionPage = () => {
   const fetchSubscriptionData = async () => {
     try {
       const [subRes, histRes] = await Promise.all([
-        fetch('/api/v1/subscriptions/current').then(res => res.json()),
-        fetch('/api/v1/subscriptions/history').then(res => res.json())
+        subscriptionAPI.getCurrent().then(res => res.data),
+        subscriptionAPI.getHistory().then(res => res.data)
       ]);
 
       if (subRes.success) {

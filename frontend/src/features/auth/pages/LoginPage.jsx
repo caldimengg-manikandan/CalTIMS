@@ -77,40 +77,40 @@ export default function LoginPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
-                className="w-full bg-white border border-slate-200 rounded-2xl p-8 shadow-sm"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 shadow-sm"
             >
                 <div className="space-y-6">
                     <div className="space-y-2 text-center">
-                        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Welcome back</h2>
-                        <p className="text-sm text-slate-500 font-medium">Please enter your details to sign in.</p>
+                        <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Welcome back</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Please enter your details to sign in.</p>
                     </div>
 
                     <div className="space-y-4">
                         <button 
                             type="button"
                             onClick={handleSocialLogin}
-                            className="w-full h-11 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
+                            className="w-full h-11 bg-white dark:bg-slate-950 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
                         >
                             <GoogleIcon />
                             <span>Continue with Google</span>
                         </button>
 
                         <div className="relative flex items-center py-2">
-                            <div className="flex-grow border-t border-slate-100"></div>
-                            <span className="flex-shrink mx-4 text-xs font-medium text-slate-400">or sign in with email</span>
-                            <div className="flex-grow border-t border-slate-100"></div>
+                            <div className="flex-grow border-t border-slate-100 dark:border-slate-800"></div>
+                            <span className="flex-shrink mx-4 text-xs font-medium text-slate-400 dark:text-slate-500">or sign in with email</span>
+                            <div className="flex-grow border-t border-slate-100 dark:border-slate-800"></div>
                         </div>
                     </div>
 
                     <form onSubmit={handleSubmit(login)} className="space-y-5">
                         <div className="space-y-1.5 group">
-                            <label className="block text-sm font-semibold text-slate-700">Email address</label>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Email address</label>
                             <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-black transition-colors" size={18} />
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[var(--color-primary)] transition-colors" size={18} />
                                 <input
                                     {...register('email')}
                                     type="email"
-                                    className={`w-full h-11 pl-10 pr-4 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-black/5 focus:border-black transition-all outline-none ${errors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : ''}`}
+                                    className={`w-full h-11 pl-10 pr-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-all outline-none ${errors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : ''}`}
                                     placeholder="name@company.com"
                                 />
                             </div>
@@ -119,25 +119,25 @@ export default function LoginPage() {
 
                         <div className="space-y-1.5 group">
                             <div className="flex justify-between items-center">
-                                <label className="block text-sm font-semibold text-slate-700">Password</label>
-                                <Link to="/forgot-password" size={16} className="text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors">
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Password</label>
+                                <Link to="/forgot-password" size={16} className="text-sm font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors">
                                     Forgot password?
                                 </Link>
                             </div>
                             <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-black transition-colors" size={18} />
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[var(--color-primary)] transition-colors" size={18} />
                                 <input
                                     {...register('password')}
                                     type={showPassword ? 'text' : 'password'}
-                                    className={`w-full h-11 pl-10 pr-10 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-black/5 focus:border-black transition-all outline-none ${errors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : ''}`}
+                                    className={`w-full h-11 pl-10 pr-10 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-all outline-none ${errors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : ''}`}
                                     placeholder="••••••••"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors z-10 p-1"
                                 >
-                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                 </button>
                             </div>
                             {errors.password && <p className="text-xs text-red-500 font-medium ml-1 mt-1">{errors.password.message}</p>}
@@ -147,7 +147,7 @@ export default function LoginPage() {
                             <button
                                 type="submit"
                                 disabled={isPending}
-                                className="w-full h-11 bg-black text-white hover:bg-slate-800 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                                className="w-full h-11 bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
                             >
                                 {isPending ? <Spinner size="sm" color="white" /> : (
                                     <span>Sign in</span>
@@ -159,9 +159,9 @@ export default function LoginPage() {
             </motion.div>
             
             <div className="mt-6 text-center">
-                <p className="text-sm text-slate-600 font-medium">
+                <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">
                     Don't have an account?{' '}
-                    <Link to="/signup" className="text-slate-900 hover:text-indigo-600 transition-colors font-bold">Sign up</Link>
+                    <Link to="/signup" className="text-slate-900 dark:text-white hover:text-[var(--color-primary)] transition-colors font-bold">Sign up</Link>
                 </p>
             </div>
         </div>

@@ -30,59 +30,64 @@ export default function ResetPasswordPage() {
     })
 
     return (
-        <div className="space-y-10">
-            <div className="space-y-2">
-                <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Security</h2>
-                <p className="text-slate-500 dark:text-slate-400 font-medium">
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 shadow-sm space-y-8"
+        >
+            <div className="space-y-2 text-center">
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Security</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
                     Reset your credentials. Choose a secure phrase.
                 </p>
             </div>
 
             <form onSubmit={handleSubmit(mutate)} className="space-y-6">
                 <div className="space-y-4">
-                    <div className="space-y-1.5">
-                        <label className="label">New password</label>
+                    <div className="space-y-1.5 group">
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">New password</label>
                         <div className="relative">
                             <input 
                                 {...register('password')} 
                                 type={show ? 'text' : 'password'}
-                                className={`input pr-12 ${errors.password ? 'input-error' : ''}`} 
+                                className={`w-full h-11 pl-4 pr-12 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-all outline-none ${errors.password ? 'border-red-500' : ''}`}
                                 placeholder="••••••••" 
                             />
                             <button 
                                 type="button" 
                                 onClick={() => setShow(!show)}
-                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                             >
                                 {show ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
                         </div>
-                        {errors.password && <p className="error-msg">{errors.password.message}</p>}
+                        {errors.password && <p className="text-xs text-red-500 font-medium ml-1 mt-1">{errors.password.message}</p>}
                     </div>
 
-                    <div className="space-y-1.5">
-                        <label className="label">Confirm password</label>
+                    <div className="space-y-1.5 group">
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Confirm password</label>
                         <input 
                             {...register('confirm')} 
                             type={show ? 'text' : 'password'}
-                            className={`input ${errors.confirm ? 'input-error' : ''}`} 
+                            className={`w-full h-11 px-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-all outline-none ${errors.confirm ? 'border-red-500' : ''}`}
                             placeholder="••••••••" 
                         />
-                        {errors.confirm && <p className="error-msg">{errors.confirm.message}</p>}
+                        {errors.confirm && <p className="text-xs text-red-500 font-medium ml-1 mt-1">{errors.confirm.message}</p>}
                     </div>
                 </div>
 
-                <button type="submit" disabled={isPending} className="btn-primary w-full justify-center py-3.5 shadow-lg shadow-primary/20">
+                <button type="submit" disabled={isPending} className="btn-primary w-full justify-center py-3 shadow-lg shadow-[var(--color-primary)]/20">
                     {isPending ? <Spinner size="sm" /> : null}
                     <span className="font-bold tracking-wide">{isPending ? 'Finalizing...' : 'Revise Credentials'}</span>
                 </button>
             </form>
 
-            <div className="pt-6 border-t border-slate-100 dark:border-slate-900">
-                <Link to="/login" className="flex items-center justify-center gap-2 text-sm text-primary font-bold hover:text-primary-700 transition-colors">
+            <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
+                <Link to="/login" className="flex items-center justify-center gap-2 text-sm text-[var(--color-primary)] font-bold hover:text-[var(--color-primary-hover)] transition-colors">
                     <ArrowLeft size={18} /> Abort and return to login
                 </Link>
             </div>
-        </div>
+        </motion.div>
     )
 }

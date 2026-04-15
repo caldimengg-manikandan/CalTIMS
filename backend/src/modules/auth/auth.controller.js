@@ -127,6 +127,16 @@ const authController = {
     
     res.redirect(redirectUrl);
   }),
+
+  sendVerificationOTP: asyncHandler(async (req, res) => {
+    await authService.sendVerificationOTP(req.body.email);
+    ApiResponse.success(res, { message: 'Verification code sent to your email' });
+  }),
+
+  verifyVerificationOTP: asyncHandler(async (req, res) => {
+    await authService.verifyVerificationOTP(req.body.email, req.body.otp);
+    ApiResponse.success(res, { message: 'Email verified successfully' });
+  }),
 };
 
 module.exports = authController;

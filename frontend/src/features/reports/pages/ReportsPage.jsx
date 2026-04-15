@@ -360,9 +360,9 @@ export default function ReportsPage() {
             subtitle="Advanced reporting, compliance tracking, AI-powered insights, and department utilization metrics are available in the Enterprise Pro tier."
             icon={Zap}
         >
-            <div className="space-y-6 fluid-container animate-fade-in pb-12">
+            <div className="fluid-container pb-12">
                 {/* ── Page Header & Export ── */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div>
                         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Enterprise Reports</h1>
                         <p className="text-slate-500 text-sm mt-1">Comprehensive organization analytics and insights</p>
@@ -403,7 +403,7 @@ export default function ReportsPage() {
                 </div>
 
                 {/* ── 1. Top Filter Bar (Global Controls) ── */}
-                <div className="card p-4 border border-slate-100 dark:border-white/5 shadow-sm sticky top-0 z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
+                <div className="card p-4 border border-slate-100 dark:border-white/5 shadow-sm sticky -top-4 md:-top-6 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md mb-6 -mx-2 px-2">
                     <div className="flex flex-wrap items-center gap-4">
                         <div className="flex items-center gap-2 text-primary dark:text-indigo-400 font-bold text-sm bg-indigo-50 dark:bg-primary-500/10 px-3 py-1.5 rounded-lg">
                             <Filter size={16} /> Filters
@@ -500,7 +500,7 @@ export default function ReportsPage() {
                 </div>
 
                 {/* ── 2. Executive KPI Section ── */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
                     <KpiCard icon={Clock} label="Total Hours Logged" value={`${totalHours.toFixed(2)}h`}
                         color="#6366f1" sub="Approved hours in period" trend={5.2} />
 
@@ -520,7 +520,7 @@ export default function ReportsPage() {
                     <>
                         {/* ── 3. Smart Insights ── */}
                         {insightsData?.length > 0 && (
-                            <div className="rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 p-1 shadow-lg">
+                            <div className="rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 p-1 shadow-lg mb-6">
                                 <div className="bg-white dark:bg-slate-900 rounded-xl p-5 relative overflow-hidden">
                                     <div className="absolute top-0 right-0 w-64 h-64 bg-primary-500/10 rounded-full blur-3xl -mr-10 -mt-20 pointer-events-none"></div>
                                     <div className="flex items-start gap-4 relative z-10">
@@ -542,7 +542,7 @@ export default function ReportsPage() {
                             </div>
                         )}
 
-                        <div className="grid grid-cols-1 lg:grid-cols-3 ultrawide:ultrawide-grid-4 gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 ultrawide:ultrawide-grid-4 gap-6 mb-6">
 
                             {/* ── Compliance Analytics (Donut) ── */}
                             <div className="card lg:col-span-1">

@@ -72,7 +72,7 @@ export default function ComplianceLocksTab() {
                                     max="31"
                                     className="input w-24 h-11 text-center font-bold text-lg"
                                     value={compliance.timesheetFreezeDay}
-                                    onChange={e => upd('timesheetFreezeDay', parseInt(e.target.value) || 1)}
+                                    onChange={e => upd('timesheetFreezeDay', Math.max(1, parseInt(e.target.value) || 1))}
                                 />
                                 <div className="flex-1">
                                     <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Locks Historical Entries</p>
@@ -115,7 +115,7 @@ export default function ComplianceLocksTab() {
                                     type="number"
                                     className="input w-24 h-11 text-center font-bold text-lg"
                                     value={compliance.auditLogRetentionDays}
-                                    onChange={e => upd('auditLogRetentionDays', parseInt(e.target.value) || 0)}
+                                    onChange={e => upd('auditLogRetentionDays', Math.max(0, parseInt(e.target.value) || 0))}
                                 />
                                 <div className="flex-1">
                                     <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Auto-Purge Cycles</p>

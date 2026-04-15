@@ -21,6 +21,8 @@ router.post('/social-login', authController.socialLogin);
 router.post('/refresh', authController.refresh);
 router.post('/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword);
 router.post('/reset-password/:token', validate(resetPasswordSchema), authController.resetPassword);
+router.post('/send-verification-otp', authController.sendVerificationOTP);
+router.post('/verify-verification-otp', authController.verifyVerificationOTP);
 
 // Google OAuth 2.0
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));

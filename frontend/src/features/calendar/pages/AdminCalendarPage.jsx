@@ -176,8 +176,8 @@ function EventModal({ event, onClose, onSave, isSaving }) {
                                 </p>
                             </div>
                         </div>
-                        <div className={`w-10 h-5 rounded-full transition-colors relative ${form.isGlobal ? 'btn-primary' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.isGlobal ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        <div className={`w-10 h-5 rounded-full transition-colors relative ${form.isGlobal ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.isGlobal ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
                         </div>
                     </div>
                 </div>

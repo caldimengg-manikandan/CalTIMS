@@ -8,6 +8,7 @@ import { Mail, ArrowLeft } from 'lucide-react'
 import { authAPI } from '@/services/endpoints'
 import Spinner from '@/components/ui/Spinner'
 import toast from 'react-hot-toast'
+import { motion } from 'framer-motion'
 
 const schema = z.object({ email: z.string().email('Enter a valid email') })
 
@@ -25,7 +26,12 @@ export default function ForgotPasswordPage() {
     })
 
     if (sent) return (
-        <div className="text-center space-y-6 animate-fade-in">
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 shadow-sm text-center space-y-6"
+        >
             <div className="w-20 h-20 bg-emerald-50 dark:bg-emerald-500/10 rounded-3xl flex items-center justify-center mx-auto shadow-sm">
                 <Mail size={32} className="text-emerald-600 dark:text-emerald-400" />
             </div>
@@ -35,47 +41,52 @@ export default function ForgotPasswordPage() {
                     A password recovery link has been dispatched to your corporate email address.
                 </p>
             </div>
-            <Link to="/login" className="btn-primary w-full justify-center py-3.5 shadow-lg shadow-indigo-600/10">
+            <Link to="/login" className="btn-primary w-full justify-center py-3.5 shadow-lg shadow-[var(--color-primary)]/10">
                 Return to Login
             </Link>
-        </div>
+        </motion.div>
     )
 
     return (
-        <div className="space-y-10">
-            <div className="space-y-2">
-                <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Recovery</h2>
-                <p className="text-slate-500 dark:text-slate-400 font-medium">
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 shadow-sm space-y-8"
+        >
+            <div className="space-y-2 text-center">
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Recovery</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
                     Lost access? Enter your email to begin restoration.
                 </p>
             </div>
 
             <form onSubmit={handleSubmit(mutate)} className="space-y-6">
-                <div className="space-y-1.5">
-                    <label className="label">Work Email</label>
+                <div className="space-y-1.5 group">
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Work Email</label>
                     <div className="relative">
                         <input
                             {...register('email')}
                             type="email"
-                            className={`input pl-11 ${errors.email ? 'input-error' : ''}`}
+                            className={`w-full h-11 pl-11 pr-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-all outline-none ${errors.email ? 'border-red-500' : ''}`}
                             placeholder="name@company.com"
                         />
-                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[var(--color-primary)] transition-colors" size={18} />
                     </div>
-                    {errors.email && <p className="error-msg">{errors.email.message}</p>}
+                    {errors.email && <p className="text-xs text-red-500 font-medium ml-1 mt-1">{errors.email.message}</p>}
                 </div>
 
-                <button type="submit" disabled={isPending} className="btn-primary w-full justify-center py-3.5 shadow-lg shadow-primary/20">
+                <button type="submit" disabled={isPending} className="btn-primary w-full justify-center py-3 shadow-lg shadow-[var(--color-primary)]/20">
                     {isPending ? <Spinner size="sm" /> : null}
-                    <span className="font-bold tracking-wide">{isPending ? 'Sending...' : 'Send'}</span>
+                    <span className="font-bold tracking-wide">{isPending ? 'Sending...' : 'Send reset link'}</span>
                 </button>
             </form>
 
-            <div className="pt-6 border-t border-slate-100 dark:border-slate-900">
-                <Link to="/login" className="flex items-center justify-center gap-2 text-sm text-primary font-bold hover:text-primary-700 transition-colors">
+            <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
+                <Link to="/login" className="flex items-center justify-center gap-2 text-sm text-[var(--color-primary)] font-bold hover:text-[var(--color-primary-hover)] transition-colors">
                     <ArrowLeft size={18} /> Back to login
                 </Link>
             </div>
-        </div>
+        </motion.div>
     )
 }

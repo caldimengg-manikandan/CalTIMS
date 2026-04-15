@@ -41,10 +41,10 @@ export default function OAuthSuccessPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
             <div className="text-center space-y-4">
                 <Spinner size="lg" />
-                <p className="text-slate-500 animate-pulse">Completing secure login...</p>
+                <p className="text-slate-500 dark:text-slate-400 animate-pulse">Completing secure login...</p>
             </div>
         </div>
     );

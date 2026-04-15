@@ -6,6 +6,8 @@ const emailService = require('../../shared/services/email.service');
 const logger = require('../../shared/utils/logger');
 const { hasPermission } = require('../../shared/utils/rbac');
 
+const otpService = require('../../shared/services/otp.service');
+
 const supportService = {
     /**
      * Submit a new support ticket
@@ -27,6 +29,24 @@ const supportService = {
             }
         }
 
+        // Auto-resolve employee context for public tickets using email
+        if (!employeeId && data.email) {
+            const userRef = await prisma.user.findUnique({
+                where: { email: data.email },
+                include: { employee: true }
+            });
+
+            if (userRef && userRef.employee) {
+                const empInfo = Array.isArray(userRef.employee) ? userRef.employee[0] : userRef.employee;
+                if (empInfo) {
+                    employeeId = empInfo.id;
+                    if (!organizationId) {
+                        organizationId = empInfo.organizationId || userRef.organizationId;
+                    }
+                }
+            }
+        }
+
         // If no employee (e.g. public request or onboarding user), we might need to handle it differently
         // but SupportTicket model requires employeeId. Let's see if we can find any employee for this org if user is admin
         if (!employeeId && organizationId) {
@@ -36,8 +56,8 @@ const supportService = {
             employeeId = firstAdmin?.id;
         }
 
-        if (!employeeId) {
-             throw new AppError('Support ticket requires a valid employee or organization context', 400);
+        if (!employeeId || !organizationId) {
+             throw new AppError('Support ticket requires a registered email address associated with an organization', 400);
         }
 
         const ticket = await prisma.supportTicket.create({
@@ -73,21 +93,34 @@ const supportService = {
             }
         }
 
-        return ticket;
+        const total = await prisma.supportTicket.count({ where: { organizationId } });
+        return {
+            ...ticket,
+            ticketId: `SUP-${(total).toString().padStart(4, '0')}`
+        };
     },
 
     /**
      * Get all tickets (Admin/User)
      */
-    async getAllTickets(query = {}, organizationId, userId, role) {
-        const { status, limit = 10, page = 1 } = query;
+    async getAllTickets(query = {}, organizationId, userId, role, permissions = []) {
+        const { status, limit = 10, page = 1, search } = query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
         
         // Base scoping using helper
         const baseQuery = enforceOrg({}, organizationId);
         const where = baseQuery.where;
         
-        if (status) where.status = status;
+        if (status && status !== 'All') where.status = status;
+
+        if (search) {
+            where.OR = [
+                { title: { contains: search, mode: 'insensitive' } },
+                { description: { contains: search, mode: 'insensitive' } },
+                { employee: { user: { name: { contains: search, mode: 'insensitive' } } } },
+                { employee: { user: { email: { contains: search, mode: 'insensitive' } } } }
+            ];
+        }
 
         // RBAC: If not authorized to manage all tickets, only show own tickets
         const canManageAll = hasPermission(permissions, 'Support', 'Help & Support', 'view');
@@ -103,7 +136,10 @@ const supportService = {
         const [tickets, total] = await Promise.all([
             prisma.supportTicket.findMany({
                 where,
-                include: { employee: { include: { user: { select: { id: true, name: true, email: true } } } } },
+                include: { 
+                    employee: { include: { user: { select: { id: true, name: true, email: true } } } },
+                    comments: { include: { user: { select: { name: true, role: true } } } }
+                },
                 orderBy: { createdAt: 'desc' },
                 skip,
                 take: parseInt(limit)
@@ -163,16 +199,71 @@ const supportService = {
      */
     async addMessage(ticketId, content, sender, organizationId) {
         const ticket = await prisma.supportTicket.findUnique({
-            where: { id_organizationId: { id: ticketId, organizationId } },
-            include: { employee: true }
+            where: { id: ticketId },
+            include: { 
+                employee: { include: { user: true } },
+                comments: { include: { user: true } }
+            }
         });
 
         if (!ticket) throw new AppError('Ticket not found', 404);
 
+        let finalUserId = ticket.employee.userId;
+
+        if (sender === 'admin') {
+            const adminUser = await prisma.user.findFirst({
+                where: { OR: [{ role: 'super_admin' }, { isOwner: true }] }
+            });
+            if (adminUser) finalUserId = adminUser.id;
+
+            if (ticket.employee?.user?.email) {
+                try {
+                    const ticketNum = ticket.id.split('-')[0].toUpperCase();
+                    
+                    // Build thread context for email
+                    let threadHtml = '';
+                    const sortedComments = [...(ticket.comments || [])].sort((a, b) => 
+                        new Date(b.createdAt) - new Date(a.createdAt)
+                    );
+                    
+                    if (sortedComments.length > 0) {
+                        threadHtml = '<br><div style="border-top: 1px solid #e2e8f0; margin-top: 20px; padding-top: 10px;"><p style="font-size: 12px; color: #64748b; font-weight: 800; text-transform: uppercase; margin-bottom: 10px;">Recent Activity:</p>';
+                        sortedComments.slice(0, 3).forEach(c => {
+                            const isAgent = c.user?.role === 'admin' || c.user?.role === 'owner';
+                            threadHtml += `
+                                <div style="margin-bottom: 12px; font-size: 13px;">
+                                    <span style="color: ${isAgent ? '#4f46e5' : '#64748b'}; font-weight: 700;">${isAgent ? 'Agent' : ticket.employee.user.name}:</span>
+                                    <span style="color: #334155;">${c.content}</span>
+                                </div>`;
+                        });
+                        threadHtml += '</div>';
+                    }
+
+                    await emailService.sendNotificationEmail(ticket.employee.user.email, {
+                        title: `Update on Support Ticket [SUP-${ticketNum}]`,
+                        message: `
+                            <div style="text-align: left;">
+                                <p>Hello ${ticket.employee.user.name},</p>
+                                <p>Your support ticket regarding "<b>${ticket.title}</b>" has received a new response:</p>
+                                <div style="background-color: #f8fafc; padding: 20px; border-radius: 12px; border-left: 4px solid #4f46e5; margin: 20px 0;">
+                                    <p style="margin: 0; font-weight: 500; color: #1e293b; line-height: 1.6;">${content}</p>
+                                </div>
+                                ${threadHtml}
+                                <p style="margin-top: 25px; font-size: 14px; color: #64748b;">You can view the full thread and respond by logging into your support portal.</p>
+                            </div>`,
+                        actionLink: `${process.env.CLIENT_URL || 'http://localhost:3000'}/login`,
+                        actionLabel: 'Go to Support Portal'
+                    });
+                } catch (e) {
+                    logger.error('Failed to send support email:', e);
+                }
+            }
+        }
+
         return await prisma.supportComment.create({
             data: {
                 ticketId,
-                userId: ticket.employee.userId, // Defaulting to the ticket owner for simple impl
+                userId: finalUserId,
                 content
             }
         });
@@ -195,34 +286,12 @@ const supportService = {
         return true;
     },
 
-    /**
-     * Send OTP for support tracking
-     */
     async sendOTP(email) {
-        // Since we don't have a DB model for SupportOTP yet, 
-        // we'll use a mocked success for now or implement a simple transient logic.
-        // In a real app, we'd store this in Redis or a table.
-        const otp = '123456'; // Mocked OTP for now
-        
-        try {
-            await emailService.sendNotificationEmail(email, {
-                title: 'Support Verification Code',
-                message: `Your verification code for CALTIMS Support is: ${otp}. This code will expire in 10 minutes.`,
-                companyName: 'CALTIMS Support'
-            });
-            return true;
-        } catch (error) {
-            logger.error('Failed to send support OTP email:', error);
-            throw new AppError('Failed to send verification code', 500);
-        }
+        return await otpService.sendOTP(email, 'Support Verification');
     },
 
-    /**
-     * Verify OTP
-     */
     async verifyOTP(email, otp) {
-        if (otp === '123456') return true; // Mocked verification
-        throw new AppError('Invalid or expired verification code', 400);
+        return await otpService.verifyOTP(email, otp);
     }
 };
 
