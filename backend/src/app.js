@@ -61,6 +61,7 @@ const adminRoutes = require('./modules/admin/admin.routes');
 const schedulerService = require('./shared/services/scheduler.service');
 
 const app = express();
+app.set('trust proxy', 1);
 app.set('etag', false);
 
 // ─── Security Middleware ─────────────────────────────────────────────────────

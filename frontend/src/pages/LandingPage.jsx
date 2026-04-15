@@ -112,7 +112,7 @@ const VideoPlayer = ({ className = '' }) => (
     </div>
     <div className="pt-10 aspect-video">
       <video
-        src="/assets/images/vid_2.mp4"
+        src="assets/images/vid_2.mp4"
         autoPlay
         muted
         loop
@@ -450,7 +450,7 @@ export default function LandingPage() {
               <div className="relative rounded-2xl overflow-hidden border border-gray-100 dark:border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.1)] group">
                 <div className="absolute inset-0 bg-gray-900/5 dark:bg-white/5 group-hover:bg-transparent transition-colors duration-300 z-10 pointer-events-none" />
                 <img
-                  src="/assets/images/timesheet.png"
+                  src="assets/images/timesheet.png"
                   alt="Timesheet Entry Interface showing week view and project selection"
                   className="w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700 ease-out"
                   onError={(e) => {
@@ -469,7 +469,7 @@ export default function LandingPage() {
                 <div className="relative rounded-2xl overflow-hidden border border-gray-100 dark:border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.1)] group">
                   <div className="absolute inset-0 bg-gray-900/5 dark:bg-white/5 group-hover:bg-transparent transition-colors duration-300 z-10 pointer-events-none" />
                   <img
-                    src="/assets/images/dashboard.png"
+                    src="assets/images/dashboard.png"
                     alt="CalTIMS Dashboard showing personalized KPI widgets, active staff, and pending approvals"
                     className="w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700 ease-out"
                     onError={(e) => {

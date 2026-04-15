@@ -6,88 +6,76 @@ This document outlines the exact deployment workflow and server structure for th
 
 ## 🏗️ Architecture & Server Structure
 
-Our application uses a clean, subpath-based architecture on the VPS so that it securely shares the server with our other products (`steeldms`, `projectmanagement`).
+Our application uses a subpath-based architecture on the VPS to share the server with other products smoothly.
 
 - **Live URL:** `https://caldimproducts.com/caltims/`
-- **Frontend Engine:** React / Vite (Built to static files via `npm run build`)
-- **Backend Engine:** Node.js / Express (Managed by PM2 in the background)
+- **Frontend Engine:** React / Vite (Built via `npm run build`)
+- **Backend Engine:** Node.js / Express (Port 5005, managed by PM2)
 - **Web Server:** Nginx (Handles HTTPS and proxy mapping)
-- **Database:** PostgreSQL (Operating natively on the VPS)
+- **Database:** PostgreSQL (Native VPS installation)
 
 ### File Paths
 - **Main Code Directory (VPS):** `/var/www/caltims`
-- **Nginx Config Location:** `/etc/nginx/sites-available/caldimproducts.conf`
-- **Nginx PM2 Subpath:** `/caltims/` maps to `/var/www/caltims/frontend/dist/`
-- **Nginx API Subpath:** `/caltims/api/` maps to `http://localhost:5005/api/`
+- **Nginx Config Location:** `/etc/nginx/sites-enabled/caldimproducts.conf`
+- **Nginx Frontend Alias:** `/caltims/` maps to `/var/www/caltims/frontend/dist/`
+- **Nginx API Proxy:** `/caltims/api//` maps to `http://localhost:5005/api/`
 
-*(If you ever need to access or modify server variables safely, the backend config lives directly at `/var/www/caltims/backend/.env` on the VPS).*
+### Important Configuration (VPS Only - .gitignore'd)
+1. **Backend Env:** `/var/www/caltims/backend/.env` (DB URL and secrets)
+2. **Frontend Env:** `/var/www/caltims/frontend/.env.production`
+   Must contain:
+   ```env
+   VITE_ROUTER_BASENAME=/caltims
+   VITE_API_BASE_URL=/caltims/api/v1
+   VITE_SOCKET_URL=/
+   ```
 
 ---
 
 ## 🚀 How to Deploy Updates
 
-Our deployment is fully automated via Git. **NEVER manually copy or FTP files to the server.** Instead, follow this exact 2-step process whenever you make code changes locally.
+### Option 1: Fully Automated (Recommended)
+Our deployment is automated via GitHub Actions. **Just push to the main branch.**
 
-### Step 1: Develop and Push (Local Machine)
-Once you have written new code or upgraded packages locally, securely commit them to the main branch.
-
-From your local VS Code terminal:
+1. **Local Machine:**
 ```bash
-# 1. Stage your changes
 git add .
-
-# 2. Add an explicit description of what got changed
-git commit -m "Update: Added new timesheet dashboard"
-
-# 3. Push to GitHub
+git commit -m "Update: Fixes for subpath routing and dashboard crash"
 git push origin main
 ```
+2. GitHub will log into the VPS, pull the code, install dependencies, run Prisma migrations, build the React frontend, and restart the backend.
 
-### Step 2: Trigger the Automation Script (VPS)
-We have a unified deployment script (`vps_deploy.sh`) installed on the master server. You do not need to build manually on the server.
-
-From your VPS SSH terminal (`caldim@187.127.135.34`):
+### Option 2: Manual Trigger (If GitHub Action fails)
+Log into your VPS SSH and run:
 ```bash
-# 1. Enter the directory
-cd /var/www/caltims
-
-# 2. Run the deployment script
-./vps_deploy.sh
+cd /var/www/caltims && ./vps_deploy.sh
 ```
-
-**What the script automatically does for you:**
-- Retrieves all your new commits from GitHub.
-- Compiles the latest Node packages for the backend and restarts your PM2 server gracefully.
-- Compiles the latest frontend Node packages, generates the optimized React `dist` folder, and automatically replaces the live website interface.
 
 ---
 
 ## 🛠️ Important Notes for Developers
-
-If you are modifying low-level routing commands, please remember:
-
-1. **React Router & Vite:** The frontend is permanently attached to the `/caltims` subpath. 
-   - `vite.config.js` always needs `base: '/caltims/'`.
-   - `main.jsx` uses `<BrowserRouter basename="/caltims">`. Do not change these strings or the live interface will return 404 Nginx errors!
-2. **Axios API:** Our frontend API is strictly pointed at `baseURL: '/caltims/api/v1'`. It is routed safely through Nginx to bypass cross-origin requests.
+1. **Routing:** The app lives at `/caltims`.
+   - `vite.config.js` uses `base: '/caltims/'`.
+   - `App.jsx` uses `<BrowserRouter basename="/caltims">`.
+2. **Proxy Trust:** In `app.js`, we use `app.set('trust proxy', 1)`. This is required for the backend to see the real user IPs behind Nginx.
+3. **Assets:** Always use relative paths for images/videos in code (e.g., `src="assets/images/..."` NOT `src="/assets/..."`).
+4. **Super Admin:** To create the root administrator, run `node create_superadmin.js` in the `backend` folder on the VPS.
 
 ---
 
 ## 🚨 Troubleshooting Commands (VPS)
 
-If something goes wrong after you run the deployment script, use these commands on your VPS to diagnose the crash:
-
-**Check Backend Server Status:**
+**Check Backend Status:**
 ```bash
 pm2 status
 ```
 
-**Check Real-time Backend Logs (Find out why Node.js crashed):**
+**Check Backend Logs:**
 ```bash
 pm2 logs caltims-backend
 ```
 
-**Reload Web Routing (If Nginx acts up):**
+**Reload Web Routing:**
 ```bash
-sudo systemctl restart nginx
+sudo nginx -t && sudo systemctl reload nginx
 ```

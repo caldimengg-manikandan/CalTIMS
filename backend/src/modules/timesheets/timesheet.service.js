@@ -574,7 +574,7 @@ const timesheetService = {
         { userId: userId },
         { user: { employee: { managerId: employeeId } } }
       ];
-    } else if (!isAdmin) {
+    } else if (!canManageAll && !context.isSuperAdmin && !context.isOwner) {
       cumulativeWhere.userId = userId;
     }
 
