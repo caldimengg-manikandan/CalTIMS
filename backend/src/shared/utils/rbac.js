@@ -13,16 +13,23 @@
 const hasPermission = (permissions, module, submodule, action) => {
   if (!permissions) return false;
   
-  // Super Admin / Owner bypass logic (handled in context, but good for safety)
-  if (permissions._isSuperAdmin || permissions._isOwner) return true;
+  // Super Admin / Owner bypass logic
+  if (permissions.all === true || (permissions.all && permissions.all.all && permissions.all.all.includes('all'))) {
+    return true;
+  }
 
-  const mod = permissions[module];
+  const mod = permissions[module] || permissions['all'];
   if (!mod) return false;
 
-  const sub = mod[submodule];
+  const sub = mod[submodule] || mod['all'];
   if (!sub) return false;
 
-  return sub[action] === true;
+  // Handle both boolean true and array of permitted actions
+  if (Array.isArray(sub)) {
+    return sub.includes(action) || sub.includes('all');
+  }
+  
+  return sub[action] === true || sub['all'] === true;
 };
 
 module.exports = { hasPermission };

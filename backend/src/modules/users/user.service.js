@@ -254,14 +254,16 @@ const userService = {
     const canEditOthers = hasPermission(context.permissions, 'Employees', 'Employee List', 'edit');
     const canChangeRoles = hasPermission(context.permissions, 'Settings', 'Users & Roles', 'edit');
     const isEditingSelf = id === requestorId;
-
     const isChangingRole = (data.role && data.role !== user.role) || (data.roleId && data.roleId !== user.roleId);
 
-    if (isChangingRole && !canChangeRoles && !context.isSuperAdmin && !context.isOwner) {
+    // Bypass check: Super Admins and Owners can do anything
+    const hasFullPower = context.isSuperAdmin || context.isOwner;
+
+    if (isChangingRole && !hasFullPower && !canChangeRoles) {
       throw new AppError('Only authorized users can change user roles', 403);
     }
     
-    if (!isEditingSelf && !canEditOthers && !context.isSuperAdmin && !context.isOwner) {
+    if (!isEditingSelf && !hasFullPower && !canEditOthers) {
       throw new AppError('You do not have permission to edit this profile', 403);
     }
 
