@@ -173,11 +173,11 @@ export const PayrollDashboard = () => {
                <div className="flex justify-between items-center">
                   <h3 className="font-bold text-slate-800 dark:text-white">Payroll Cycle Status</h3>
                   <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border transition-all ${dash?.summary?.status === 'Draft' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                        dash?.summary?.status === 'Processed' || dash?.summary?.status === 'Warning' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
-                           dash?.summary?.status === 'Completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                              dash?.summary?.status === 'Paid' ? 'bg-emerald-600 text-white' :
-                                 dash?.summary?.status === 'Locked' ? 'bg-slate-900 dark:bg-white dark:text-black text-white' :
-                                    'bg-slate-50 dark:bg-[#1a1a1a] text-slate-400'
+                     dash?.summary?.status === 'Processed' || dash?.summary?.status === 'Warning' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+                        dash?.summary?.status === 'Completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                           dash?.summary?.status === 'Paid' ? 'bg-emerald-600 text-white' :
+                              dash?.summary?.status === 'Locked' ? 'bg-slate-900 dark:bg-white dark:text-black text-white' :
+                                 'bg-slate-50 dark:bg-[#1a1a1a] text-slate-400'
                      }`}>
                      {dash?.summary?.status || 'Draft'}
                   </span>
@@ -276,15 +276,15 @@ export const PayrollDashboard = () => {
                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `${currencySymbol}${v / 1000}k`} />
-                           <ReTooltip 
-                              contentStyle={{ 
-                                 borderRadius: '12px', 
-                                 border: 'none', 
-                                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)', 
+                           <ReTooltip
+                              contentStyle={{
+                                 borderRadius: '12px',
+                                 border: 'none',
+                                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
                                  backgroundColor: '#111827',
                                  color: '#fff',
-                                 fontWeight: 700 
-                              }} 
+                                 fontWeight: 700
+                              }}
                               itemStyle={{ color: '#fff' }}
                               labelStyle={{ color: '#94a3b8' }}
                            />
@@ -297,18 +297,18 @@ export const PayrollDashboard = () => {
                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `${currencySymbol}${v / 1000}k`} />
-                           <ReTooltip 
-                              contentStyle={{ 
-                                 borderRadius: '12px', 
-                                 border: 'none', 
-                                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)', 
+                           <ReTooltip
+                              contentStyle={{
+                                 borderRadius: '12px',
+                                 border: 'none',
+                                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
                                  backgroundColor: '#111827',
                                  color: '#fff',
-                                 fontWeight: 700 
-                              }} 
+                                 fontWeight: 700
+                              }}
                               itemStyle={{ color: '#fff' }}
                               labelStyle={{ color: '#94a3b8' }}
-                              formatter={(v, name) => [formatCurrency(v), metricConfigs[name]?.label || name]} 
+                              formatter={(v, name) => [formatCurrency(v), metricConfigs[name]?.label || name]}
                            />
 
                            {metrics.map(m => (
@@ -328,18 +328,18 @@ export const PayrollDashboard = () => {
                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `${currencySymbol}${v / 1000}k`} />
-                           <ReTooltip 
-                              contentStyle={{ 
-                                 borderRadius: '12px', 
-                                 border: 'none', 
-                                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)', 
+                           <ReTooltip
+                              contentStyle={{
+                                 borderRadius: '12px',
+                                 border: 'none',
+                                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
                                  backgroundColor: '#111827',
                                  color: '#fff',
-                                 fontWeight: 700 
-                              }} 
+                                 fontWeight: 700
+                              }}
                               itemStyle={{ color: '#fff' }}
                               labelStyle={{ color: '#94a3b8' }}
-                              formatter={(v, name) => [formatCurrency(v), metricConfigs[name]?.label || name]} 
+                              formatter={(v, name) => [formatCurrency(v), metricConfigs[name]?.label || name]}
                            />
 
                            {metrics.map(m => (
@@ -367,18 +367,18 @@ export const PayrollDashboard = () => {
                         <Pie data={deptData} cx="50%" cy="50%" innerRadius={70} outerRadius={100} fill="#8884d8" paddingAngle={5} dataKey="value" isAnimationActive={true} animationBegin={0} animationDuration={1500} animationEasing="ease-out">
                            {deptData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                         </Pie>
-                        <ReTooltip 
-                           contentStyle={{ 
-                              borderRadius: '12px', 
-                              border: 'none', 
-                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)', 
+                        <ReTooltip
+                           contentStyle={{
+                              borderRadius: '12px',
+                              border: 'none',
+                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
                               backgroundColor: '#111827',
                               color: '#fff',
-                              fontWeight: 700 
-                           }} 
+                              fontWeight: 700
+                           }}
                            itemStyle={{ color: '#fff' }}
                            labelStyle={{ color: '#94a3b8' }}
-                           formatter={(v) => [`${currencySymbol}${formatCurrency(v)}`, 'Total Cost']} 
+                           formatter={(v) => [`${currencySymbol}${formatCurrency(v)}`, 'Total Cost']}
                         />
                         <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }} />
                      </RePieChart>
@@ -398,19 +398,19 @@ export const PayrollDashboard = () => {
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="currentColor" className="text-slate-100 dark:text-white/5" />
                         <XAxis type="number" hide />
                         <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: '#475569' }} width={120} />
-                        <ReTooltip 
-                           cursor={{ fill: 'rgba(255,255,255,0.02)' }} 
-                           contentStyle={{ 
-                              borderRadius: '12px', 
-                              border: 'none', 
-                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)', 
+                        <ReTooltip
+                           cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                           contentStyle={{
+                              borderRadius: '12px',
+                              border: 'none',
+                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
                               backgroundColor: '#111827',
                               color: '#fff',
-                              fontWeight: 700 
-                           }} 
+                              fontWeight: 700
+                           }}
                            itemStyle={{ color: '#fff' }}
                            labelStyle={{ color: '#94a3b8' }}
-                           formatter={(v) => [`${currencySymbol}${formatCurrency(v)}`, 'Total Vol.']} 
+                           formatter={(v) => [`${currencySymbol}${formatCurrency(v)}`, 'Total Vol.']}
                         />
                         <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={30} isAnimationActive={true} animationBegin={0} animationDuration={1500} animationEasing="ease-out">
                            {breakdownData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.type === 'Earning' ? '#6366f1' : '#f43f5e'} fillOpacity={0.8} />)}
@@ -429,7 +429,7 @@ export const PayrollDashboard = () => {
          <div className="bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-50 dark:border-white/5 flex justify-between items-center">
                <h3 className="font-bold text-slate-800 dark:text-white">Recent Payroll Batches</h3>
-               <button onClick={() => window.location.href = '/payroll/history'} className="text-xs font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-700 transition-colors flex items-center gap-1.5">
+               <button onClick={() => window.location.href = '/caltims/payroll/history'} className="text-xs font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-700 transition-colors flex items-center gap-1.5">
                   View Full Ledger <ExternalLink size={12} />
                </button>
             </div>
@@ -451,8 +451,8 @@ export const PayrollDashboard = () => {
                            <td className="px-6 py-4 text-right font-bold text-slate-800 dark:text-white tabular-nums">{currencySymbol}{formatCurrency(run.totalNet || 0)}</td>
                            <td className="px-6 py-4 text-center">
                               <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium ${run.status === 'Completed' || run.status === 'Paid' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' :
-                                    run.status === 'Processed' ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400' :
-                                       'bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400'
+                                 run.status === 'Processed' ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400' :
+                                    'bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400'
                                  }`}>
                                  <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
                                  {run.status}
@@ -595,7 +595,7 @@ export const EmployeePayrollProfiles = () => {
       if (mode === 'view') {
          const profile = profiles?.find(p => (p.employee?.userId === userId) || (p.user === userId));
          if (!profile) return toast.error('No payroll configuration found for this user');
-         
+
          const breakdown = calculateSalaryBreakdown(profile.earnings, profile.deductions, profile.monthlyCTC, globalPolicy);
          setViewModal({ isOpen: true, data: { user, profile, breakdown } });
       } else {
@@ -891,7 +891,7 @@ export const EmployeePayrollProfiles = () => {
                                     ))}
                                  </div>
                               )}
-                              
+
                               {/* Profile Deductions */}
                               {viewModal.data.breakdown.deductions.map((d, idx) => (
                                  <div key={idx} className="flex justify-between items-center">
@@ -919,7 +919,7 @@ export const EmployeePayrollProfiles = () => {
                            <Landmark size={16} className="text-emerald-500" />
                            <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">Bank & Compliance</span>
                         </div>
-                        
+
                         <div className="space-y-4">
                            <div className="p-5 bg-white dark:bg-[#1a1a1a] border border-slate-100 dark:border-[#333333] rounded-2xl shadow-sm space-y-4">
                               <div className="flex justify-between items-center">
@@ -956,7 +956,7 @@ export const EmployeePayrollProfiles = () => {
                   </div>
 
                   <div className="flex justify-end pt-4">
-                     <button 
+                     <button
                         onClick={() => navigate(`/payroll/profile/${viewModal.data.user.id || viewModal.data.user._id}`, { state: { preSelectedUser: viewModal.data.user } })}
                         className="flex items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white dark:text-black text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 dark:shadow-none"
                      >
@@ -2416,9 +2416,9 @@ ${filename}`,
       const effectiveStatus = (status === 'SENT' || isEmailSent) ? 'SENT' : (status || 'GENERATED');
       const cfg = {
          GENERATED: { label: 'Generated', cls: 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-500/20', dot: 'bg-blue-400' },
-         PAID:      { label: 'Paid',      cls: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20', dot: 'bg-emerald-500' },
-         SENT:      { label: 'Sent',      cls: 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-500/20', dot: 'bg-indigo-400' },
-         PENDING:   { label: 'Pending',   cls: 'bg-amber-50 dark:bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-100 dark:border-amber-500/20', dot: 'bg-amber-400' },
+         PAID: { label: 'Paid', cls: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20', dot: 'bg-emerald-500' },
+         SENT: { label: 'Sent', cls: 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-500/20', dot: 'bg-indigo-400' },
+         PENDING: { label: 'Pending', cls: 'bg-amber-50 dark:bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-100 dark:border-amber-500/20', dot: 'bg-amber-400' },
       }[effectiveStatus] || { label: effectiveStatus, cls: 'bg-slate-50 dark:bg-white/10 text-slate-400 dark:text-gray-500 border-slate-100 dark:border-white/5', dot: 'bg-slate-300' };
       return (
          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${cfg.cls}`}>
@@ -2663,53 +2663,53 @@ ${filename}`,
                         const isSent = p.status === 'SENT' || p.isEmailSent;
                         const canSendEmail = isPaid || isSent;
                         return (
-                        <tr key={p.id} className={`group hover:bg-indigo-50/30 dark:hover:bg-indigo-500/10 transition-colors ${selectedRows.includes(p.id) ? 'bg-indigo-50/50 dark:bg-indigo-500/20' : ''}`}>
-                           <td className="px-6 py-4">
-                              <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" checked={selectedRows.includes(p.id)} onChange={() => toggleRow(p.id)} />
-                           </td>
-                           <td className="px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                 <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center font-black text-indigo-600 dark:text-indigo-400 text-sm flex-shrink-0">{p.employeeInfo?.name?.charAt(0) || 'E'}</div>
-                                 <div>
-                                    <p className="text-sm font-bold text-slate-800 dark:text-white leading-none mb-1">{p.employeeInfo?.name}</p>
-                                    <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 tracking-tighter uppercase">{p.employeeInfo?.employeeId} • {p.employeeInfo?.department}</p>
+                           <tr key={p.id} className={`group hover:bg-indigo-50/30 dark:hover:bg-indigo-500/10 transition-colors ${selectedRows.includes(p.id) ? 'bg-indigo-50/50 dark:bg-indigo-500/20' : ''}`}>
+                              <td className="px-6 py-4">
+                                 <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" checked={selectedRows.includes(p.id)} onChange={() => toggleRow(p.id)} />
+                              </td>
+                              <td className="px-6 py-4">
+                                 <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center font-black text-indigo-600 dark:text-indigo-400 text-sm flex-shrink-0">{p.employeeInfo?.name?.charAt(0) || 'E'}</div>
+                                    <div>
+                                       <p className="text-sm font-bold text-slate-800 dark:text-white leading-none mb-1">{p.employeeInfo?.name}</p>
+                                       <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 tracking-tighter uppercase">{p.employeeInfo?.employeeId} • {p.employeeInfo?.department}</p>
+                                    </div>
                                  </div>
-                              </div>
-                           </td>
-                           <td className="px-6 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-300">{p.employeeInfo?.designation || 'Technical Staff'}</p></td>
-                           <td className="px-6 py-4 text-right font-bold text-slate-600 dark:text-gray-400">{currencySymbol}{formatCurrency(p.gross || 0)}</td>
-                           <td className="px-6 py-4 text-right font-bold text-rose-500">-{currencySymbol}{formatCurrency(p.totalDeductions || 0)}</td>
-                           <td className="px-6 py-4 text-right">
-                              <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{currencySymbol}{formatCurrency(p.netPay || 0)}</span>
-                              {p.paidAt && <p className="text-[9px] font-bold text-slate-400 dark:text-gray-500 mt-0.5">Paid {new Date(p.paidAt).toLocaleDateString()}</p>}
-                           </td>
-                           <td className="px-6 py-4 text-center">
-                              <StatusBadge status={p.status} isEmailSent={p.isEmailSent} />
-                           </td>
-                           <td className="px-6 py-4">
-                              <div className="flex items-center justify-end gap-1">
-                                 <button onClick={() => { setActivePayslipId(p.id); setIsPreviewOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="View Statement"><Eye size={16} /></button>
-                                 <button onClick={() => handleDownload(p.id)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-all" title="Download PDF">
-                                    {downloadingId === p.id ? <RefreshCw size={16} className="animate-spin text-indigo-600" /> : <Download size={16} />}
-                                 </button>
-                                 {isGenerated && (
+                              </td>
+                              <td className="px-6 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-300">{p.employeeInfo?.designation || 'Technical Staff'}</p></td>
+                              <td className="px-6 py-4 text-right font-bold text-slate-600 dark:text-gray-400">{currencySymbol}{formatCurrency(p.gross || 0)}</td>
+                              <td className="px-6 py-4 text-right font-bold text-rose-500">-{currencySymbol}{formatCurrency(p.totalDeductions || 0)}</td>
+                              <td className="px-6 py-4 text-right">
+                                 <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{currencySymbol}{formatCurrency(p.netPay || 0)}</span>
+                                 {p.paidAt && <p className="text-[9px] font-bold text-slate-400 dark:text-gray-500 mt-0.5">Paid {new Date(p.paidAt).toLocaleDateString()}</p>}
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                 <StatusBadge status={p.status} isEmailSent={p.isEmailSent} />
+                              </td>
+                              <td className="px-6 py-4">
+                                 <div className="flex items-center justify-end gap-1">
+                                    <button onClick={() => { setActivePayslipId(p.id); setIsPreviewOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="View Statement"><Eye size={16} /></button>
+                                    <button onClick={() => handleDownload(p.id)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-all" title="Download PDF">
+                                       {downloadingId === p.id ? <RefreshCw size={16} className="animate-spin text-indigo-600" /> : <Download size={16} />}
+                                    </button>
+                                    {isGenerated && (
+                                       <button
+                                          onClick={() => setMarkPaidConfirm({ isOpen: true, id: p.id, name: p.employeeInfo?.name || 'employee' })}
+                                          className="p-2 text-slate-400 dark:text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-all"
+                                          title="Mark as Paid — confirm salary disbursement"
+                                       ><CreditCard size={16} /></button>
+                                    )}
+                                    {(isPaid && !isSent) && <span className="p-2 text-emerald-500 dark:text-emerald-400" title="Salary Paid"><Check size={16} /></span>}
                                     <button
-                                       onClick={() => setMarkPaidConfirm({ isOpen: true, id: p.id, name: p.employeeInfo?.name || 'employee' })}
-                                       className="p-2 text-slate-400 dark:text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-all"
-                                       title="Mark as Paid — confirm salary disbursement"
-                                    ><CreditCard size={16} /></button>
-                                 )}
-                                 {(isPaid && !isSent) && <span className="p-2 text-emerald-500 dark:text-emerald-400" title="Salary Paid"><Check size={16} /></span>}
-                                 <button
-                                    onClick={() => canSendEmail ? handleSendEmail(p.id, p) : (isGenerated ? toast.error('Mark this payslip as Paid before sending.') : toast.error('Generate this payslip before sending.'))}
-                                    className={`p-2 rounded-lg transition-all ${canSendEmail ? (isSent ? 'text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/10' : 'text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10') : 'text-slate-200 dark:text-gray-800 cursor-not-allowed'}`}
-                                    title={canSendEmail ? (isSent ? `Resend email` : `Send payslip email`) : 'Mark as Paid before sending'}
-                                 >
-                                    {sendingEmailId === p.id ? <RefreshCw size={16} className="animate-spin text-indigo-600 dark:text-indigo-400" /> : <Mail size={16} />}
-                                 </button>
-                              </div>
-                           </td>
-                        </tr>
+                                       onClick={() => canSendEmail ? handleSendEmail(p.id, p) : (isGenerated ? toast.error('Mark this payslip as Paid before sending.') : toast.error('Generate this payslip before sending.'))}
+                                       className={`p-2 rounded-lg transition-all ${canSendEmail ? (isSent ? 'text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/10' : 'text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10') : 'text-slate-200 dark:text-gray-800 cursor-not-allowed'}`}
+                                       title={canSendEmail ? (isSent ? `Resend email` : `Send payslip email`) : 'Mark as Paid before sending'}
+                                    >
+                                       {sendingEmailId === p.id ? <RefreshCw size={16} className="animate-spin text-indigo-600 dark:text-indigo-400" /> : <Mail size={16} />}
+                                    </button>
+                                 </div>
+                              </td>
+                           </tr>
                         );
                      })}
 
@@ -3333,7 +3333,7 @@ export const PayrollReports = () => {
             const res = await fetchFn(reportPeriod);
             const data = res.data.data;
             let headers = [], rows = [];
-            
+
             if (type === 'Summary') {
                headers = ['Metric', 'Value'];
                rows = [
@@ -3375,7 +3375,7 @@ export const PayrollReports = () => {
             // 1. Discover all unique earning and deduction component names across all records
             const earningNames = new Set();
             const deductionNames = new Set();
-            
+
             relevantHistory.forEach(h => {
                (h.breakdown?.earnings || []).forEach(e => earningNames.add(e.name));
                (h.breakdown?.deductions || []).forEach(d => deductionNames.add(d.name));
@@ -3386,12 +3386,12 @@ export const PayrollReports = () => {
 
             // 2. Define Headers
             const headers = [
-               'Employee Name', 
-               'Employee ID', 
-               'Department', 
-               'Pay Period', 
+               'Employee Name',
+               'Employee ID',
+               'Department',
+               'Pay Period',
                'Monthly CTC (Full)',
-               'Gross Earnings (Payable)', 
+               'Gross Earnings (Payable)',
                ...sortedEarnings.map(name => `Earning: ${name}`),
                'Total Deductions',
                ...sortedDeductions.map(name => `Deduction: ${name}`),
@@ -3407,7 +3407,7 @@ export const PayrollReports = () => {
             const rows = relevantHistory.map(h => {
                const earningsMap = {};
                (h.breakdown?.earnings || []).forEach(e => earningsMap[e.name] = e.value);
-               
+
                const deductionsMap = {};
                (h.breakdown?.deductions || []).forEach(d => deductionsMap[d.name] = d.value);
 
@@ -3437,7 +3437,7 @@ export const PayrollReports = () => {
                ...rows.map(row => row.map(cell => {
                   const cellStr = String(cell === null || cell === undefined ? '' : cell);
                   if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
-                      return `"${cellStr.replace(/"/g, '""')}"`;
+                     return `"${cellStr.replace(/"/g, '""')}"`;
                   }
                   return cellStr;
                }).join(','))
@@ -3458,10 +3458,10 @@ export const PayrollReports = () => {
 
             const taxHeaders = ['Employee Name', 'PAN Number', 'Period', 'Total Gross', 'Statutory Deductions', 'Taxable Net'];
             const taxRows = relevantHistory.map(h => [
-               h.user?.name || h.employeeInfo?.name, 
-               h.user?.pan || h.bankDetails?.pan || 'N/A', 
-               `${h.month}/${h.year}`, 
-               safe(h.grossYield || h.breakdown?.grossPay), 
+               h.user?.name || h.employeeInfo?.name,
+               h.user?.pan || h.bankDetails?.pan || 'N/A',
+               `${h.month}/${h.year}`,
+               safe(h.grossYield || h.breakdown?.grossPay),
                safe(h.liability || h.breakdown?.totalDeductions),
                safe((h.grossYield || h.breakdown?.grossPay) - (h.liability || h.breakdown?.totalDeductions))
             ]);
@@ -3474,9 +3474,9 @@ export const PayrollReports = () => {
             a.click();
             toast.success('Tax Compliance Report Exported');
          }
-      } catch (err) { 
+      } catch (err) {
          console.error(err);
-         toast.error('Extraction Engine Error'); 
+         toast.error('Extraction Engine Error');
       }
    };
 
@@ -3996,8 +3996,8 @@ export const BankTransferExport = () => {
                                     <div className="flex items-center gap-3">
                                        <div className="w-10 h-10 rounded-full bg-slate-900 dark:bg-indigo-500 flex items-center justify-center text-white text-xs font-black shadow-inner">
                                           {(h.employee?.user?.name || h.employeeInfo?.name || 'E')[0]}
-                                        </div>
-                                        <p className="font-bold text-slate-800 dark:text-white text-sm">{h.employee?.user?.name || h.employeeInfo?.name}</p>
+                                       </div>
+                                       <p className="font-bold text-slate-800 dark:text-white text-sm">{h.employee?.user?.name || h.employeeInfo?.name}</p>
                                     </div>
                                  </td>
                                  <td className="px-8 py-4">
