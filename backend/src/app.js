@@ -74,18 +74,22 @@ app.use(
       const allowedOrigins = [
         process.env.CLIENT_URL,
         'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'http://192.168.1.15:3000'
+        'http://127.0.0.1:3000'
       ].filter(Boolean);
-      
-      // Allow system origins
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
+
+      // Add domain-only version of CLIENT_URL to allowed origins
+      if (process.env.CLIENT_URL) {
+        try {
+          const url = new URL(process.env.CLIENT_URL);
+          allowedOrigins.push(url.origin);
+        } catch (e) {
+          // Fallback if URL is invalid
+          allowedOrigins.push(process.env.CLIENT_URL.split('/')[2]);
+        }
       }
       
-      // Allow local network IPs in development/private environments
-      const isLocalIP = origin.match(/^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/);
-      if (isLocalIP) {
+      // Allow system origins
+      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.some(o => o && origin.startsWith(o))) {
         return callback(null, true);
       }
 
