@@ -1,5 +1,8 @@
 'use strict';
-require('dotenv').config();
+const path = require('path');
+// Attempt to load from multiple locations
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 console.log('=== Backend Environment Check ===');
 console.log('NODE_ENV:', process.env.NODE_ENV);
