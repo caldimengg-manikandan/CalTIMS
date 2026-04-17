@@ -122,7 +122,7 @@ export default function SignupPage() {
 
   const handleSocialLogin = (provider) => {
     // Standard OAuth redirect to backend for social providers
-    window.location.href = `${import.meta.env.VITE_ROUTER_BASENAME || ''}/api/v1/auth/${provider}`
+    window.location.href = `${window.location.origin}${import.meta.env.BASE_URL}api/v1/auth/${provider}`
   }
 
   return (
