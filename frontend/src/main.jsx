@@ -24,9 +24,16 @@ const queryClient = new QueryClient({
     },
 })
 
+// Dynamically determine basename based on current path to support subpath deployment
+const getBasename = () => {
+    const path = window.location.pathname;
+    if (path.startsWith('/caltims')) return '/caltims';
+    return import.meta.env.VITE_ROUTER_BASENAME || "";
+};
+
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
-        <BrowserRouter basename={import.meta.env.VITE_ROUTER_BASENAME || ""}>
+        <BrowserRouter basename={getBasename()}>
             <QueryClientProvider client={queryClient}>
                 <App />
             </QueryClientProvider>

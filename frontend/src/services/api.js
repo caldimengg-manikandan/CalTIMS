@@ -87,8 +87,9 @@ api.interceptors.response.use(
         localStorage.removeItem('timesheet-auth') // Explicit clear for persistence
 
         // 2. Only redirect if NOT already at /login
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login'
+        const loginPath = `${import.meta.env.BASE_URL}login`.replace(/\/+/g, '/');
+        if (window.location.pathname !== loginPath) {
+          window.location.href = loginPath;
         }
         return Promise.reject(err)
       } finally {
