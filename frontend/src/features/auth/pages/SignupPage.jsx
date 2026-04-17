@@ -121,11 +121,8 @@ export default function SignupPage() {
   })
 
   const handleSocialLogin = (provider) => {
-    socialLogin({
-      email: `demo_${provider}_new@example.com`,
-      name: `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
-      provider
-    })
+    // Standard OAuth redirect to backend for social providers
+    window.location.href = `${import.meta.env.VITE_ROUTER_BASENAME || ''}/api/v1/auth/${provider}`
   }
 
   return (
