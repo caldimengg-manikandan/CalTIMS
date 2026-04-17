@@ -48,7 +48,7 @@ const NAVIGATION_SECTIONS = [
     
             { id: 'timesheet_policy', label: 'Timesheet Policy', icon: Clock },
             { id: 'leave_policy', label: 'Leave Policy', icon: Briefcase },
-            // { id: 'payroll_policy', label: 'Payroll Policy', icon: Banknote },
+            { id: 'payroll_policy', label: 'Payroll Policy', icon: Banknote },
             // { id: 'payslip_templates', label: 'Payslip Templates', icon: FileText },
             { id: 'compliance', label: 'Compliance & Locks', icon: FileLock },
         ]

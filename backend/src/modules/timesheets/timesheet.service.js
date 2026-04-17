@@ -855,7 +855,8 @@ const timesheetService = {
       rows.forEach(row => {
         if (Array.isArray(row.entries)) {
           row.entries.forEach(e => {
-            totalHours += parseFloat(e.hoursWorked || e.hours || 0);
+            const h = parseFloat(e.hoursWorked || e.hours || 0);
+            if (!isNaN(h)) totalHours += h;
           });
         }
       });

@@ -7,6 +7,7 @@ const ROLE_PERMISSIONS = {
     'Projects': { 'Project List': ['view', 'create', 'edit', 'delete'] }
   },
   MANAGER: {
+    'Employees': { 'Employee List': ['view', 'edit'] },
     'Timesheets': { Dashboard: ['view'], Entry: ['view', 'create', 'edit'], History: ['view'], Management: ['view', 'approve', 'reject'] },
     'Leave Management': { 'Leave Tracker': ['view'] },
     'My Payslip': { 'Payslip View': ['view', 'download'] },
@@ -31,6 +32,7 @@ const ROLE_PERMISSIONS = {
     'My Payslip': { 'Payslip View': ['view', 'download'] }
   },
   EMPLOYEE: {
+    'Employees': { 'Employee List': ['view'] },
     'Timesheets': { Dashboard: ['view'], Entry: ['view', 'create', 'edit'], History: ['view'] },
     'Leave Management': { 'Leave Tracker': ['view'] },
     'My Payslip': { 'Payslip View': ['view', 'download'] },

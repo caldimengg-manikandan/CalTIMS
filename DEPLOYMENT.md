@@ -12,7 +12,7 @@ Our application uses a subpath-based architecture on the VPS to share the server
 - **Frontend Engine:** React / Vite (Built via `npm run build`)
 - **Backend Engine:** Node.js / Express (Port 5005, managed by PM2)
 - **Web Server:** Nginx (Handles HTTPS and proxy mapping)
-- **Database:** PostgreSQL (Native VPS installation)
+- **Database:** PostgreSQL (Native VPS installation) 
 
 ### File Paths
 - **Main Code Directory (VPS):** `/var/www/caltims`

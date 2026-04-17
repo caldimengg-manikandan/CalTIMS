@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { X, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { X, AlertCircle, Info, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import incidentService from '../../services/incidents/incidentService';
+import { validateString } from '../../utils/validation';
 
 const INCIDENT_CATEGORIES = [
     'timesheet error',
@@ -10,6 +11,11 @@ const INCIDENT_CATEGORIES = [
     'leave conflict',
     'general help'
 ];
+
+const VALIDATION_RULES = {
+    title: { name: 'Title', min: 5, max: 100, required: true },
+    description: { name: 'Description', min: 20, max: 500, required: true }
+};
 
 const CreateIncidentModal = ({ isOpen, onClose, relatedTimesheetId = null, onSuccess, initialData = null }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,6 +26,9 @@ const CreateIncidentModal = ({ isOpen, onClose, relatedTimesheetId = null, onSuc
         description: '',
     });
 
+    const [errors, setErrors] = useState({});
+    const [touched, setTouched] = useState({});
+
     useEffect(() => {
         if (isOpen) {
             setFormData({
@@ -28,20 +37,59 @@ const CreateIncidentModal = ({ isOpen, onClose, relatedTimesheetId = null, onSuc
                 priority: initialData?.priority || 'Medium',
                 description: initialData?.description || '',
             });
+            setErrors({});
+            setTouched({});
         }
     }, [isOpen, initialData]);
 
-    if (!isOpen) return null;
+    const validateField = useCallback((name, value) => {
+        const rules = VALIDATION_RULES[name];
+        if (!rules) return '';
+        return validateString(value, rules);
+    }, []);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
+        
+        // Update form data
         setFormData((prev) => ({ ...prev, [name]: value }));
+
+        // Clear error as user corrects input
+        if (errors[name]) {
+            setErrors(prev => ({ ...prev, [name]: '' }));
+        }
+
+        // Apply real-time validation if field was already touched
+        if (touched[name]) {
+            const error = validateField(name, value);
+            setErrors(prev => ({ ...prev, [name]: error }));
+        }
+    };
+
+    const handleBlur = (e) => {
+        const { name, value } = e.target;
+        setTouched(prev => ({ ...prev, [name]: true }));
+        const error = validateField(name, value);
+        setErrors(prev => ({ ...prev, [name]: error }));
+    };
+
+    const isFormValid = () => {
+        const titleError = validateField('title', formData.title);
+        const descError = validateField('description', formData.description);
+        return !titleError && !descError;
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.title || !formData.description) {
-            toast.error('Please fill in all required fields');
+        
+        // Final validation check
+        const titleError = validateField('title', formData.title);
+        const descError = validateField('description', formData.description);
+
+        if (titleError || descError) {
+            setErrors({ title: titleError, description: descError });
+            setTouched({ title: true, description: true });
+            toast.error('Please fix the validation errors before submitting');
             return;
         }
 
@@ -66,121 +114,153 @@ const CreateIncidentModal = ({ isOpen, onClose, relatedTimesheetId = null, onSuc
         }
     };
 
+    if (!isOpen) return null;
+
+    const renderFieldHeader = (label, name, rules) => (
+        <div className="flex justify-between items-center mb-1.5">
+            <label htmlFor={name} className="label-regular !mb-0">
+                {label} {rules?.required && <span className="text-red-500">*</span>}
+            </label>
+            {rules?.max && (
+                <span className={`text-[10px] font-medium tabular-nums ${
+                    formData[name]?.length > rules.max ? 'text-red-500' : 
+                    formData[name]?.length >= rules.min ? 'text-emerald-500' : 'text-slate-400'
+                }`}>
+                    {formData[name]?.length}/{rules.max}
+                </span>
+            )}
+        </div>
+    );
+
     return (
         <div className="fixed inset-0 z-50 overflow-y-auto">
             <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-                <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={onClose} />
+                <div 
+                    className="fixed inset-0 transition-opacity bg-slate-900/60 backdrop-blur-sm" 
+                    onClick={onClose} 
+                />
 
-                <div className="relative inline-block px-4 pt-5 pb-4 overflow-hidden text-left align-bottom transition-all transform bg-white rounded-lg shadow-xl sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-                    <div className="absolute top-0 right-0 hidden pt-4 pr-4 sm:block">
+                <div className="relative inline-block w-full px-4 pt-5 pb-4 overflow-hidden text-left align-bottom transition-all transform bg-white rounded-2xl shadow-2xl sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-8 animate-scale-in">
+                    <div className="absolute top-0 right-0 pt-6 pr-6">
                         <button
                             type="button"
-                            className="text-gray-400 bg-white rounded-md hover:text-gray-500 focus:outline-none"
+                            className="p-1 text-slate-400 transition-colors bg-white rounded-full hover:text-slate-600 hover:bg-slate-100 focus:outline-none"
                             onClick={onClose}
                         >
-                            <span className="sr-only">Close</span>
-                            <X className="w-6 h-6" />
+                            <X className="w-5 h-5" />
                         </button>
                     </div>
 
-                    <div className="sm:flex sm:items-start">
-                        <div className="flex items-center justify-center flex-shrink-0 w-12 h-12 mx-auto bg-blue-100 rounded-full sm:mx-0 sm:h-10 sm:w-10">
-                            <AlertCircle className="w-6 h-6 text-blue-600" />
+                    <div className="flex items-start mb-8">
+                        <div className="flex items-center justify-center flex-shrink-0 w-12 h-12 bg-indigo-50 rounded-xl">
+                            <AlertCircle className="w-6 h-6 text-indigo-600" />
                         </div>
-                        <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                            <h3 className="text-lg font-medium leading-6 text-gray-900">Report an Issue</h3>
-                            <div className="mt-2">
-                                <p className="text-sm text-gray-500">
-                                    Please describe the issue you are facing. Our admin team will review it shortly.
-                                </p>
-                            </div>
+                        <div className="ml-4">
+                            <h3 className="text-xl font-bold text-slate-900">Report an Issue</h3>
+                           
                         </div>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-                        <div>
-                            <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-                                Title *
-                            </label>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="form-group">
+                            {renderFieldHeader('Issue Title', 'title', VALIDATION_RULES.title)}
                             <input
                                 type="text"
                                 name="title"
                                 id="title"
-                                required
                                 value={formData.title}
                                 onChange={handleChange}
-                                className="block w-full mt-1 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                placeholder="Brief summary of the issue"
+                                onBlur={handleBlur}
+                                className={`input h-11 ${errors.title ? 'input-error' : formData.title.length >= 5 ? 'border-emerald-200 focus:border-emerald-500' : ''}`}
+                                placeholder="e.g., Unable to submit timesheet for Week 14"
                             />
+                            {errors.title && <p className="error-msg">{errors.title}</p>}
+                            {!errors.title && <p className="helper-text">Minimize title to 5-100 characters.</p>}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="category" className="block text-sm font-medium text-gray-700">
-                                    Category *
-                                </label>
-                                <select
-                                    name="category"
-                                    id="category"
-                                    value={formData.category}
-                                    onChange={handleChange}
-                                    className="block w-full mt-1 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                >
-                                    {INCIDENT_CATEGORIES.map(cat => (
-                                        <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
-                                    ))}
-                                </select>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            <div className="form-group">
+                                <label htmlFor="category" className="label-regular">Category</label>
+                                <div className="relative">
+                                    <select
+                                        name="category"
+                                        id="category"
+                                        value={formData.category}
+                                        onChange={handleChange}
+                                        className="input h-11 appearance-none pr-10"
+                                    >
+                                        {INCIDENT_CATEGORIES.map(cat => (
+                                            <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div>
-                                <label htmlFor="priority" className="block text-sm font-medium text-gray-700">
-                                    Priority
-                                </label>
-                                <select
-                                    name="priority"
-                                    id="priority"
-                                    value={formData.priority}
-                                    onChange={handleChange}
-                                    className="block w-full mt-1 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                >
-                                    <option value="Low">Low</option>
-                                    <option value="Medium">Medium</option>
-                                    <option value="High">High</option>
-                                    <option value="Urgent">Urgent</option>
-                                </select>
+                            <div className="form-group">
+                                <label htmlFor="priority" className="label-regular">Priority Level</label>
+                                <div className="relative">
+                                    <select
+                                        name="priority"
+                                        id="priority"
+                                        value={formData.priority}
+                                        onChange={handleChange}
+                                        className="input h-11 appearance-none pr-10"
+                                    >
+                                        <option value="Low">Low</option>
+                                        <option value="Medium">Medium</option>
+                                        <option value="High">High</option>
+                                        <option value="Urgent">Urgent</option>
+                                    </select>
+                                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div>
-                            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-                                Detailed Description *
-                            </label>
+                        <div className="form-group">
+                            {renderFieldHeader('Description', 'description', VALIDATION_RULES.description)}
                             <textarea
                                 id="description"
                                 name="description"
-                                rows={4}
-                                required
+                                rows={5}
                                 value={formData.description}
                                 onChange={handleChange}
-                                className="block w-full mt-1 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                placeholder="Please describe the issue in detail..."
+                                onBlur={handleBlur}
+                                className={`input !h-auto min-h-[120px] py-3 ${errors.description ? 'input-error' : formData.description.length >= 20 ? 'border-emerald-200 focus:border-emerald-500' : ''}`}
+                                placeholder="Provide step-by-step details of what happened..."
                             />
+                            {errors.description && <p className="error-msg">{errors.description}</p>}
+                            {!errors.description && <p className="helper-text font-medium">Please provide at least 20 characters.</p>}
                         </div>
 
-                        <div className="flex justify-end pt-4 mt-5 space-x-3 border-t border-gray-200">
+                        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-slate-100">
                             <button
                                 type="button"
-                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                className="btn-secondary w-full sm:w-auto"
                                 onClick={onClose}
                             >
-                                Cancel
+                                Discard
                             </button>
                             <button
                                 type="submit"
-                                disabled={isSubmitting}
-                                className="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                                disabled={isSubmitting || !isFormValid()}
+                                className="btn-primary w-full sm:w-auto shadow-md shadow-indigo-200/50"
                             >
-                                {isSubmitting ? 'Submitting...' : 'Submit Ticket'}
+                                {isSubmitting ? (
+                                    <span className="flex items-center gap-2">
+                                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        Submitting...
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-2">
+                                        <CheckCircle2 className="w-4 h-4" />
+                                        Submit Ticket
+                                    </span>
+                                )}
                             </button>
                         </div>
                     </form>

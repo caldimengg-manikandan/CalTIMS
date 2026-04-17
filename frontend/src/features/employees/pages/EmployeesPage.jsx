@@ -177,7 +177,7 @@ function EmployeeHistory({ entityId }) {
 }
 
 /* ─── Employee Form (shared by Add & Edit) ───────────────────── */
-function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, errors = {}, roles = [] }) {
+function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, errors = {}, roles = [], canChangeRoles = true }) {
     const [showPassword, setShowPassword] = useState(false)
     const getInputClass = (name) => {
         return `input ${errors[name] ? 'bg-red-50 border-red-300 ring-red-200' : ''}`
@@ -231,6 +231,7 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Role *</label>
                         <select 
                             name="role" 
+                            disabled={isEdit && !canChangeRoles}
                             className={getInputClass('role')} 
                             value={formData.roleId || formData.role?.toLowerCase() || ''} 
                             onChange={(e) => {
@@ -365,6 +366,10 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
 export default function EmployeesPage() {
     const isTrial = useAuthStore(s => s.isTrial())
     const user = useAuthStore(s => s.user)
+    const canViewEmployees = user?.permissions?.['Employees']?.['Employee List']?.['view'] === true || user?.role === 'super_admin' || user?.isOwner;
+    const canEditEmployees = user?.permissions?.['Employees']?.['Employee List']?.['edit'] === true || user?.role === 'super_admin' || user?.isOwner;
+    const canDeleteEmployees = user?.permissions?.['Employees']?.['Employee List']?.['delete'] === true || user?.role === 'super_admin' || user?.isOwner;
+    const canChangeRoles = user?.permissions?.['Settings']?.['Users & Roles']?.['edit'] === true || user?.role === 'super_admin' || user?.isOwner;
 
     const [search, setSearch] = useState('')
     const [role, setRole] = useState('')
@@ -852,22 +857,24 @@ export default function EmployeesPage() {
                         </button>
 
                         {/* Add — gated by Trial limit */}
-                        <button
-                            onClick={() => {
-                                const totalCount = allEmployees?.length ?? 0
-                                if (isTrial && !user?.isOwner && totalCount >= TRIAL_EMPLOYEE_LIMIT) {
-                                    setShowTrialLimit(true)
-                                    return
-                                }
-                                setAddForm(INITIAL_FORM)
-                                setAddOpen(true)
-                            }}
-                            className="btn-primary h-9 text-sm px-4 flex items-center gap-2"
-                        >
-                            {isTrial && !user?.isOwner && (allEmployees?.length ?? 0) >= TRIAL_EMPLOYEE_LIMIT
-                                ? <><Lock size={14} /> Add Employee</>
-                                : <><UserPlus size={15} /> Add Employee</>}
-                        </button>
+                        {canEditEmployees && (
+                          <button
+                              onClick={() => {
+                                  const totalCount = allEmployees?.length ?? 0
+                                  if (isTrial && !user?.isOwner && totalCount >= TRIAL_EMPLOYEE_LIMIT) {
+                                      setShowTrialLimit(true)
+                                      return
+                                  }
+                                  setAddForm(INITIAL_FORM)
+                                  setAddOpen(true)
+                              }}
+                              className="btn-primary h-9 text-sm px-4 flex items-center gap-2"
+                          >
+                              {isTrial && !user?.isOwner && (allEmployees?.length ?? 0) >= TRIAL_EMPLOYEE_LIMIT
+                                  ? <><Lock size={14} /> Add Employee</>
+                                  : <><UserPlus size={15} /> Add Employee</>}
+                          </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -924,14 +931,16 @@ export default function EmployeesPage() {
                                                 >
                                                     <Eye size={16} />
                                                 </button>
-                                                <button
-                                                    onClick={() => openEdit(emp)}
-                                                    title="Edit Employee"
-                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
-                                                >
-                                                    <Pencil size={16} />
-                                                </button>
-                                                {!emp.isOwner && (
+                                                {(canEditEmployees || emp._id === user?.id) && (
+                                                  <button
+                                                      onClick={() => openEdit(emp)}
+                                                      title="Edit Employee"
+                                                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+                                                  >
+                                                      <Pencil size={16} />
+                                                  </button>
+                                                )}
+                                                {!emp.isOwner && canEditEmployees && (
                                                     <button
                                                         onClick={() => toggleStatusMut.mutate({ id: emp._id, isActive: emp.isActive })}
                                                         title={emp.isActive ? 'Deactivate' : 'Activate'}
@@ -944,7 +953,7 @@ export default function EmployeesPage() {
                                                         {emp.isActive ? <UserX size={16} /> : <UserCheck size={16} />}
                                                     </button>
                                                 )}
-                                                {!emp.isOwner && (
+                                                {!emp.isOwner && canDeleteEmployees && (
                                                     <button
                                                         onClick={() => setDeleteEmp(emp)}
                                                         title="Delete Employee"
@@ -982,7 +991,7 @@ export default function EmployeesPage() {
             {/* Modals */}
             <Modal open={addOpen} onClose={() => !createMut.isPending && setAddOpen(false)}>
                 <ModalHeader icon={<UserPlus size={20} />} title="Add New Employee" subtitle="Create a new user account" onClose={() => setAddOpen(false)} />
-                <EmployeeForm formId="add-form" formData={addForm} onChange={handleAddChange} onSubmit={handleAddSubmit} errors={addErrors} roles={rolesData} />
+                <EmployeeForm formId="add-form" formData={addForm} onChange={handleAddChange} onSubmit={handleAddSubmit} errors={addErrors} roles={rolesData} canChangeRoles={canChangeRoles} />
                 <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                     <button onClick={() => setAddOpen(false)} className="btn-secondary">Cancel</button>
                     <button type="submit" form="add-form" disabled={createMut.isPending} className="btn-primary min-w-[140px]">
@@ -993,7 +1002,7 @@ export default function EmployeesPage() {
 
             <Modal open={!!editEmp} onClose={() => !editMut.isPending && setEditEmp(null)}>
                 <ModalHeader icon={<Pencil size={20} />} title="Edit Employee" subtitle={editEmp?.name} onClose={() => setEditEmp(null)} />
-                <EmployeeForm formId="edit-form" formData={editForm} onChange={handleEditChange} onSubmit={handleEditSubmit} errors={editErrors} isEdit roles={rolesData} />
+                <EmployeeForm formId="edit-form" formData={editForm} onChange={handleEditChange} onSubmit={handleEditSubmit} errors={editErrors} isEdit roles={rolesData} canChangeRoles={canChangeRoles} />
                 <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0">
                     <button onClick={() => setEditEmp(null)} className="btn-secondary">Cancel</button>
                     <button type="submit" form="edit-form" disabled={editMut.isPending} className="btn-primary min-w-[140px]">

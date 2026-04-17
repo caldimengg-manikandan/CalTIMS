@@ -362,7 +362,7 @@ const RunPayroll = () => {
                                                                 </td>
                                                             ) : (
                                                                 <>
-                                                                    <td className="px-2 py-4 text-center font-bold text-slate-500 dark:text-gray-400">{row.totalOrgWorkingDays || 0}</td>
+                                                                    <td className="px-2 py-4 text-center font-bold text-slate-500 dark:text-gray-400">{row.standardMonthlyDays || 0}</td>
                                                                     <td className="px-2 py-4 text-center font-bold text-indigo-600 dark:text-indigo-400">{row.working || 0}</td>
                                                                     <td className="px-2 py-4 text-center font-black text-emerald-600 dark:text-emerald-400">{row.present || 0}</td>
                                                                     <td className="px-2 py-4 text-center font-bold text-rose-500 dark:text-rose-400">{row.lop || 0}</td>

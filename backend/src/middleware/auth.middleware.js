@@ -67,6 +67,8 @@ const authenticate = asyncHandler(async (req, res, next) => {
     employeeId,
     organizationId: currentUser.organizationId,
     role: currentUser.role,
+    isOwner: currentUser.isOwner,
+    isSuperAdmin: currentUser.role === 'super_admin',
     permissions: currentUser.roleRef?.permissions || {}
   };
 

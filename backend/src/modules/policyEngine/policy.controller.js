@@ -75,8 +75,8 @@ const previewPolicyCalculation = async (req, res) => {
       user: mockUser
     };
 
-    const breakdown = payrollService.calculateSalaryBreakdown(policy, mockProfile, attendance, contextData);
-    res.status(200).json({ breakdown, sampleEmployee: mockUser.name, ctc: mockProfile.monthlyCTC });
+    const breakdown = payrollService.calculateSalaryBreakdown(mockProfile, attendance, policy);
+    res.status(200).json({ breakdown, sampleEmployee: mockUser.name, ctc: mockProfile.monthlyCTC || 0 });
   } catch (error) {
     logger.error('Error previewing calculation: ' + error.message);
     res.status(500).json({ message: 'Error previewing calculation', error: error.message });

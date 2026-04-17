@@ -20,7 +20,15 @@ const projectService = {
     }
     if (query.search) where.name = { contains: query.search, mode: 'insensitive' };
     if (query.code) where.code = query.code.toUpperCase();
-    if (query.managerId) where.managerId = query.managerId;
+    if (query.managerId) {
+      // If it looks like a User ID (we fetch User list in frontend), resolve to Employee ID
+      const emp = await prisma.employee.findFirst({
+        where: { OR: [{ id: query.managerId }, { userId: query.managerId }], organizationId },
+        select: { id: true }
+      });
+      if (emp) where.managerId = emp.id;
+      else where.managerId = query.managerId; // Fallback
+    }
     
     // Always exclude the system 'Leave' project from general lists
     where.code = { not: 'LEAVE-SYS', ...(query.code && { equals: query.code.toUpperCase() }) };
@@ -29,11 +37,17 @@ const projectService = {
     const assignedOnly = query.assignedOnly === 'true';
 
     // Resolve the target user to an Employee ID for member-based filtering.
-    // The ProjectMember table stores `employeeId` (Employee record ID), not the User ID.
-    let targetEmployeeId = query.employeeId || context.employeeId;
-    const targetUserId = query.userId || context.userId;
+    // We prioritize query params over context to allow "view as" or "fill for" functionality.
+    let targetUserId = query.userId;
+    let targetEmployeeId = query.employeeId;
 
-    // If only a userId was given (e.g. from admin compliance page), resolve it to employeeId
+    // If neither is provided in query, default to the current authenticated user
+    if (!targetUserId && !targetEmployeeId) {
+      targetUserId = context.userId;
+      targetEmployeeId = context.employeeId;
+    }
+
+    // Resolve targetUserId to targetEmployeeId if needed
     if (!targetEmployeeId && targetUserId) {
       const emp = await prisma.employee.findFirst({
         where: { userId: targetUserId, organizationId },
@@ -68,6 +82,15 @@ const projectService = {
     const formatted = projects.map(p => ({
       ...p,
       _id: p.id,
+      manager: p.manager ? { ...p.manager.user, id: p.manager.id, _id: p.manager.user.id } : null,
+      team_members: p.members.map(m => ({
+        userId: m.employee.user.id,
+        user: { ...m.employee.user, id: m.employee.id, _id: m.employee.user.id },
+        role: m.role,
+        allocationPercent: m.allocationPercent,
+        budgetHours: m.budgetHours
+      })),
+      // Keep legacy keys for temporary compatibility during migration
       managerId: p.manager ? { ...p.manager.user, id: p.manager.id, _id: p.manager.user.id } : null,
       allocatedEmployees: p.members.map(m => ({ 
         userId: { ...m.employee.user, id: m.employee.id, _id: m.employee.user.id },
@@ -97,6 +120,15 @@ const projectService = {
     return {
       ...project,
       _id: project.id,
+      manager: project.manager ? { ...project.manager.user, id: project.manager.id, _id: project.manager.user.id } : null,
+      team_members: project.members.map(m => ({
+        userId: m.employee.user.id,
+        user: { ...m.employee.user, id: m.employee.id, _id: project.manager.user.id },
+        role: m.role,
+        allocationPercent: m.allocationPercent,
+        budgetHours: m.budgetHours
+      })),
+      // Legacy
       managerId: project.manager ? { ...project.manager.user, id: project.manager.id, _id: project.manager.user.id } : null,
       allocatedEmployees: project.members.map(m => ({
         userId: { ...m.employee.user, id: m.employee.id, _id: m.employee.user.id },
@@ -234,38 +266,45 @@ const projectService = {
     }
 
     // Handle members update separately to be safe or via nested update
-    if (allocatedEmployees) {
-      await prisma.projectMember.deleteMany({ where: { projectId: id } });
-      if (allocatedEmployees.length > 0) {
-        await prisma.projectMember.createMany({
-          data: await Promise.all(allocatedEmployees.map(async (alloc) => {
-            const emp = await prisma.employee.findFirst({ 
-              where: { OR: [{ id: alloc.userId }, { userId: alloc.userId }], organizationId } 
-            });
-            if (!emp) throw new AppError(`Employee not found for user ID ${alloc.userId}`, 404);
-            return {
-              projectId: id,
-              employeeId: emp.id,
-              role: alloc.role || 'MEMBER',
-              allocationPercent: Number(alloc.allocationPercent) || 100,
-              budgetHours: Number(alloc.budgetHours) || 0
-            };
-          }))
-        });
-      }
-    }
+    // Use a transaction to ensure atomicity
+    const updated = await prisma.$transaction(async (tx) => {
+        if (allocatedEmployees) {
+            const resolvedMembers = [];
+            for (const alloc of allocatedEmployees) {
+                const emp = await tx.employee.findFirst({ 
+                    where: { OR: [{ id: alloc.userId }, { userId: alloc.userId }], organizationId } 
+                });
+                if (emp) {
+                    resolvedMembers.push({
+                        projectId: id,
+                        employeeId: emp.id,
+                        role: alloc.role || 'MEMBER',
+                        allocationPercent: Number(alloc.allocationPercent) || 100,
+                        budgetHours: Number(alloc.budgetHours) || 0
+                    });
+                }
+            }
 
-    const updated = await prisma.project.update({
-      where: { 
-        id_organizationId: { id, organizationId }
-      },
-      data: {
-        ...updateData,
-        code: data.code ? data.code.toUpperCase() : project.code,
-        managerId: managerId !== undefined ? managerId : undefined,
-        startDate: startDate ? new Date(startDate) : undefined,
-        endDate: endDate !== undefined ? (endDate ? new Date(endDate) : null) : undefined
-      }
+            await tx.projectMember.deleteMany({ where: { projectId: id } });
+            if (resolvedMembers.length > 0) {
+                await tx.projectMember.createMany({
+                    data: resolvedMembers
+                });
+            }
+        }
+
+        return await tx.project.update({
+            where: { 
+                id_organizationId: { id, organizationId }
+            },
+            data: {
+                ...updateData,
+                code: data.code ? data.code.toUpperCase() : project.code,
+                managerId: managerId !== undefined ? managerId : undefined,
+                startDate: startDate ? new Date(startDate) : undefined,
+                endDate: endDate !== undefined ? (endDate ? new Date(endDate) : null) : undefined
+            }
+        });
     });
 
     const result = await this.getById(id, organizationId);

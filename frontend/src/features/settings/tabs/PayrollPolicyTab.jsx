@@ -13,7 +13,7 @@ const PayrollPolicyTab = () => {
   const [policy, setPolicy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('statutory');
+  const [activeTab, setActiveTab] = useState('attendance');
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -114,7 +114,7 @@ const PayrollPolicyTab = () => {
         <div className="xl:col-span-8 space-y-6">
           <nav className="flex items-center gap-1 p-1 bg-slate-100/80 dark:bg-white/5 rounded-2xl w-fit border border-slate-200 dark:border-[#333333] backdrop-blur-sm">
             {[
-              { id: 'statutory', label: 'Statutory Rules', icon: ShieldCheck },
+              // { id: 'statutory', label: 'Statutory Rules', icon: ShieldCheck },
               { id: 'attendance', label: 'Attendance & OT', icon: Clock },
               { id: 'rounding', label: 'Engine Config', icon: Settings2 },
             ].map((tab) => (
@@ -143,9 +143,10 @@ const PayrollPolicyTab = () => {
               transition={{ duration: 0.2 }}
             >
 
-              {activeTab === 'statutory' && (
+               {/* {activeTab === 'statutory' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Provident Fund */}
+                  
+                  
                   <div className="bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-200 dark:border-[#333333] shadow-sm space-y-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
@@ -159,47 +160,51 @@ const PayrollPolicyTab = () => {
                       </div>
                       <input 
                         type="checkbox"
-                        checked={policy.statutory.pf.enabled}
-                        onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, pf: { ...policy.statutory.pf, enabled: e.target.checked } } })}
+                        checked={policy?.statutory?.pf?.enabled}
+                        onChange={(e) => setPolicy({ ...policy, statutory: { ...policy?.statutory, pf: { ...policy?.statutory?.pf, enabled: e.target.checked } } })}
                         className="w-6 h-6 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4 pt-2">
-                       <div className="space-y-2">
-                         <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Employee Contribution %</label>
-                         <input 
-                           type="number"
-                           value={policy.statutory.pf.employeeRate}
-                           onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, pf: { ...policy.statutory.pf, employeeRate: parseFloat(e.target.value) } } })}
-                           className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
-                         />
-                       </div>
-                       <div className="space-y-2">
-                         <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Employer Contribution %</label>
-                         <input 
-                           type="number"
-                           value={policy.statutory.pf.employerRate}
-                           onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, pf: { ...policy.statutory.pf, employerRate: parseFloat(e.target.value) } } })}
-                           className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
-                         />
-                       </div>
-                    </div>
-                     <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-[#333333]">
-                      <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase block mb-2">Wage Ceiling for PF Calculation</label>
-                      <div className="flex items-center gap-3">
-                        <IndianRupee size={16} className="text-slate-400 dark:text-gray-600" />
-                        <input 
-                          type="number"
-                           value={policy.statutory.pf.wageLimit}
-                          onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, pf: { ...policy.statutory.pf, wageLimit: parseFloat(e.target.value) } } })}
-                          className="bg-transparent text-lg font-bold text-slate-800 dark:text-white outline-none w-full"
-                        />
-                      </div>
-                    </div>
+                    {policy?.statutory?.pf?.enabled && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-6 overflow-hidden">
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Employee Contribution %</label>
+                            <input 
+                              type="number"
+                              value={policy?.statutory?.pf?.employeeRate}
+                              onChange={(e) => setPolicy({ ...policy, statutory: { ...policy?.statutory, pf: { ...policy?.statutory?.pf, employeeRate: parseFloat(e.target.value) } } })}
+                              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Employer Contribution %</label>
+                            <input 
+                              type="number"
+                              value={policy?.statutory?.pf?.employerRate}
+                              onChange={(e) => setPolicy({ ...policy, statutory: { ...policy?.statutory, pf: { ...policy?.statutory?.pf, employerRate: parseFloat(e.target.value) } } })}
+                              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
+                            />
+                          </div>
+                        </div>
+                        <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-[#333333]">
+                          <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase block mb-2">Wage Ceiling for PF Calculation</label>
+                          <div className="flex items-center gap-3">
+                            <IndianRupee size={16} className="text-slate-400 dark:text-gray-600" />
+                            <input 
+                              type="number"
+                              value={policy?.statutory?.pf?.wageLimit}
+                              onChange={(e) => setPolicy({ ...policy, statutory: { ...policy?.statutory, pf: { ...policy?.statutory?.pf, wageLimit: parseFloat(e.target.value) } } })}
+                              className="bg-transparent text-lg font-bold text-slate-800 dark:text-white outline-none w-full"
+                            />
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
 
-                  {/* ESI */}
-                   <div className="bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-200 dark:border-[#333333] shadow-sm space-y-6">
+                 
+                  <div className="bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-200 dark:border-[#333333] shadow-sm space-y-6">
                     <div className="flex items-center justify-between">
                        <div className="flex items-center gap-4">
                          <div className="p-3 bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-2xl">
@@ -217,36 +222,103 @@ const PayrollPolicyTab = () => {
                         className="w-6 h-6 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4 pt-2">
-                       <div className="space-y-2">
-                         <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Employee Rate %</label>
-                         <input 
-                           type="number"
-                           step="0.01"
-                           value={policy.statutory.esi.employeeRate}
-                           onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, esi: { ...policy.statutory.esi, employeeRate: parseFloat(e.target.value) } } })}
-                           className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
-                         />
-                       </div>
-                       <div className="space-y-2">
-                         <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Wage Limit Ceiling</label>
-                         <input 
-                           type="number"
-                           value={policy.statutory.esi.wageLimit}
-                           onChange={(e) => setPolicy({ ...policy, statutory: { ...policy.statutory, esi: { ...policy.statutory.esi, wageLimit: parseFloat(e.target.value) } } })}
-                           className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
-                         />
-                       </div>
+                    {policy.statutory.esi.enabled && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-6 overflow-hidden">
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                           <div className="space-y-2">
+                             <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Employee Rate %</label>
+                             <input 
+                               type="number"
+                               step="0.01"
+                               value={policy?.statutory?.esi?.employeeRate}
+                               onChange={(e) => setPolicy({ ...policy, statutory: { ...policy?.statutory, esi: { ...policy?.statutory?.esi, employeeRate: parseFloat(e.target.value) } } })}
+                               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
+                             />
+                           </div>
+                           <div className="space-y-2">
+                             <label className="text-xs font-bold text-slate-500 dark:text-gray-500 uppercase">Wage Limit Ceiling</label>
+                             <input 
+                               type="number"
+                               value={policy?.statutory?.esi?.wageLimit}
+                               onChange={(e) => setPolicy({ ...policy, statutory: { ...policy?.statutory, esi: { ...policy?.statutory?.esi, wageLimit: parseFloat(e.target.value) } } })}
+                               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
+                             />
+                           </div>
+                        </div>
+                        <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-500/10 rounded-2xl border border-amber-100 dark:border-amber-500/20">
+                          <AlertCircle size={18} className="text-amber-600 mt-1 flex-shrink-0" />
+                          <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                            ESI is only applicable for employees whose Gross Salary is less than or equal to the specified wage limit.
+                          </p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </div>
+
+              
+                 
+
+                  <div className="bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-200 dark:border-[#333333] shadow-sm space-y-6">
+                    <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-4">
+                         <div className="p-3 bg-emerald-100 text-emerald-600 rounded-2xl">
+                           <Percent size={24} />
+                         </div>
+                         <div>
+                           <h4 className="font-bold text-slate-800 dark:text-white text-lg leading-tight">Gratuity Provision</h4>
+                           <span className="text-xs text-slate-400 dark:text-gray-500 font-medium uppercase tracking-wider">Statutory Formula</span>
+                         </div>
+                      </div>
+                      <input 
+                        type="checkbox"
+                        checked={policy?.statutory?.gratuity?.enabled}
+                        onChange={(e) => setPolicy({ ...policy, statutory: { ...policy?.statutory, gratuity: { ...policy?.statutory?.gratuity, enabled: e.target.checked } } })}
+                        className="w-6 h-6 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
+                      />
                     </div>
-                    <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-500/10 rounded-2xl border border-amber-100 dark:border-amber-500/20">
-                      <AlertCircle size={18} className="text-amber-600 mt-1 flex-shrink-0" />
-                      <p className="text-xs text-amber-800 font-medium leading-relaxed">
-                        ESI is only applicable for employees whose Gross Salary is less than or equal to the specified wage limit.
-                      </p>
-                    </div>
+                    {policy?.statutory?.gratuity?.enabled && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-6 overflow-hidden">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-[#333333]">
+                            <div>
+                               <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">Include in CTC</p>
+                               <p className="text-xs text-slate-400 dark:text-gray-500">Add monthly provision to gross breakdown</p>
+                            </div>
+                            <input 
+                              type="checkbox"
+                              checked={policy?.statutory?.gratuity?.includeInCTC}
+                              onChange={(e) => setPolicy({ ...policy, statutory: { ...policy?.statutory, gratuity: { ...policy?.statutory?.gratuity, includeInCTC: e.target.checked } } })}
+                              className="w-5 h-5 rounded-lg text-indigo-600 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-[#333333]">
+                            <div>
+                               <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">Show Accrued Gratuity</p>
+                               <p className="text-xs text-slate-400 dark:text-gray-500">Informational field for tenure {'>'} 5 years</p>
+                            </div>
+                            <input 
+                              type="checkbox"
+                              checked={policy?.statutory?.gratuity?.showAccrued}
+                              onChange={(e) => setPolicy({ ...policy, statutory: { ...policy?.statutory, gratuity: { ...policy?.statutory?.gratuity, showAccrued: e.target.checked } } })}
+                              className="w-5 h-5 rounded-lg text-indigo-600 focus:ring-indigo-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20">
+                           <div className="flex items-center gap-2 mb-2">
+                             <Calculator size={14} className="text-emerald-600" />
+                             <span className="text-[10px] font-black uppercase text-emerald-800 tracking-widest">Formula Used</span>
+                           </div>
+                           <p className="text-xs font-mono text-emerald-700 font-semibold">
+                             (Basic Salary * 15 / 26) / 12
+                           </p>
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
                 </div>
-              )}
+              )}  */}
+
 
               {activeTab === 'attendance' && (
                 <div className="bg-white dark:bg-[#111111] p-8 rounded-3xl border border-slate-200 dark:border-[#333333] shadow-sm space-y-8">
@@ -266,8 +338,8 @@ const PayrollPolicyTab = () => {
                           </div>
                           <input 
                             type="number"
-                            value={policy.attendance.workingDaysPerMonth}
-                            onChange={(e) => setPolicy({ ...policy, attendance: { ...policy.attendance, workingDaysPerMonth: parseInt(e.target.value) } })}
+                            value={policy?.attendance?.workingDaysPerMonth}
+                            onChange={(e) => setPolicy({ ...policy, attendance: { ...policy?.attendance, workingDaysPerMonth: parseInt(e.target.value) } })}
                             className="bg-transparent text-right font-black text-2xl text-indigo-600 dark:text-indigo-400 outline-none w-16"
                           />
                         </div>
@@ -278,8 +350,8 @@ const PayrollPolicyTab = () => {
                           </div>
                           <input 
                             type="checkbox"
-                            checked={policy.attendance.prorateSalary}
-                            onChange={(e) => setPolicy({ ...policy, attendance: { ...policy.attendance, prorateSalary: e.target.checked } })}
+                            checked={policy?.attendance?.prorateSalary}
+                            onChange={(e) => setPolicy({ ...policy, attendance: { ...policy?.attendance, prorateSalary: e.target.checked } })}
                             className="w-6 h-6 rounded-lg text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
                           />
                         </div>
@@ -301,8 +373,8 @@ const PayrollPolicyTab = () => {
                           </div>
                           <input 
                             type="checkbox"
-                            checked={policy.overtime.enabled}
-                            onChange={(e) => setPolicy({ ...policy, overtime: { ...policy.overtime, enabled: e.target.checked } })}
+                            checked={policy?.overtime?.enabled}
+                            onChange={(e) => setPolicy({ ...policy, overtime: { ...policy?.overtime, enabled: e.target.checked } })}
                             className="w-6 h-6 rounded-lg text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
                           />
                         </div>
@@ -314,8 +386,8 @@ const PayrollPolicyTab = () => {
                           <input 
                             type="number"
                             step="0.1"
-                            value={policy.overtime.multiplier}
-                            onChange={(e) => setPolicy({ ...policy, overtime: { ...policy.overtime, multiplier: parseFloat(e.target.value) } })}
+                            value={policy?.overtime?.multiplier}
+                            onChange={(e) => setPolicy({ ...policy, overtime: { ...policy?.overtime, multiplier: parseFloat(e.target.value) } })}
                             className="bg-transparent text-right font-black text-2xl text-indigo-600 dark:text-indigo-400 outline-none w-16"
                           />
                         </div>
@@ -337,8 +409,8 @@ const PayrollPolicyTab = () => {
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-slate-500 dark:text-gray-500 uppercase">Rounding Strategy</label>
                       <select 
-                        value={policy.rounding.rule}
-                         onChange={(e) => setPolicy({ ...policy, rounding: { ...policy.rounding, rule: e.target.value } })}
+                        value={policy?.rounding?.rule}
+                         onChange={(e) => setPolicy({ ...policy, rounding: { ...policy?.rounding, rule: e.target.value } })}
                         className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
                       >
                         <option value="ROUND_OFF" className="dark:bg-[#111111]">Standard Round Off</option>
@@ -350,8 +422,8 @@ const PayrollPolicyTab = () => {
                        <label className="text-sm font-bold text-slate-500 dark:text-gray-500 uppercase">Decimal Precision</label>
                        <input 
                           type="number"
-                           value={policy.rounding.decimals}
-                          onChange={(e) => setPolicy({ ...policy, rounding: { ...policy.rounding, decimals: parseInt(e.target.value) } })}
+                          value={policy?.rounding?.decimals}
+                          onChange={(e) => setPolicy({ ...policy, rounding: { ...policy?.rounding, decimals: parseInt(e.target.value) } })}
                           className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-[#333333] bg-transparent focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 dark:text-gray-300"
                        />
                     </div>
@@ -402,18 +474,27 @@ const PayrollPolicyTab = () => {
                   <div className="space-y-4">
                     <p className="text-[10px] uppercase tracking-tighter font-black text-slate-500 border-l-2 border-indigo-600 pl-2">Calculated Breakdown</p>
                     <div className="space-y-3">
-                      {preview.breakdown.earnings.components.map((c, i) => (
+                      {preview.breakdown.earnings?.map((c, i) => (
                         <div key={i} className="flex items-center justify-between text-sm group">
                           <span className="text-slate-300 group-hover:text-white transition-colors capitalize">{c.name}</span>
                           <span className="font-mono font-semibold text-emerald-400">+{c.value?.toFixed(2)}</span>
                         </div>
                       ))}
-                      {preview.breakdown.deductions.components.map((c, i) => (
+                      {preview.breakdown.deductions?.map((c, i) => (
                         <div key={i} className="flex items-center justify-between text-sm group">
                           <span className="text-slate-300 group-hover:text-white transition-colors capitalize">{c.name}</span>
                           <span className="font-mono font-semibold text-rose-400">-{c.value?.toFixed(2)}</span>
                         </div>
                       ))}
+                      
+                      {preview.breakdown.gratuityAccrued > 0 && (
+                        <div className="pt-2 border-t border-slate-800">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase">
+                            <span>Total Accrued Gratuity</span>
+                            <span className="text-indigo-400">₹{preview.breakdown.gratuityAccrued?.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 

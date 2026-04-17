@@ -13,7 +13,7 @@ router.use(checkSubscription);
 // Dashboard summary for timesheets
 router.get('/summary', timesheetController.getDashboardSummary);
 router.get('/history', timesheetController.getHistory);
-router.get('/admin-summary', checkPermission('Timesheets', 'Dashboard', 'view'), timesheetController.getDashboardSummary);
+router.get('/admin-summary', checkPermission('Timesheets', 'Dashboard', 'view'), timesheetController.getAdminSummary);
 router.get('/admin-list', checkPermission('Timesheets', 'Management', 'view'), timesheetController.getAdminTimesheets);
 router.get('/admin-filters', checkPermission('Timesheets', 'Management', 'view'), timesheetController.getAdminFilterOptions);
 router.get('/admin-kpi', checkPermission('Timesheets', 'Dashboard', 'view'), timesheetController.getAdminKpiSummary);

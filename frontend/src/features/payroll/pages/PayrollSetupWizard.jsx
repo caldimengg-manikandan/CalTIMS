@@ -22,7 +22,7 @@ import {
   Lock
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { payrollAPI, userAPI } from '@/services/endpoints';
+import { payrollAPI, userAPI, policyAPI } from '@/services/endpoints';
 import { toast } from 'react-hot-toast';
 import { ROLE_TEMPLATES, calculateSalaryBreakdown } from '../payrollUtils';
 import { formatCurrency, getCurrencySymbol } from '@/utils/formatters';
@@ -88,7 +88,7 @@ const PayrollSetupWizard = () => {
 
   const { data: globalPolicy } = useQuery({
     queryKey: ['payrollPolicy'],
-    queryFn: () => payrollAPI.getPolicy().then(res => res.data.data)
+    queryFn: () => policyAPI.getPolicy().then(res => res.data.data)
   });
 
   // If we have a userId in URL but no selectedUser, find them in the users list
@@ -172,8 +172,8 @@ const PayrollSetupWizard = () => {
   }, [ctcValue, ctcType]);
 
   const breakdown = useMemo(() => {
-    return calculateSalaryBreakdown(structure.earnings, structure.deductions, monthlyCTC);
-  }, [structure, monthlyCTC]);
+    return calculateSalaryBreakdown(structure.earnings, structure.deductions, monthlyCTC, globalPolicy);
+  }, [structure, monthlyCTC, globalPolicy]);
 
     // Check for existing profile when user is selected
     useEffect(() => {
@@ -621,6 +621,16 @@ const PayrollSetupWizard = () => {
                                   </div>
                                ))}
                                <div className="h-4" />
+                               {breakdown.statutoryDeductions?.length > 0 && (
+                                  <div className="space-y-2 mb-4 bg-white/5 p-3 rounded-xl">
+                                     {breakdown.statutoryDeductions.map((d, idx) => (
+                                        <div key={`stat-${idx}`} className="flex justify-between items-center opacity-70">
+                                           <span className="text-[10px] font-medium text-white/40 italic">{d.name} (Policy)</span>
+                                           <span className="font-black text-rose-400/80 text-[11px]">{currencySymbol}{formatCurrency(d.calculatedValue)}</span>
+                                        </div>
+                                     ))}
+                                  </div>
+                               )}
                                {breakdown.deductions.map((d, idx) => (
                                   <div key={idx} className="flex justify-between items-center text-xs">
                                      <span className="text-[10px] font-bold text-white/40">{d.name}</span>
@@ -803,6 +813,16 @@ const PayrollSetupWizard = () => {
                         <div className="h-px bg-white/5" />
                         <div className="space-y-3">
                            <span className="text-[9px] font-black uppercase text-white/20 tracking-widest">Deductions</span>
+                           {breakdown.statutoryDeductions?.length > 0 && (
+                              <div className="space-y-2 mb-2">
+                                 {breakdown.statutoryDeductions.map((d, i) => (
+                                    <div key={`stat-${i}`} className="flex justify-between items-center opacity-70">
+                                       <span className="text-[11px] font-bold text-white/30 italic">{d.name} (Policy)</span>
+                                       <span className="text-xs font-black text-rose-400/80">{currencySymbol}{formatCurrency(d.calculatedValue)}</span>
+                                    </div>
+                                 ))}
+                              </div>
+                           )}
                            {breakdown.deductions.map((d, i) => (
                               <div key={i} className="flex justify-between items-center"><span className="text-[11px] font-bold text-white/50">{d.name}</span><span className="text-xs font-black text-rose-400">{currencySymbol}{formatCurrency(d.calculatedValue)}</span></div>
                            ))}

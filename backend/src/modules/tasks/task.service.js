@@ -23,8 +23,17 @@ class TaskService {
 
     // Filter by assignee if requested OR if the user is an employee/manager (unless they are admin)
     const assignedOnly = query.assignedOnly === 'true';
-    const targetUserId = query.userId || (assignedOnly || role === 'employee' || role === 'manager' ? userId : null);
-    const targetEmployeeId = query.employeeId || (assignedOnly || role === 'employee' || role === 'manager' ? employeeId : null);
+    
+    // Determine the target for "assigned only" filtering.
+    // We prioritize query params to allow admins to view tasks for a specific user.
+    let targetUserId = query.userId;
+    let targetEmployeeId = query.employeeId;
+
+    // If no target is specified but filtering is required (either by flag or role), default to current user
+    if (!targetUserId && !targetEmployeeId && (assignedOnly || role === 'employee' || role === 'manager')) {
+      targetUserId = userId;
+      targetEmployeeId = employeeId;
+    }
 
     if (targetUserId || targetEmployeeId) {
       where.assignees = {

@@ -10,11 +10,20 @@ const { google } = require('googleapis');
 const axios = require('axios');
 const { encrypt } = require('../../shared/utils/security');
 
-// Public callback routes (must be before authenticate middleware or handle auth inside)
-// Actually, it's better to keep them protected if we can pass state, but usually OAuth callbacks are public and we verify state.
-// For simplicity in this implementation, I'll use a 'state' parameter that contains the user's JWT or a temporary token.
-// Or just let the frontend handle the callback and send the code to a protected endpoint.
-// Let's do the latter: Frontend handles callback -> sends code to /api/calendar/connect/google/callback (Protected)
+// Public callback routes (MUST be before authenticate middleware)
+router.get('/callback/google/proxy', (req, res) => {
+  const { code, state } = req.query;
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  // Redirect back to frontend with the same params
+  res.redirect(`${clientUrl}/settings?tab=integrations&provider=google&code=${code}&state=${state}`);
+});
+
+router.get('/callback/outlook/proxy', (req, res) => {
+  const { code, state } = req.query;
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  // Redirect back to frontend with the same params
+  res.redirect(`${clientUrl}/settings?tab=integrations&provider=outlook&code=${code}&state=${state}`);
+});
 
 router.use(authenticate);
 
@@ -42,9 +51,11 @@ router.get('/integrations', asyncHandler(async (req, res) => {
 
 // ── OAuth Initiation Endpoints ──────────────────────────────────────────────
 router.get('/connect/google', (req, res) => {
-  // Use the frontend URL for redirection so the settings tab can handle the code
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
-  const redirectUri = `${clientUrl}/settings?tab=integrations&provider=google`;
+  // Construct the absolute backend URL for the proxy callback
+  const protocol = req.protocol === 'http' && process.env.NODE_ENV === 'production' ? 'https' : req.protocol;
+  const host = req.get('host');
+  // We use the same base path as matched in app.js
+  const redirectUri = `${protocol}://${host}/api/v1/calendar/callback/google/proxy`;
 
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -66,8 +77,9 @@ router.get('/connect/google', (req, res) => {
 });
 
 router.get('/connect/outlook', (req, res) => {
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
-  const redirectUri = `${clientUrl}/settings?tab=integrations&provider=outlook`;
+  const protocol = req.protocol === 'http' && process.env.NODE_ENV === 'production' ? 'https' : req.protocol;
+  const host = req.get('host');
+  const redirectUri = `${protocol}://${host}/api/v1/calendar/callback/outlook/proxy`;
 
   const baseUrl = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize';
   const params = new URLSearchParams({
@@ -85,8 +97,9 @@ router.get('/connect/outlook', (req, res) => {
 // ── OAuth Callback Handlers (Protected - Frontend usually redirects here) ───
 router.post('/callback/google', asyncHandler(async (req, res) => {
   const { code } = req.body;
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
-  const redirectUri = `${clientUrl}/settings?tab=integrations&provider=google`;
+  const protocol = req.protocol === 'http' && process.env.NODE_ENV === 'production' ? 'https' : req.protocol;
+  const host = req.get('host');
+  const redirectUri = `${protocol}://${host}/api/v1/calendar/callback/google/proxy`;
 
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -125,8 +138,9 @@ router.post('/callback/google', asyncHandler(async (req, res) => {
 
 router.post('/callback/outlook', asyncHandler(async (req, res) => {
   const { code } = req.body;
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
-  const redirectUri = `${clientUrl}/settings?tab=integrations&provider=outlook`;
+  const protocol = req.protocol === 'http' && process.env.NODE_ENV === 'production' ? 'https' : req.protocol;
+  const host = req.get('host');
+  const redirectUri = `${protocol}://${host}/api/v1/calendar/callback/outlook/proxy`;
   
   const params = new URLSearchParams();
   params.append('client_id', process.env.MICROSOFT_CLIENT_ID);

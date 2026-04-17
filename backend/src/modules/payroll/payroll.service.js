@@ -209,7 +209,8 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
     totalHours,
     overtimeHours: totalOvertimeHours,
     hoursPerDay,
-    actualWorkedDays
+    actualWorkedDays,
+    month
   };
 };
 
@@ -217,9 +218,10 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
 /**
  * UNIVERSAL PAYROLL CALCULATION ENGINE
  * Rule: Single Source of Truth for all salary computations.
- * Signature: calculateSalaryBreakdown(profile, attendance, policy)
+ * Signature: calculateSalaryBreakdown(profile, attendance, policy, month)
  */
-const calculateSalaryBreakdown = (profile, attendance, policy) => {
+const calculateSalaryBreakdown = (profile, attendance, policy, month = new Date().getMonth()) => {
+  const processingMonth = month !== undefined ? month : (attendance.month !== undefined ? attendance.month : new Date().getMonth());
   const { 
     workingDays = 1, 
     totalOrgWorkingDays = 1, 
@@ -253,8 +255,8 @@ const calculateSalaryBreakdown = (profile, attendance, policy) => {
     return val; 
   };
 
-  const earningsList = profile.earnings || [];
-  const deductionsList = profile.deductions || [];
+  const earningsList = (profile.earnings || []).map(e => ({ ...e, name: e.name === 'grativity' ? 'Gratuity' : e.name }));
+  const deductionsList = (profile.deductions || []).map(d => ({ ...d, name: d.name === 'grativity' ? 'Gratuity' : d.name }));
 
   // Stage 1: Base Calculation (Full Month)
   let baseGross = 0;
@@ -297,10 +299,40 @@ const calculateSalaryBreakdown = (profile, attendance, policy) => {
 
   if (policy?.statutory?.pt?.enabled) {
       const pt = policy.statutory.pt;
-      const slabs = pt.slabs || [];
-      const slab = slabs.find(s => baseGross >= s.min && baseGross <= (s.max || 99999999));
-      if (slab && slab.amount > 0) {
-          statutoryDeductions.push({ name: 'Professional Tax (PT)', baseVal: slab.amount, isStatutory: true });
+      // Frequency Logic: MONTHLY (always), HALF_YEARLY/YEARLY (only if match)
+      const months = pt.deductionMonths || [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+      const isPaymentMonth = months.includes(processingMonth);
+
+      if (isPaymentMonth || pt.frequency === 'MONTHLY') {
+          const slabs = pt.slabs || [];
+          const slab = slabs.find(s => baseGross >= s.min && baseGross <= (s.max || 99999999));
+          if (slab && slab.amount > 0) {
+              statutoryDeductions.push({ name: 'Professional Tax (PT)', baseVal: slab.amount, isStatutory: true, state: pt.state });
+          }
+      }
+  }
+
+  // Gratuity Calculation
+  let gratuityProvision = 0;
+  let gratuityAccrued = 0;
+  if (policy?.statutory?.gratuity?.enabled) {
+      const gConfig = policy.statutory.gratuity;
+      // Monthly Provision: basic * (15/26) / 12
+      gratuityProvision = (basicSalary * (15 / 26)) / 12;
+      
+      if (gConfig.includeInCTC) {
+          statutoryDeductions.push({ name: 'Gratuity', baseVal: gratuityProvision, isStatutory: true });
+      }
+
+      // Accrued Gratuity (Informational): basic * tenure * (15/26)
+      if (gConfig.showAccrued && attendance.joiningDate) {
+          const join = new Date(attendance.joiningDate);
+          const now = new Date(); // Using current date for tenure as of today
+          const tenureYears = (now - join) / (1000 * 60 * 60 * 24 * 365.25);
+          
+          if (tenureYears >= 5) {
+              gratuityAccrued = basicSalary * tenureYears * (15 / 26);
+          }
       }
   }
 
@@ -309,8 +341,13 @@ const calculateSalaryBreakdown = (profile, attendance, policy) => {
     const name = d.name.toLowerCase();
     const isStatutoryPF = name.includes('provident fund') || name === 'pf';
     const isStatutoryESI = name.includes('esi') || name.includes('state insurance');
+    const isStatutoryPT = name.includes('professional tax') || name === 'pt';
+    const isStatutoryGratuity = name.includes('gratuity') || name.includes('grativity');
+
     if (isStatutoryPF && policy?.statutory?.pf?.enabled) return false;
     if (isStatutoryESI && policy?.statutory?.esi?.enabled) return false;
+    if (isStatutoryPT && policy?.statutory?.pt?.enabled) return false;
+    if (isStatutoryGratuity && policy?.statutory?.gratuity?.enabled) return false;
     return true;
   }).map(d => {
     let base = 0;
@@ -339,7 +376,7 @@ const calculateSalaryBreakdown = (profile, attendance, policy) => {
   // Overtime
   let overtimePay = 0;
   if (overtimeHours > 0 && policy?.overtime?.enabled) {
-    const denominator = policy?.attendance?.workingDaysPerMonth || totalOrgWorkingDays || 30;
+    const denominator = standardMonthlyDays || 30;
     const hourlyRate = (monthlySalary / denominator) / hoursPerDay;
     const multiplier = policy.overtime.multiplier || 1.5;
     overtimePay = applyRounding(overtimeHours * hourlyRate * multiplier);
@@ -353,6 +390,7 @@ const calculateSalaryBreakdown = (profile, attendance, policy) => {
   return {
     workingDays,
     totalOrgWorkingDays,
+    standardMonthlyDays,
     presentDays,
     lopDays,
     overtimeHours,
@@ -363,6 +401,8 @@ const calculateSalaryBreakdown = (profile, attendance, policy) => {
     netSalary: netPay, // for compatibility
     earnings: finalEarnings,
     deductions: finalDeductions,
+    gratuityAccrued: applyRounding(gratuityAccrued),
+    gratuityProvision: applyRounding(gratuityProvision),
     lopDeduction: (lopDays > 0 && standardMonthlyDays > 0) ? applyRounding((baseGross / standardMonthlyDays) * lopDays) : 0,
     performanceMetrics: {
         attendancePercentage: standardMonthlyDays > 0 ? (presentDays / standardMonthlyDays) * 100 : 0
@@ -396,7 +436,7 @@ const simulateUserPayroll = async (userId, month, year, organizationId, options 
   const attendance = await calculateAttendance(user, month, year, effectivePolicy, profile.payrollType || 'Monthly', organizationId);
 
   // 2. Use Centralized Calculation Engine
-  const calculation = calculateSalaryBreakdown(profile, attendance, effectivePolicy);
+  const calculation = calculateSalaryBreakdown(profile, attendance, effectivePolicy, month);
 
 
   return {
@@ -1296,6 +1336,7 @@ const getPayrollPreview = async (organizationId, month, year, overtimeEnabled) =
                 gross: sim.grossPay,
                 deductions: sim.totalDeductions,
                 net: sim.netSalary,
+                standardMonthlyDays: sim.standardMonthlyDays,
                 working: sim.workingDays,
                 present: sim.presentDays,
                 lop: sim.lopDays,

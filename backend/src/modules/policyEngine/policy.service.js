@@ -3,7 +3,7 @@ const logger = require('../../shared/utils/logger');
 
 const defaultPolicy = {
   name: 'Default Unified Policy',
-  version: 1,
+  version: 2,
   isActive: true,
   salaryComponents: [
     { name: 'Basic Salary', type: 'EARNING', calculationType: 'percentage', value: 40, formula: 'CTC' },
@@ -14,8 +14,15 @@ const defaultPolicy = {
   ],
   statutory: {
     pf: { enabled: true, employeeRate: 12, employerRate: 12, wageLimit: 15000 },
-    pt: { enabled: true, slabs: [{ min: 0, max: 15000, amount: 0 }, { min: 15001, max: 99999999, amount: 200 }] },
+    pt: { 
+      enabled: true, 
+      state: 'TN', 
+      frequency: 'MONTHLY', // MONTHLY, HALF_YEARLY, YEARLY
+      deductionMonths: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      slabs: [{ min: 0, max: 15000, amount: 0 }, { min: 15001, max: 99999999, amount: 200 }] 
+    },
     esi: { enabled: true, employeeRate: 0.75, employerRate: 3.25, wageLimit: 21000 },
+    gratuity: { enabled: false, includeInCTC: true, showAccrued: false },
     tds: { 
       enabled: true, 
       regime: 'OLD', 
@@ -142,7 +149,31 @@ const getPolicy = async (organizationId = null) => {
     
     // Flatten rules into the root object for the frontend
     const { rules, ...rest } = policy;
-    return { ...rest, ...((rules && typeof rules === 'object') ? rules : {}) };
+    const finalRules = (rules && typeof rules === 'object') ? rules : {};
+    
+    // Backward Compatibility Migrations
+    if (!finalRules.statutory) finalRules.statutory = { ...defaultPolicy.statutory };
+    if (!finalRules.statutory.gratuity) {
+      finalRules.statutory.gratuity = { ...defaultPolicy.statutory.gratuity };
+    }
+    if (finalRules.statutory.pt && finalRules.statutory.pt.state === undefined) {
+      finalRules.statutory.pt.state = 'TN'; // Default to Tamil Nadu
+    }
+    if (finalRules.statutory.pt && finalRules.statutory.pt.frequency === undefined) {
+      finalRules.statutory.pt.frequency = 'MONTHLY';
+      finalRules.statutory.pt.deductionMonths = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    }
+    if (!finalRules.attendance) {
+      finalRules.attendance = { ...defaultPolicy.attendance };
+    }
+    if (!finalRules.overtime) {
+      finalRules.overtime = { ...defaultPolicy.overtime };
+    }
+    if (!finalRules.rounding) {
+        finalRules.rounding = { ...defaultPolicy.rounding };
+    }
+
+    return { ...rest, ...finalRules };
   } catch (err) {
     logger.error(`Error fetching policy: ${err.message}`);
     return { ...defaultPolicy, organizationId };

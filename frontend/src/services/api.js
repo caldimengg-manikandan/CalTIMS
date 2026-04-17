@@ -3,7 +3,7 @@ import { useAuthStore } from '@/store/authStore'
 import toast from 'react-hot-toast'
 
 const api = axios.create({
-  baseURL: '/caltims/api/v1',
+  baseURL: `${import.meta.env.VITE_ROUTER_BASENAME || ''}/api/v1`,
   headers: { 'Content-Type': 'application/json' },
   timeout: 60000,
 })
@@ -71,7 +71,7 @@ api.interceptors.response.use(
         const { refreshToken } = useAuthStore.getState()
         if (!refreshToken) throw new Error('No refresh token')
 
-        const { data } = await axios.post('/api/v1/auth/refresh', { refreshToken })
+        const { data } = await axios.post(`${import.meta.env.VITE_ROUTER_BASENAME || ''}/api/v1/auth/refresh`, { refreshToken })
         const { accessToken, refreshToken: newRefreshToken } = data.data
         useAuthStore.getState().setAccessToken(accessToken)
         if (newRefreshToken) useAuthStore.getState().setRefreshToken(newRefreshToken)

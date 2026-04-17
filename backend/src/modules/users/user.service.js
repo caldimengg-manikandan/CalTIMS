@@ -21,7 +21,12 @@ const userService = {
 
     if (query.status === 'active') where.isActive = true;
     else if (query.status === 'inactive') where.isActive = false;
-    if (query.role) where.role = query.role;
+    if (query.role) {
+      where.OR = [
+        { role: { equals: query.role, mode: 'insensitive' } },
+        { roleRef: { name: { equals: query.role, mode: 'insensitive' } } }
+      ];
+    }
     if (query.search) {
       where.OR = [
         { name: { contains: query.search, mode: 'insensitive' } },
@@ -250,7 +255,9 @@ const userService = {
     const canChangeRoles = hasPermission(context.permissions, 'Settings', 'Users & Roles', 'edit');
     const isEditingSelf = id === requestorId;
 
-    if (data.role && !canChangeRoles && !context.isSuperAdmin && !context.isOwner) {
+    const isChangingRole = (data.role && data.role !== user.role) || (data.roleId && data.roleId !== user.roleId);
+
+    if (isChangingRole && !canChangeRoles && !context.isSuperAdmin && !context.isOwner) {
       throw new AppError('Only authorized users can change user roles', 403);
     }
     

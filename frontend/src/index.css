@@ -462,6 +462,13 @@
 .animate-slide-in { animation: slideIn var(--animation-speed) ease-out; }
 .animate-slide-up { animation: slideUp var(--animation-speed) ease-out; }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
+
 @keyframes gradient-x {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }

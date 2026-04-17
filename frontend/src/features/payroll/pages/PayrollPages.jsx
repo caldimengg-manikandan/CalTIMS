@@ -3,7 +3,7 @@ import { LayoutDashboard, Wallet, Receipt, Calculator, FileText, Percent, BarCha
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { payrollAPI, userAPI, settingsAPI } from '@/services/endpoints';
+import { payrollAPI, userAPI, settingsAPI, policyAPI } from '@/services/endpoints';
 import { toast } from 'react-hot-toast';
 import Spinner from '@/components/ui/Spinner';
 import StatementPreview from '../components/StatementPreview';
@@ -506,6 +506,11 @@ export const EmployeePayrollProfiles = () => {
       queryFn: () => payrollAPI.getRoleStructures().then(res => res.data.data)
    });
 
+   const { data: globalPolicy } = useQuery({
+      queryKey: ['payrollPolicy'],
+      queryFn: () => policyAPI.getPolicy().then(res => res.data.data)
+   });
+
    const departments = React.useMemo(() => {
       if (!users) return [];
       return ['All', ...new Set(users.map(u => u.department).filter(Boolean))];
@@ -591,7 +596,7 @@ export const EmployeePayrollProfiles = () => {
          const profile = profiles?.find(p => (p.employee?.userId === userId) || (p.user === userId));
          if (!profile) return toast.error('No payroll configuration found for this user');
          
-         const breakdown = calculateSalaryBreakdown(profile.earnings, profile.deductions, profile.monthlyCTC);
+         const breakdown = calculateSalaryBreakdown(profile.earnings, profile.deductions, profile.monthlyCTC, globalPolicy);
          setViewModal({ isOpen: true, data: { user, profile, breakdown } });
       } else {
          navigate(`/payroll/profile/${user.id || user._id}`, { state: { preSelectedUser: user } });
@@ -874,6 +879,20 @@ export const EmployeePayrollProfiles = () => {
                            <div className="h-px bg-white/5" />
                            <div className="space-y-3">
                               <p className="text-[9px] font-black uppercase text-white/20 tracking-widest">Deductions</p>
+                              {/* Statutory Section */}
+                              {viewModal.data.breakdown.statutoryDeductions?.length > 0 && (
+                                 <div className="space-y-2 mb-4 bg-white/5 p-3 rounded-xl border border-white/5">
+                                    <p className="text-[8px] font-black uppercase text-indigo-400/60 tracking-tighter mb-1">Statutory (Policy Driven)</p>
+                                    {viewModal.data.breakdown.statutoryDeductions.map((d, idx) => (
+                                       <div key={`stat-${idx}`} className="flex justify-between items-center opacity-80">
+                                          <span className="text-[11px] font-bold text-white/60 italic">{d.name}</span>
+                                          <span className="text-xs font-black text-rose-400/80">{currencySymbol}{formatCurrency(d.calculatedValue)}</span>
+                                       </div>
+                                    ))}
+                                 </div>
+                              )}
+                              
+                              {/* Profile Deductions */}
                               {viewModal.data.breakdown.deductions.map((d, idx) => (
                                  <div key={idx} className="flex justify-between items-center">
                                     <span className="text-[11px] font-bold text-white/50">{d.name}</span>

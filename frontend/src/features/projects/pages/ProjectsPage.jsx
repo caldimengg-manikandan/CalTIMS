@@ -19,18 +19,18 @@ import PageHeader from '@/components/ui/PageHeader'
 import Pagination from '@/components/ui/Pagination'
 
 const projectSchema = z.object({
-    name: z.string().min(3, 'Project name must be at least 3 characters'),
-    code: z.string().min(2, 'Project code is required'),
-    description: z.string().optional().nullable(),
-    clientName: z.string().optional().nullable(),
+    name: z.string().min(3, 'Project name must be at least 3 characters').max(100, 'Name cannot exceed 100 characters'),
+    code: z.string().min(2, 'Project code is required').max(20, 'Code cannot exceed 20 characters'),
+    description: z.string().max(500, 'Description cannot exceed 500 characters').optional().nullable(),
+    clientName: z.string().max(100, 'Client name cannot exceed 100 characters').optional().nullable(),
     startDate: z.string().min(1, 'Start date is required').regex(/^\d{4}-/, 'Year must be exactly 4 digits'),
     endDate: z.string().optional().nullable().or(z.literal('')).refine(val => !val || /^\d{4}-/.test(val), 'Year must be exactly 4 digits'),
     status: z.enum(['active', 'completed', 'on-hold']).default('active'),
     managerId: z.string().min(1, 'Project manager is required'),
     allocatedEmployees: z.array(z.object({
         userId: z.string().optional().nullable(),
-        role: z.string().default('Developer'),
-        allocationPercent: z.number().min(1).max(100).default(100),
+        role: z.string().max(50, 'Role cannot exceed 50 characters').default('Developer'),
+        allocationPercent: z.number().min(0, 'Min 0%').max(100, 'Max 100%').default(100),
         budgetHours: z.preprocess((val) => val === '' ? 0 : Number(val), z.number().min(0).default(0))
     })).default([]),
     onlyProjectTasks: z.boolean().default(false),
@@ -42,6 +42,14 @@ const projectSchema = z.object({
     message: "End date cannot be before start date",
     path: ["endDate"]
 })
+
+const budgetHoursSchema = z.preprocess(
+    (val) => val === '' ? 0 : Number(val), 
+    z.number({ invalid_type_error: 'Must be a number' })
+     .min(0, 'Budget hours cannot be negative')
+     .max(99999999, 'Max 8 digits allowed')
+     .default(0)
+)
 
 /* ─── Shared Modal Shell ─────────────────────────────────────── */
 function Modal({ open, onClose, maxWidth = 'max-w-2xl', children }) {
@@ -86,15 +94,15 @@ function ProjectFormModal({ project, onClose }) {
     const queryClient = useQueryClient()
     const isEdit = !!project
 
-    const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm({
+    const { register, handleSubmit, control, watch, reset, setValue, formState: { errors } } = useForm({
         resolver: zodResolver(projectSchema),
         defaultValues: project ? {
             ...project,
             startDate: project.startDate ? format(new Date(project.startDate), 'yyyy-MM-dd') : '',
             endDate: project.endDate && isValid(new Date(project.endDate)) ? format(new Date(project.endDate), 'yyyy-MM-dd') : '',
-            managerId: project.managerId?._id || project.managerId || '',
-            allocatedEmployees: project.allocatedEmployees?.map(a => ({
-                userId: a.userId?._id || a.userId || '',
+            managerId: project.manager?._id || project.manager?.id || project.managerId || '',
+            allocatedEmployees: (project.team_members || project.allocatedEmployees)?.map(a => ({
+                userId: a.user?._id || a.user?.id || a.userId?._id || a.userId || '',
                 role: a.role || 'Developer',
                 allocationPercent: a.allocationPercent || 100,
                 budgetHours: a.budgetHours || 0
@@ -107,15 +115,32 @@ function ProjectFormModal({ project, onClose }) {
         }
     })
 
+    React.useEffect(() => {
+        if (project) {
+            reset({
+                ...project,
+                startDate: project.startDate ? format(new Date(project.startDate), 'yyyy-MM-dd') : '',
+                endDate: project.endDate && isValid(new Date(project.endDate)) ? format(new Date(project.endDate), 'yyyy-MM-dd') : '',
+                managerId: project.manager?._id || project.manager?.id || project.managerId || '',
+                allocatedEmployees: (project.team_members || project.allocatedEmployees)?.map(a => ({
+                    userId: a.user?._id || a.user?.id || a.userId?._id || a.userId || '',
+                    role: a.role || 'Developer',
+                    allocationPercent: a.allocationPercent || 100,
+                    budgetHours: a.budgetHours || 0
+                })) || []
+            })
+        }
+    }, [project, reset])
+
     const { fields, append, remove } = useFieldArray({ control, name: 'allocatedEmployees' })
 
     const { data: managers } = useQuery({
         queryKey: ['users', 'managers'],
-        queryFn: () => userAPI.getAll({ role: 'manager' }).then(r => r.data.data)
+        queryFn: () => userAPI.getAll({ role: 'manager' }).then(r => r.data.data || [])
     })
-    const { data: allEmployees } = useQuery({
+    const { data: allEmployees, isLoading: isAllLoading } = useQuery({
         queryKey: ['users', 'all'],
-        queryFn: () => userAPI.getAll({ limit: 5000 }).then(r => r.data.data)
+        queryFn: () => userAPI.getAll({ limit: 5000 }).then(r => r.data.data || [])
     })
 
     const mutation = useMutation({
@@ -127,6 +152,12 @@ function ProjectFormModal({ project, onClose }) {
         },
         onError: (err) => toast.error(err.response?.data?.message || `Failed to ${isEdit ? 'update' : 'create'} project`)
     })
+
+    // ─── Real-time calculations ───
+    const watchedProjectBudget = watch('budgetHours') || 0
+    const watchedAllocations = watch('allocatedEmployees') || []
+    const totalAllocated = watchedAllocations.reduce((sum, emp) => sum + (Number(emp.budgetHours) || 0), 0)
+    const remainingBudget = watchedProjectBudget - totalAllocated
 
     const onFormSubmit = (data) => {
         const payload = {
@@ -173,18 +204,46 @@ function ProjectFormModal({ project, onClose }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="col-span-2 space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Project Name *</label>
-                            <input {...register('name')} className={`input ${errors.name ? 'border-rose-400' : ''}`} placeholder="e.g. Website Redesign" />
+                            <input {...register('name')} maxLength={100} className={`input ${errors.name ? 'border-rose-400' : ''}`} placeholder="e.g. Website Redesign" />
                             {errors.name && <p className="text-[10px] text-rose-500">{errors.name.message}</p>}
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Project Code *</label>
-                            <input {...register('code')} className={`input font-mono uppercase ${errors.code ? 'border-rose-400' : ''}`} placeholder="PRJ-001" />
+                            <input {...register('code')} maxLength={20} className={`input font-mono uppercase ${errors.code ? 'border-rose-400' : ''}`} placeholder="PRJ-001" />
                             {errors.code && <p className="text-[10px] text-rose-500">{errors.code.message}</p>}
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Project Budget Hours</label>
-                            <input {...register('budgetHours')} type="number" step="0.5" className="input" placeholder="e.g. 100" />
-                            <p className="text-[10px] text-slate-400 leading-tight">Hours limit before alerts.</p>
+                            <div className="relative">
+                                <input 
+                                    {...register('budgetHours')} 
+                                    type="number" 
+                                    step="0.5" 
+                                    className={`input ${errors.budgetHours ? 'border-red-500 ring-red-200 animate-shake' : ''}`} 
+                                    placeholder="e.g. 100" 
+                                    onKeyDown={(e) => {
+                                        if (['e', 'E', '+', '-'].includes(e.key)) {
+                                            e.preventDefault();
+                                            toast.error('Only positive numbers allowed', { duration: 1000, position: 'bottom-center' });
+                                        }
+                                    }}
+                                    onInput={(e) => {
+                                        if (e.target.value.length > 8) e.target.value = e.target.value.slice(0, 8);
+                                        if (Number(e.target.value) < 0) e.target.value = 0;
+                                    }}
+                                />
+                                {errors.budgetHours && (
+                                    <p className="text-[10px] text-red-500 font-bold mt-1 flex items-center gap-1">
+                                        <AlertCircle size={10} /> {errors.budgetHours.message}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                                <p className="text-[10px] text-slate-400 leading-tight">Total hours for the project.</p>
+                                <span className={`text-[10px] font-bold ${remainingBudget < 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                    Rem: {remainingBudget}h
+                                </span>
+                            </div>
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</label>
@@ -196,7 +255,7 @@ function ProjectFormModal({ project, onClose }) {
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Client Name</label>
-                            <input {...register('clientName')} className="input" placeholder="Optional" />
+                            <input {...register('clientName')} maxLength={100} className="input" placeholder="Optional" />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Start Date *</label>
@@ -237,9 +296,9 @@ function ProjectFormModal({ project, onClose }) {
                         </div>
                         <div className="col-span-2 space-y-1.5">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
-                            <textarea {...register('description')} rows={2} className="input resize-none" placeholder="Optional project details..." />
+                            <textarea {...register('description')} maxLength={500} rows={2} className="input resize-none" placeholder="Optional project details..." />
                         </div>
-                        <div className="col-span-2 space-y-1.5 pt-2">
+                        {/* <div className="col-span-2 space-y-1.5 pt-2">
                             <label className="flex items-center gap-2 cursor-pointer group">
                                 <input type="checkbox" {...register('onlyProjectTasks')} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-indigo-500 transition-all cursor-pointer" />
                                 <div className="flex flex-col">
@@ -247,7 +306,7 @@ function ProjectFormModal({ project, onClose }) {
                                     <span className="text-[10px] text-slate-400 font-normal leading-tight">If checked, global task categories will be hidden for this project.</span>
                                 </div>
                             </label>
-                        </div>
+                        </div> */}
                     </div>
                 </div>
 
@@ -267,20 +326,39 @@ function ProjectFormModal({ project, onClose }) {
                             <div key={field.id} className="flex gap-3 items-start bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
                                 <div className="flex-1">
                                     <select {...register(`allocatedEmployees.${index}.userId`)} className="input text-xs h-9">
-                                        <option value="">Select Member...</option>
+                                        <option value="">{isAllLoading ? 'Loading members...' : 'Select Member...'}</option>
                                         {allEmployees?.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
                                     </select>
                                 </div>
                                 <div className="w-32">
-                                    <input {...register(`allocatedEmployees.${index}.role`)} className="input text-xs h-9" placeholder="Dev, PM..." />
+                                    <input {...register(`allocatedEmployees.${index}.role`)} maxLength={50} className="input text-xs h-9" placeholder="Dev, PM..." />
                                 </div>
                                 <div className="w-20">
-                                    <input type="number" {...register(`allocatedEmployees.${index}.allocationPercent`, { valueAsNumber: true })}
-                                        className="input text-xs h-9 text-center" placeholder="%" title="Allocation %" />
+                                    <input 
+                                        type="number" 
+                                        {...register(`allocatedEmployees.${index}.allocationPercent`, { valueAsNumber: true })}
+                                        className="input text-xs h-9 text-center" 
+                                        placeholder="%" 
+                                        title="Allocation %" 
+                                        onKeyDown={(e) => ['e', 'E', '+', '-', '.'].includes(e.key) && e.preventDefault()}
+                                    />
                                 </div>
                                 <div className="w-20">
-                                    <input type="number" step="0.5" {...register(`allocatedEmployees.${index}.budgetHours`, { valueAsNumber: true })}
-                                        className="input text-xs h-9 text-center" placeholder="Hrs" title="Budget Hours" />
+                                    <input 
+                                        type="number" 
+                                        step="0.5" 
+                                        {...register(`allocatedEmployees.${index}.budgetHours`, { valueAsNumber: true })}
+                                        className={`input text-xs h-9 text-center ${errors.allocatedEmployees?.[index]?.budgetHours ? 'border-red-500' : ''}`} 
+                                        placeholder="Hrs" 
+                                        title="Budget Hours" 
+                                        onKeyDown={(e) => {
+                                            if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
+                                        }}
+                                        onInput={(e) => {
+                                            if (e.target.value.length > 8) e.target.value = e.target.value.slice(0, 8);
+                                            if (Number(e.target.value) < 0) e.target.value = 0;
+                                        }}
+                                    />
                                 </div>
                                 <button type="button" onClick={() => remove(index)}
                                     className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors">
@@ -330,12 +408,12 @@ function ProjectViewModal({ project, onClose, onEdit }) {
                 {/* Info grid */}
                 <div className="grid grid-cols-1 gap-3">
                     {[
-                        { icon: <User size={15} />, label: 'Manager', value: project.managerId?.name || '—' },
+                        { icon: <User size={15} />, label: 'Manager', value: project.manager?.name || project.managerId?.name || '—' },
                         { icon: <Building2 size={15} />, label: 'Client', value: project.clientName || '—' },
                         { icon: <Calendar size={15} />, label: 'Start Date', value: project.startDate ? format(new Date(project.startDate), 'MMM d, yyyy') : '—' },
                         { icon: <Calendar size={15} />, label: 'End Date', value: project.endDate && isValid(new Date(project.endDate)) ? format(new Date(project.endDate), 'MMM d, yyyy') : '—' },
                         { icon: <Briefcase size={15} />, label: 'Budget Hours', value: project.budgetHours ? `${project.budgetHours} h` : 'No limit' },
-                        { icon: <Users size={15} />, label: 'Team Size', value: `${project.allocatedEmployees?.length || 0} Members` },
+                        { icon: <Users size={15} />, label: 'Team Size', value: `${(project.team_members || project.allocatedEmployees)?.length || 0} Members` },
                         { icon: <CheckCircle2 size={15} />, label: 'Task Isolation', value: project.onlyProjectTasks ? 'Only project tasks' : 'All categories' },
                     ].map(({ icon, label, value }) => (
                         <div key={label} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
@@ -359,13 +437,13 @@ function ProjectViewModal({ project, onClose, onEdit }) {
                     <div>
                         <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-2">Team Members</p>
                         <div className="space-y-2">
-                            {project.allocatedEmployees.map((a, i) => (
+                            {(project.team_members || project.allocatedEmployees).map((a, i) => (
                                 <div key={i} className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
                                     <div className="flex items-center gap-2">
                                         <div className="w-7 h-7 rounded-lg gradient-primary flex items-center justify-center text-white text-[10px] font-bold">
-                                            {(a.userId?.name || 'M').charAt(0)}
+                                            {(a.user?.name || a.userId?.name || 'M').charAt(0)}
                                         </div>
-                                        <span className="text-sm font-medium text-slate-700 dark:text-white">{a.userId?.name || '—'}</span>
+                                        <span className="text-sm font-medium text-slate-700 dark:text-white">{a.user?.name || a.userId?.name || '—'}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <div className="text-right mr-2">
@@ -418,13 +496,12 @@ export default function ProjectsPage() {
     // Fetch all projects for the ID dropdown
     const { data: allProjectsList } = useQuery({
         queryKey: ['all-projects-list'],
-        queryFn: () => projectAPI.getAll({ limit: 5000 }).then(r => r.data.data),
+        queryFn: () => projectAPI.getAll({ limit: 5000 }).then(r => r.data.data || []),
     })
 
-    // Fetch managers for the manager filter
-    const { data: managers } = useQuery({
-        queryKey: ['users', 'managers'],
-        queryFn: () => userAPI.getAll({ role: 'manager' }).then(r => r.data.data)
+    const { data: managersList } = useQuery({
+        queryKey: ['users', 'managers-filter'],
+        queryFn: () => userAPI.getAll({ role: 'manager' }).then(r => r.data.data || [])
     })
 
     const effectiveSearch = search.trim().length >= 2 ? search.trim() : ''
@@ -469,11 +546,11 @@ export default function ProjectsPage() {
         const headers = ['Name', 'Code', 'Status', 'Manager', 'Client', 'Start Date', 'End Date', 'Team Members']
         const rows = projects.map(p => [
             p.name, p.code, p.status,
-            p.managerId?.name || '',
+            p.manager?.name || p.managerId?.name || '',
             p.clientName || '',
             p.startDate ? format(new Date(p.startDate), 'yyyy-MM-dd') : '',
             p.endDate && isValid(new Date(p.endDate)) ? format(new Date(p.endDate), 'yyyy-MM-dd') : '',
-            p.allocatedEmployees?.map(a => a.userId?.name || '').filter(Boolean).join(', ')
+            (p.team_members || p.allocatedEmployees)?.map(a => a.user?.name || a.userId?.name || '').filter(Boolean).join(', ')
         ])
         const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
         const blob = new Blob([csv], { type: 'text/csv' })
@@ -587,7 +664,7 @@ export default function ProjectsPage() {
                                                 >
                                                     <option value="">All Projects</option>
                                                     {allProjectsList?.map(p => (
-                                                        <option key={p.code} value={p.code}>{p.code} — {p.name}</option>
+                                                        <option key={p.id} value={p.code}>{p.id} — {p.name}</option>
                                                     ))}
                                                 </select>
                                             </div>
@@ -601,7 +678,7 @@ export default function ProjectsPage() {
                                                     onChange={e => setTempFilters(p => ({ ...p, managerId: e.target.value }))}
                                                 >
                                                     <option value="">All Managers</option>
-                                                    {managers?.map(m => (
+                                                    {managersList?.map(m => (
                                                         <option key={m._id} value={m._id}>{m.name}</option>
                                                     ))}
                                                 </select>
@@ -692,7 +769,7 @@ export default function ProjectsPage() {
                                             </div>
                                         </td>
                                         <td>
-                                            <p className="text-sm text-slate-600 dark:text-white">{proj.managerId?.name || '—'}</p>
+                                            <p className="text-sm text-slate-600 dark:text-white">{proj.manager?.name || proj.managerId?.name || '—'}</p>
                                             {proj.clientName && <p className="text-[10px] text-slate-400">{proj.clientName}</p>}
                                         </td>
                                         <td>
@@ -702,20 +779,20 @@ export default function ProjectsPage() {
                                                 title="View team members"
                                             >
                                                 <div className="flex -space-x-1.5">
-                                                    {proj.allocatedEmployees?.slice(0, 3).map((a, i) => (
-                                                        <div key={i} title={a.userId?.name}
+                                                    {(proj.team_members || proj.allocatedEmployees)?.slice(0, 3).map((a, i) => (
+                                                        <div key={i} title={a.user?.name || a.userId?.name}
                                                             className="w-6 h-6 rounded-full gradient-primary border-2 border-white dark:border-slate-900 flex items-center justify-center text-white text-[9px] font-bold">
-                                                            {(a.userId?.name || 'M').charAt(0)}
+                                                            {(a.user?.name || a.userId?.name || 'M').charAt(0)}
                                                         </div>
                                                     ))}
-                                                    {(proj.allocatedEmployees?.length || 0) > 3 && (
+                                                    {(proj.team_members || proj.allocatedEmployees || []).length > 3 && (
                                                         <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-900 flex items-center justify-center text-slate-500 text-[9px] font-bold">
-                                                            +{proj.allocatedEmployees.length - 3}
+                                                            +{(proj.team_members || proj.allocatedEmployees).length - 3}
                                                         </div>
                                                     )}
                                                 </div>
                                                 <span className="text-xs text-slate-400 group-hover/team:text-primary-600 transition-colors font-medium">
-                                                    {proj.allocatedEmployees?.length || 0}
+                                                    {(proj.team_members || proj.allocatedEmployees)?.length || 0}
                                                 </span>
                                             </button>
                                         </td>
@@ -776,25 +853,25 @@ export default function ProjectsPage() {
                 <ModalHeader
                     icon={<Users size={20} />}
                     title="Team Members"
-                    subtitle={teamProject ? `${teamProject.name} • ${teamProject.allocatedEmployees?.length || 0} members` : ''}
+                    subtitle={teamProject ? `${teamProject.name} • ${(teamProject.team_members || teamProject.allocatedEmployees)?.length || 0} members` : ''}
                     onClose={() => setTeamProject(null)}
                 />
                 <div className="px-6 py-5 overflow-y-auto flex-1" style={{ maxHeight: '60vh' }}>
-                    {teamProject?.allocatedEmployees?.length > 0 ? (
+                    {(teamProject?.team_members || teamProject?.allocatedEmployees)?.length > 0 ? (
                         <div className="space-y-3">
-                            {teamProject.allocatedEmployees.map((a, i) => (
+                            {(teamProject.team_members || teamProject.allocatedEmployees).map((a, i) => (
                                 <div key={i} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                     <div className="flex items-center gap-3">
                                         {/* Avatar */}
                                         <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center text-white font-bold text-sm shrink-0">
-                                            {(a.userId?.name || 'M').charAt(0)}
+                                            {(a.user?.name || a.userId?.name || 'M').charAt(0)}
                                         </div>
                                         <div>
                                             <p className="text-sm font-semibold text-slate-800 dark:text-white">
-                                                {a.userId?.name || '—'}
+                                                {a.user?.name || a.userId?.name || '—'}
                                             </p>
                                             <p className="text-[10px] text-slate-400 font-mono">
-                                                {a.userId?.employeeId || a.userId?.email || ''}
+                                                {a.user?.employeeId || a.userId?.employeeId || a.user?.email || a.userId?.email || ''}
                                             </p>
                                         </div>
                                     </div>

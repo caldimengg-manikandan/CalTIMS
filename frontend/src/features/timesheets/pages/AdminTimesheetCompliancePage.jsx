@@ -38,10 +38,6 @@ export default function AdminTimesheetCompliancePage() {
     const complianceData = complianceRes?.data || []
     const pagination = complianceRes?.pagination
 
-    const { data: projects } = useQuery({
-        queryKey: ['projects', 'active'],
-        queryFn: () => projectAPI.getAll({ status: 'active' }).then(r => r.data.data),
-    })
 
     const { data: tsSettings } = useQuery({
         queryKey: ['settings', 'timesheet'],
