@@ -4,15 +4,34 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-console.log('=== Backend Environment Check ===');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('PORT:', process.env.PORT);
-console.log('CLIENT_URL:', process.env.CLIENT_URL);
-console.log('\n--- Google OAuth Config ---');
-console.log('GOOGLE_CLIENT_ID (first 10 chars):', (process.env.GOOGLE_CLIENT_ID || 'MISSING').substring(0, 10) + '...');
-console.log('GOOGLE_CLIENT_ID (length):', (process.env.GOOGLE_CLIENT_ID || '').trim().length);
-console.log('GOOGLE_CALLBACK_URL:', process.env.GOOGLE_CALLBACK_URL);
-console.log('GOOGLE_CLIENT_SECRET Status:', process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_CLIENT_SECRET !== 'YOUR_CLIENT_SECRET_HERE' ? '✅ Set' : '❌ NOT SET CORRECTLY');
-console.log('==============================\n');
+const runDiag = async () => {
+    console.log('=== Backend Environment Check ===');
+    console.log('NODE_ENV:', process.env.NODE_ENV);
+    console.log('PORT:', process.env.PORT);
+    console.log('CLIENT_URL:', process.env.CLIENT_URL);
 
-process.exit(0);
+    console.log('\n--- SMTP Config ---');
+    console.log('SMTP_HOST:', process.env.SMTP_HOST || 'MISSING');
+    console.log('SMTP_USER:', process.env.SMTP_USER || 'MISSING');
+    console.log('SMTP_PASS Status:', process.env.SMTP_PASS ? '✅ Set' : '❌ MISSING');
+
+    console.log('\n--- PDF Dependencies ---');
+    try {
+        const puppeteer = require('puppeteer');
+        console.log('Puppeteer package: ✅ Installed');
+        console.log('Testing Browser Launch...');
+        const browser = await puppeteer.launch({ 
+            headless: 'new', 
+            args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+        });
+        console.log('Browser Launch: ✅ SUCCESS');
+        await browser.close();
+    } catch (e) {
+        console.log('Puppeteer/Browser Error: ❌ FAILED');
+        console.log('Error Details:', e.message);
+    }
+    console.log('==============================\n');
+    process.exit(0);
+};
+
+runDiag();
