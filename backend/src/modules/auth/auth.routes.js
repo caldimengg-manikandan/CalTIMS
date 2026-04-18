@@ -21,6 +21,9 @@ router.post('/social-login', authController.socialLogin);
 router.post('/refresh', authController.refresh);
 router.post('/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword);
 router.post('/reset-password/:token', validate(resetPasswordSchema), authController.resetPassword);
+router.post('/forgot-password-otp', authController.forgotPasswordOTP);
+router.post('/verify-reset-otp', authController.verifyResetOTP);
+router.post('/reset-password-otp', authController.resetPasswordWithOTP);
 router.post('/send-verification-otp', authController.sendVerificationOTP);
 router.post('/verify-verification-otp', authController.verifyVerificationOTP);
 

@@ -137,6 +137,21 @@ const authController = {
     await authService.verifyVerificationOTP(req.body.email, req.body.otp);
     ApiResponse.success(res, { message: 'Email verified successfully' });
   }),
+  
+  forgotPasswordOTP: asyncHandler(async (req, res) => {
+    await authService.forgotPasswordOTP(req.body.email);
+    ApiResponse.success(res, { message: 'Password recovery code sent to your email' });
+  }),
+
+  verifyResetOTP: asyncHandler(async (req, res) => {
+    await authService.verifyResetOTP(req.body.email, req.body.otp);
+    ApiResponse.success(res, { message: 'Recovery code verified successfully' });
+  }),
+
+  resetPasswordWithOTP: asyncHandler(async (req, res) => {
+    await authService.resetPasswordWithOTP(req.body.email, req.body.otp, req.body.password);
+    ApiResponse.success(res, { message: 'Password reset successfully' });
+  }),
 };
 
 module.exports = authController;

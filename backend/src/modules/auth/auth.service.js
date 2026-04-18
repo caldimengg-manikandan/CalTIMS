@@ -378,6 +378,43 @@ const authService = {
   async verifyVerificationOTP(email, otp) {
     return await otpService.verifyOTP(email, otp);
   },
+
+  async forgotPasswordOTP(email) {
+    const user = await prisma.user.findFirst({ where: { email: email.toLowerCase().trim(), isActive: true } });
+    if (!user) throw new AppError('No user with this email address', 404);
+    
+    // Send OTP via otpService
+    return await otpService.sendOTP(email, 'Password Recovery');
+  },
+
+  async verifyResetOTP(email, otp) {
+    return await otpService.verifyOTP(email, otp);
+  },
+
+  async resetPasswordWithOTP(email, otp, newPassword) {
+    // 1. Verify OTP again (it shouldn't have been deleted if logic follows)
+    await otpService.verifyOTP(email, otp);
+    
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (!user) throw new AppError('User not found', 404);
+    
+    const hashed = await bcrypt.hash(newPassword, saltRounds());
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashed,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+        refreshTokenHash: null,
+        passwordChangedAt: new Date(),
+      },
+    });
+    
+    // 2. Delete OTP after successful reset
+    await otpService.deleteOTP(email);
+    
+    return true;
+  },
 };
 
 function formatUser(u) {
