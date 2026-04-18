@@ -10,6 +10,8 @@ const statusMap = {
     pending:        { cls: 'badge-warning', label: 'Pending' },
     cancelled:      { cls: 'badge-gray',    label: 'Cancelled' },
     withdrawn:      { cls: 'badge-gray',    label: 'Withdrawn' },
+    frozen:         { cls: 'badge-danger',  label: '⛔ Frozen' },
+    admin_filled:   { cls: 'badge-indigo',  label: 'Admin Filled' },
     // Project/Task states
     active:         { cls: 'badge-info',    label: 'Active' },
     'on-hold':      { cls: 'badge-warning', label: 'On Hold' },

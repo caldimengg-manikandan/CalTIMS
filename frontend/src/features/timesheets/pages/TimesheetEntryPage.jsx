@@ -908,10 +908,68 @@ export default function TimesheetEntryPage() {
     const isWeekFrozen = useMemo(() => {
         const weekStr = format(weekStart, 'yyyy-MM-dd')
         const currentWeekTs = existingTimesheets?.find(t => (typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd')) === weekStr)
-        return currentWeekTs ? currentWeekTs.status === 'frozen' : false
-    }, [existingTimesheets, weekStart])
+        
+        // Check DB status first
+        if (currentWeekTs?.status?.toLowerCase() === 'frozen') return true;
+        
+        // Client-side check: if freeze deadline has passed for this week, treat as frozen
+        // (backend will update DB status on next fetch)
+        if (tsSettings?.freezeTimesheet) {
+            const now = new Date();
+            const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+            const parts = tsSettings.freezeTimesheet.toLowerCase().trim().split(/\s+/);
+            const dayName = parts[0];
+            const timePart = parts[1] || '23:59';
+            const [hh, mm] = timePart.split(':').map(Number);
+            const targetDayIndex = dayNames.indexOf(dayName);
+            if (targetDayIndex !== -1) {
+                const wsDay = weekStart.getDay();
+                let daysOffset = targetDayIndex - wsDay;
+                if (daysOffset < 0) daysOffset += 7;
+                if (daysOffset === 0) daysOffset = 7;
+                const freezeDeadline = new Date(weekStart);
+                freezeDeadline.setDate(freezeDeadline.getDate() + daysOffset);
+                freezeDeadline.setHours(isNaN(hh) ? 23 : hh, isNaN(mm) ? 59 : mm, 0, 0);
+                if (now > freezeDeadline) return true;
+            }
+        }
+        
+        return false;
+    }, [existingTimesheets, weekStart, tsSettings])
 
-    // Optional banner for "pending near deadline" can be implemented later. For now focus on Frozen.
+    // Check if we're approaching the submission deadline (within 24h) 
+    const deadlineWarning = useMemo(() => {
+        if (!tsSettings?.submissionDeadline || isWeekFrozen || isWeekSubmitted) return null;
+        const now = new Date();
+        const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+        const parts = (tsSettings.submissionDeadline || 'Friday 18:00').toLowerCase().trim().split(/\s+/);
+        const dayName = parts[0];
+        const timePart = parts[1] || '18:00';
+        const [hh, mm] = timePart.split(':').map(Number);
+        const targetDayIndex = dayNames.indexOf(dayName);
+        if (targetDayIndex === -1) return null;
+
+        // Check if deadline falls in this week (between weekStart and weekStart+6)
+        const wsDay = weekStart.getDay();
+        let daysOffset = targetDayIndex - wsDay;
+        if (daysOffset < 0) daysOffset = -1; // deadline already passed this week
+        
+        const deadline = new Date(weekStart);
+        deadline.setDate(deadline.getDate() + daysOffset);
+        deadline.setHours(isNaN(hh) ? 18 : hh, isNaN(mm) ? 0 : mm, 0, 0);
+
+        const diffMs = deadline - now;
+        const diffHours = diffMs / (1000 * 60 * 60);
+
+        // Warn if deadline is within the next 24 hours and hasn't passed yet
+        if (diffHours > 0 && diffHours <= 24) {
+            const hoursLeft = Math.floor(diffHours);
+            const minsLeft = Math.round((diffHours - hoursLeft) * 60);
+            return `Submission deadline in ${hoursLeft}h ${minsLeft}m — ${tsSettings.submissionDeadline}`;
+        }
+        return null;
+    }, [tsSettings, weekStart, isWeekFrozen, isWeekSubmitted])
+
 
     const lockedDays = useMemo(() => {
         const locked = Array(7).fill(false)
@@ -984,9 +1042,13 @@ export default function TimesheetEntryPage() {
                     <div className="flex items-start gap-3">
                         <AlertTriangle className="text-rose-500 mt-0.5" size={20} />
                         <div>
-                            <h3 className="text-rose-800 font-bold text-sm">Timesheet Frozen</h3>
+                            <h3 className="text-rose-800 font-bold text-sm">⛔ Timesheet Frozen</h3>
                             <p className="text-rose-700 text-sm mt-1">
-                                Your timesheet for the previous week has been frozen because it was not submitted before the deadline. Please raise a Help & Support ticket so the admin can assist you.
+                                This timesheet week has been frozen — the submission deadline has passed and no further edits are allowed.
+                                {tsSettings?.freezeTimesheet && (
+                                    <span className="ml-1 font-medium">(Auto-lock: {tsSettings.freezeTimesheet})</span>
+                                )}
+                                {' '}Please raise a Help &amp; Support ticket so the admin can assist you.
                             </p>
                         </div>
                     </div>
@@ -996,6 +1058,16 @@ export default function TimesheetEntryPage() {
                     >
                         Raise Ticket
                     </button>
+                </div>
+            )}
+
+            {!isWeekFrozen && deadlineWarning && (
+                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg shadow-sm flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <Clock className="text-amber-500 shrink-0" size={18} />
+                        <p className="text-amber-800 text-sm font-semibold">{deadlineWarning}</p>
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-500 bg-amber-100 px-2 py-1 rounded-lg shrink-0">Submit Soon</span>
                 </div>
             )}
 

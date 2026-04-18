@@ -15,6 +15,102 @@ async function getWeekStartDay(organizationId) {
 }
 
 /**
+ * Parses a freeze/deadline string like "Monday 18:00" and returns the
+ * absolute Date when a given week's timesheet should be frozen.
+ * The freeze deadline is the specified day of the FOLLOWING week at the given time.
+ * @param {Date} weekStart - Monday (or Sunday) of the timesheet week
+ * @param {string} freezeStr - e.g. "Monday 18:00" or "Monday"
+ * @returns {Date|null}
+ */
+function getWeekFreezeDeadline(weekStart, freezeStr) {
+  if (!freezeStr) return null;
+  const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  const parts = freezeStr.toLowerCase().trim().split(/\s+/);
+  const dayName = parts[0];
+  const timePart = parts[1] || '23:59';
+  const [hh, mm] = timePart.split(':').map(Number);
+  const targetDayIndex = dayNames.indexOf(dayName);
+  if (targetDayIndex === -1) return null;
+
+  // The freeze deadline is on the NEXT week relative to weekStart
+  // e.g. if week starts Mon Apr 14, "Monday 18:00" means Mon Apr 21 18:00
+  // We calculate how many days from weekStart to reach target day in the following week
+  const weekStartDay = weekStart.getDay(); // 0=Sun, 1=Mon, ...
+  let daysOffset = targetDayIndex - weekStartDay;
+  if (daysOffset < 0) daysOffset += 7;
+  // daysOffset === 0 means same day as weekStart → push to next week (+7)
+  if (daysOffset === 0) daysOffset = 7;
+
+  const deadline = new Date(weekStart);
+  deadline.setDate(deadline.getDate() + daysOffset);
+  deadline.setHours(isNaN(hh) ? 23 : hh, isNaN(mm) ? 59 : mm, 0, 0);
+  return deadline;
+}
+
+/**
+ * Checks whether the given week's timesheet should be auto-frozen
+ * based on the organization's "freezeTimesheet" setting.
+ * Returns true if now > freezeDeadline for that week.
+ */
+async function isWeekFrozenByDeadline(organizationId, weekStartDate) {
+  try {
+    const settings = await prisma.orgSettings.findUnique({ where: { organizationId } });
+    const tsSettings = settings?.data?.timesheet || {};
+    const freezeStr = tsSettings.freezeTimesheet;
+    if (!freezeStr) return false;
+
+    const weekStart = new Date(weekStartDate);
+    const freezeDeadline = getWeekFreezeDeadline(weekStart, freezeStr);
+    if (!freezeDeadline) return false;
+
+    return new Date() > freezeDeadline;
+  } catch (err) {
+    console.error('isWeekFrozenByDeadline error:', err.message);
+    return false;
+  }
+}
+
+/**
+ * Auto-freezes all DRAFT timesheets for an organization that are past their freeze deadline.
+ * Should be called lazily on compliance list and timesheet list fetches.
+ */
+async function autoFreezeOverdueTimesheets(organizationId) {
+  try {
+    const settings = await prisma.orgSettings.findUnique({ where: { organizationId } });
+    const tsSettings = settings?.data?.timesheet || {};
+    const freezeStr = tsSettings.freezeTimesheet;
+    if (!freezeStr) return 0;
+
+    const now = new Date();
+
+    // Find all DRAFT timesheets for the org
+    const drafts = await prisma.timesheetWeek.findMany({
+      where: { organizationId, status: 'DRAFT', isDeleted: false },
+      select: { id: true, weekStartDate: true }
+    });
+
+    const idsToFreeze = [];
+    for (const ts of drafts) {
+      const freezeDeadline = getWeekFreezeDeadline(new Date(ts.weekStartDate), freezeStr);
+      if (freezeDeadline && now > freezeDeadline) {
+        idsToFreeze.push(ts.id);
+      }
+    }
+
+    if (idsToFreeze.length > 0) {
+      await prisma.timesheetWeek.updateMany({
+        where: { id: { in: idsToFreeze }, organizationId },
+        data: { status: 'FROZEN', updatedAt: new Date() }
+      });
+    }
+    return idsToFreeze.length;
+  } catch (err) {
+    console.error('autoFreezeOverdueTimesheets error:', err.message);
+    return 0;
+  }
+}
+
+/**
  * Validates if the operation is allowed based on compliance policy.
  */
 async function validateCompliance(organizationId, weekStartDate, isAdminOperation = false) {
@@ -26,7 +122,7 @@ async function validateCompliance(organizationId, weekStartDate, isAdminOperatio
   const now = new Date();
   const weekStart = new Date(weekStartDate);
   
-  // 1. Freeze Day Check
+  // 1. Monthly Freeze Day Check (previous month lock)
   const freezeDay = compliance.timesheetFreezeDay || 28;
   const currentDay = now.getDate();
   
@@ -38,18 +134,21 @@ async function validateCompliance(organizationId, weekStartDate, isAdminOperatio
     throw new AppError(`This period is frozen. Policy prohibits modifications after the ${freezeDay}${getOrdinalSign(freezeDay)} of the following month.`, 403);
   }
 
-  // 2. Backdated Entries Check
+  // 2. Backdated Entries Check (when backdated entries are NOT allowed)
   if (compliance.allowBackdatedEntries === false) {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    
-    // Find the start of the current week
     const wsd = policy?.attendance?.weekStartDay || 'monday';
     const currentWeekStart = getWeekStart(now, wsd);
     
     if (weekStart < currentWeekStart) {
       throw new AppError('Backdated timesheet entries are forbidden by organizational policy.', 403);
     }
+  }
+
+  // 3. Weekly Deadline Freeze Check
+  // If the week's freeze deadline has passed, block further edits
+  const isFrozenByDeadline = await isWeekFrozenByDeadline(organizationId, weekStart);
+  if (isFrozenByDeadline) {
+    throw new AppError('This timesheet week is frozen. The submission deadline has passed and no further changes are allowed.', 403);
   }
 }
 
@@ -114,6 +213,11 @@ const timesheetService = {
     const { organizationId, userId, role } = context;
     const { page, limit, skip } = parsePagination(query);
     
+    // Auto-freeze any overdue DRAFT timesheets so the employee sees frozen status
+    await autoFreezeOverdueTimesheets(organizationId).catch(err =>
+      console.error('autoFreezeOverdueTimesheets failed:', err.message)
+    );
+
     // Base scoping using helper
     const baseQuery = enforceOrg({}, organizationId);
     const where = baseQuery.where;
@@ -694,7 +798,7 @@ const timesheetService = {
         where: { userId, organizationId, weekStartDate: weekStart, isDeleted: false }
       });
 
-      // Compliance check
+      // Compliance check (includes weekly deadline freeze check)
       try {
         await validateCompliance(organizationId, weekStart);
       } catch (err) {
@@ -704,7 +808,7 @@ const timesheetService = {
 
       let ts;
       if (existing) {
-        // Prevent editing if already submitted or approved
+        // Prevent editing if already submitted, approved, or frozen
         if (['SUBMITTED', 'APPROVED', 'FROZEN'].includes(existing.status)) {
           throw new AppError(`Cannot save values to a timesheet that is already ${existing.status.toLowerCase()}.`, 400);
         }
@@ -900,6 +1004,11 @@ const timesheetService = {
   async getAdminTimesheets(query, organizationId) {
     const { page, limit, skip } = parsePagination(query);
     const where = { organizationId, isDeleted: false };
+
+    // Auto-freeze overdue DRAFT timesheets before admin view
+    await autoFreezeOverdueTimesheets(organizationId).catch(err =>
+      console.error('autoFreezeOverdueTimesheets failed:', err.message)
+    );
 
     if (query.status && query.status !== 'All' && query.status !== 'All Status') {
         where.status = query.status.toUpperCase();
@@ -1118,6 +1227,11 @@ const timesheetService = {
     const { page, limit, skip } = parsePagination(query);
     const { weekStartDate, search } = query;
     
+    // Auto-freeze any overdue DRAFT timesheets before returning compliance data
+    await autoFreezeOverdueTimesheets(organizationId).catch(err =>
+      console.error('autoFreezeOverdueTimesheets failed:', err.message)
+    );
+
     // Normalize weekStartDate based on organization's policy
     const wsdSetting = await getWeekStartDay(organizationId);
     const wsd = getWeekStart(weekStartDate || new Date(), wsdSetting);

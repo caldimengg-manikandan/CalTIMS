@@ -428,6 +428,7 @@ export default function AdminTimesheetPage() {
                                                         <option value="submitted">Pending</option>
                                                         <option value="approved">Approved</option>
                                                         <option value="rejected">Rejected</option>
+                                                        <option value="frozen">Frozen</option>
                                                     </select>
                                                 </div>
                                                 <div className="space-y-2">

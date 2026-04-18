@@ -32,7 +32,7 @@ const MONTHS = [
     'All Months', 'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
 ]
-const STATUSES = ['All Status', 'draft', 'submitted', 'approved', 'rejected']
+const STATUSES = ['All Status', 'draft', 'submitted', 'approved', 'rejected', 'frozen']
 
 
 export default function TimesheetHistoryPage() {
@@ -113,9 +113,12 @@ export default function TimesheetHistoryPage() {
     }
 
     const resolveStatus = (statuses) => {
+        if (!statuses || !Array.isArray(statuses)) return 'draft'
+        if (statuses.some(s => s?.toLowerCase() === 'frozen')) return 'frozen'
         if (statuses.includes('rejected')) return 'rejected'
         if (statuses.includes('submitted')) return 'submitted'
         if (statuses.includes('approved')) return 'approved'
+        if (statuses.includes('admin_filled')) return 'admin_filled'
         return 'draft'
     }
 
