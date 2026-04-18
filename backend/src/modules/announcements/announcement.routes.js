@@ -78,10 +78,33 @@ router.get('/admin', checkPermission('Announcements', 'Announcements', 'view'), 
 router.post('/', checkPermission('Announcements', 'Announcements', 'create'), asyncHandler(async (req, res) => {
   const { title, content, type, priority, targetRoles, expiresAt } = req.body;
   
+  // ── Duplicate Check (Same Day) ──
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const existing = await prisma.announcement.findFirst({
+    where: {
+      organizationId: req.organizationId,
+      title: title.trim(),
+      content: content.trim(),
+      createdAt: {
+        gte: startOfDay,
+        lte: endOfDay
+      },
+      isDeleted: false
+    }
+  });
+
+  if (existing) {
+    return ApiResponse.badRequest(res, 'This announcement has already been published today.');
+  }
+
   const ann = await prisma.announcement.create({
     data: {
-      title,
-      content,
+      title: title.trim(),
+      content: content.trim(),
       type: type || 'INFO',
       priority: priority || 'LOW',
       targetRoles: targetRoles || [],
