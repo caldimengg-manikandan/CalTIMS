@@ -1013,10 +1013,10 @@ export default function EmployeesPage() {
 
             <Modal open={!!viewEmp} onClose={() => { setViewEmp(null); setShowHistory(false) }} maxWidth={showHistory ? 'max-w-4xl' : 'max-w-lg'}>
                 <ModalHeader icon={<Eye size={20} />} title="Employee Details" subtitle={viewEmp?.employeeId} onClose={() => { setViewEmp(null); setShowHistory(false) }} />
-                <div className="flex-1 overflow-y-auto">
-                    <div className="flex flex-col md:flex-row h-full">
+                <div className="flex-1 overflow-hidden">
+                    <div className="flex flex-col md:flex-row h-full min-h-0">
                         {viewEmp && (
-                            <div className={`px-6 py-5 space-y-5 transition-all duration-300 ${showHistory ? 'w-full md:w-1/2 border-slate-100 dark:border-slate-700 md:border-r' : 'w-full'}`}>
+                            <div className={`px-6 py-5 space-y-5 transition-all duration-300 overflow-y-auto ${showHistory ? 'w-full md:w-1/2 border-slate-100 dark:border-slate-700 md:border-r' : 'w-full'}`}>
                                 <div className="flex items-center gap-4">
                                     <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center text-white text-2xl font-bold shrink-0">
                                         {viewEmp.name.charAt(0)}
@@ -1057,9 +1057,15 @@ export default function EmployeesPage() {
                             </div>
                         )}
                         {showHistory && viewEmp && (
-                            <div className="w-full md:w-1/2 px-6 py-5 bg-slate-50/50 dark:bg-slate-900/50 min-h-[350px]">
-                                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Change History</h3>
-                                <EmployeeHistory entityId={viewEmp._id} />
+                            <div className="w-full md:w-1/2 flex flex-col bg-slate-50/50 dark:bg-slate-900/50 border-l border-slate-100 dark:border-slate-800">
+                                <div className="p-5 pb-2 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                        <History size={13} /> Change History
+                                    </h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto px-5 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
+                                    <EmployeeHistory entityId={viewEmp._id} />
+                                </div>
                             </div>
                         )}
                     </div>
