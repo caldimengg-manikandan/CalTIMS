@@ -261,38 +261,41 @@ router.put('/:id', checkPermission('Settings', 'General', 'edit'), asyncHandler(
   const organizationId = req.organizationId;
 
   let event;
-  // We try to update in each table since we don't know which one it is
-  // A better way would be to pass the type from frontend, but let's try this for now
+  
+  // Strategy: If eventType is provided, try that table first. Otherwise fall back to sequence.
+  const tryHoliday = async () => prisma.holiday.update({
+    where: { id, organizationId },
+    data: { name: title, date: new Date(startDate), isPublic: isGlobal ?? true }
+  });
+
+  const tryCompanyEvent = async () => prisma.companyEvent.update({
+    where: { id, organizationId },
+    data: { title, description, startDate: new Date(startDate), endDate: new Date(endDate || startDate) }
+  });
+
+  const tryPersonalEvent = async () => prisma.calendarEvent.update({
+    where: { id, organizationId, userId: req.user.id },
+    data: { title, description, startDate: new Date(startDate), endDate: new Date(endDate || startDate) }
+  });
+
   try {
-    event = await prisma.holiday.update({
-      where: { id, organizationId },
-      data: {
-        name: title,
-        date: new Date(startDate),
-        isPublic: isGlobal ?? true
-      }
-    });
-  } catch (e) {
+    if (eventType === 'holiday') {
+      event = await tryHoliday();
+    } else if (eventType === 'company_event') {
+      event = await tryCompanyEvent();
+    } else {
+      event = await tryPersonalEvent();
+    }
+  } catch (err) {
+    // If specific type failed (maybe it was changed?), try all in order
     try {
-      event = await prisma.companyEvent.update({
-        where: { id, organizationId },
-        data: {
-          title,
-          description,
-          startDate: new Date(startDate),
-          endDate: new Date(endDate || startDate)
-        }
-      });
-    } catch (e2) {
-      event = await prisma.calendarEvent.update({
-        where: { id, organizationId, userId: req.user.id },
-        data: {
-          title,
-          description,
-          startDate: new Date(startDate),
-          endDate: new Date(endDate || startDate)
-        }
-      });
+      event = await tryHoliday();
+    } catch (e1) {
+      try {
+        event = await tryCompanyEvent();
+      } catch (e2) {
+        event = await tryPersonalEvent();
+      }
     }
   }
 

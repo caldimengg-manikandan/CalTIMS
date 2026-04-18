@@ -86,11 +86,11 @@ export default function CalendarEventModal({ isOpen, onClose, event, onSave, onD
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                         <label className="label text-[11px] uppercase tracking-wider text-slate-400 font-bold px-1">Event Type</label>
-                        <select {...register('eventType')} className="input py-2 bg-slate-50/50 border-slate-200 focus:bg-white">
-                            <option value="meeting">Meeting</option>
+                        <select {...register('eventType')} className="input py-2 bg-slate-50/50 border-slate-200 focus:bg-white text-sm font-medium">
+                            <option value="meeting">Personal Task</option>
                             <option value="holiday">Holiday</option>
                             <option value="deadline">Deadline</option>
-                            <option value="company-event">Company Event</option>
+                            <option value="company_event">Company Event</option>
                         </select>
                     </div>
                     <div className="space-y-1.5">

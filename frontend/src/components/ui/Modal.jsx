@@ -17,7 +17,7 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'ma
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+            className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300"
             onClick={onClose}
         >
             <div

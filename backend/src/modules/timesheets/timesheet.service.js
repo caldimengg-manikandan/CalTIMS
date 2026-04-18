@@ -266,7 +266,23 @@ const timesheetService = {
       };
     });
 
-    return { data: transformed, pagination: buildPaginationMeta(total, page, limit), holidays: [] };
+    // 4. Fetch Holidays for the period
+    const holidayFrom = where.weekStartDate?.gte || new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const holidayTo = (where.weekEndDate?.lte || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
+    
+    const holidays = await prisma.holiday.findMany({
+      where: {
+        organizationId,
+        date: { gte: holidayFrom, lte: holidayTo }
+      },
+      select: { id: true, name: true, date: true, isPublic: true }
+    });
+
+    return { 
+      data: transformed, 
+      pagination: buildPaginationMeta(total, page, limit), 
+      holidays 
+    };
   },
 
 
@@ -356,6 +372,14 @@ const timesheetService = {
         };
     }); // Removed __PERMISSION__ filter to allow persistence
 
+    const holidays = await prisma.holiday.findMany({
+        where: {
+            organizationId,
+            date: { gte: ts.weekStartDate, lte: ts.weekEndDate }
+        },
+        select: { id: true, name: true, date: true, isPublic: true }
+    });
+
     return {
         ...ts,
         _id: ts.id,
@@ -365,7 +389,8 @@ const timesheetService = {
             employeeId: ts.user.employee?.employeeCode
         } : null,
         totalHours: weekTotalHours,
-        rows: transformedRows
+        rows: transformedRows,
+        holidays
     };
   },
 

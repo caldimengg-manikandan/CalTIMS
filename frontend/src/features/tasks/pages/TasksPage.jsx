@@ -144,21 +144,6 @@ function TaskForm({ formId, formData, onChange, onSubmit, projects = [] }) {
                     />
                 </div>
 
-                <div className="pt-2">
-                    <label className="flex items-center gap-2 cursor-pointer group">
-                        <input
-                            type="checkbox"
-                            name="onlyProjectTasks"
-                            className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-indigo-500 transition-all cursor-pointer"
-                            checked={formData.onlyProjectTasks}
-                            onChange={(e) => onChange({ target: { name: 'onlyProjectTasks', value: e.target.checked } })}
-                        />
-                        <div className="flex flex-col">
-                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-primary transition-colors">Only show project-specific tasks</span>
-                            <span className="text-[10px] text-slate-400 font-normal leading-tight italic">Combined global categories will be hidden.</span>
-                        </div>
-                    </label>
-                </div>
             </div>
         </form>
     )
@@ -732,20 +717,6 @@ export default function TasksPage() {
                             onChange={(e) => setBulkNames(e.target.value)}
                         />
                         <p className="text-[10px] text-slate-400 italic">Enter each task name on a new line.</p>
-                    </div>
-                    <div className="pt-2">
-                        <label className="flex items-center gap-2 cursor-pointer group">
-                            <input
-                                type="checkbox"
-                                className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-indigo-500 transition-all cursor-pointer"
-                                checked={bulkIsolate}
-                                onChange={(e) => setBulkIsolate(e.target.checked)}
-                            />
-                            <div className="flex flex-col">
-                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-primary transition-colors">Only show these tasks for this project</span>
-                                <span className="text-[10px] text-slate-400 font-normal leading-tight italic">Combined global categories will be hidden.</span>
-                            </div>
-                        </label>
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 -mx-6 -mb-6 px-6 py-4">
                         <button type="button" onClick={() => setBulkAddOpen(false)} disabled={bulkCreateMut.isPending} className="btn-secondary h-10">Cancel</button>
