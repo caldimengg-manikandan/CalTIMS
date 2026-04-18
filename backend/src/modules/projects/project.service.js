@@ -12,7 +12,7 @@ const projectService = {
     const { page, limit, skip } = parsePagination(query);
     
     // Base scoping using helper
-    const baseQuery = enforceOrg({}, organizationId);
+    const baseQuery = enforceOrg({ where: { isDeleted: false } }, organizationId);
     const where = baseQuery.where;
 
     if (query.status) {
