@@ -762,11 +762,14 @@ export default function EmployeesPage() {
                                                     onChange={(e) => setTempFilters(p => ({ ...p, employeeId: e.target.value }))}
                                                 >
                                                     <option value="">Select Employee ID</option>
-                                                    {allEmployees?.map(emp => (
-                                                        <option key={emp.employeeId} value={emp.employeeId}>
-                                                            {emp.employeeId} - {emp.name}
-                                                        </option>
-                                                    ))}
+                                                    {allEmployees
+                                                        ?.filter(emp => emp.employeeId)
+                                                        .sort((a,b) => a.employeeId.localeCompare(b.employeeId, undefined, {numeric: true}))
+                                                        .map(emp => (
+                                                            <option key={emp.id || emp.employeeId} value={emp.employeeId}>
+                                                                {emp.employeeId} - {emp.name}
+                                                            </option>
+                                                        ))}
                                                 </select>
                                             </div>
 
@@ -778,7 +781,7 @@ export default function EmployeesPage() {
                                                     onChange={(e) => setTempFilters(p => ({ ...p, department: e.target.value }))}
                                                 >
                                                     <option value="">All Departments</option>
-                                                    {depts?.map(d => (
+                                                    {[...new Set(allEmployees?.map(e => e.department).filter(Boolean))].sort().map(d => (
                                                         <option key={d} value={d}>{d}</option>
                                                     ))}
                                                 </select>
@@ -793,20 +796,12 @@ export default function EmployeesPage() {
                                                         onChange={(e) => setTempFilters(p => ({ ...p, role: e.target.value }))}
                                                     >
                                                         <option value="">All Roles</option>
-                                                        {rolesData?.length > 0 ? (
+                                                        {rolesData?.length > 0 && (
                                                             rolesData
                                                                 .filter(r => r.name.toLowerCase() !== 'super_admin' && r.name.toLowerCase() !== 'super admin')
                                                                 .map(r => (
                                                                     <option key={r.id || r.name} value={r.name.toLowerCase()}>{r.name}</option>
                                                                 ))
-                                                        ) : (
-                                                            <>
-                                                                <option value="employee">Employee</option>
-                                                                <option value="hr">HR</option>
-                                                                <option value="admin">Admin</option>
-                                                                <option value="finance">Finance</option>
-                                                                <option value="manager">Manager</option>
-                                                            </>
                                                         )}
                                                     </select>
                                                 </div>

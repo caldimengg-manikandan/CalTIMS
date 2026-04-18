@@ -35,18 +35,48 @@ const userService = {
 
     if (query.status === 'active') where.isActive = true;
     else if (query.status === 'inactive') where.isActive = false;
+
+    // Use and to combine filters
+    const andFilters = [];
+
     if (query.role) {
-      where.OR = [
-        { role: { equals: query.role, mode: 'insensitive' } },
-        { roleRef: { name: { equals: query.role, mode: 'insensitive' } } }
-      ];
+      andFilters.push({
+        OR: [
+          { role: { equals: query.role, mode: 'insensitive' } },
+          { roleRef: { name: { equals: query.role, mode: 'insensitive' } } }
+        ]
+      });
     }
+
+    if (query.department) {
+      andFilters.push({
+        employee: {
+          department: { name: { equals: query.department, mode: 'insensitive' } }
+        }
+      });
+    }
+
+    if (query.employeeId) {
+      andFilters.push({
+        employee: {
+          employeeCode: { equals: query.employeeId, mode: 'insensitive' }
+        }
+      });
+    }
+
     if (query.search) {
-      where.OR = [
-        { name: { contains: query.search, mode: 'insensitive' } },
-        { email: { contains: query.search, mode: 'insensitive' } },
-        { phone: { contains: query.search, mode: 'insensitive' } },
-      ];
+      andFilters.push({
+        OR: [
+          { name: { contains: query.search, mode: 'insensitive' } },
+          { email: { contains: query.search, mode: 'insensitive' } },
+          { phone: { contains: query.search, mode: 'insensitive' } },
+          { employee: { employeeCode: { contains: query.search, mode: 'insensitive' } } }
+        ]
+      });
+    }
+
+    if (andFilters.length > 0) {
+      where.AND = andFilters;
     }
 
     const include = {
