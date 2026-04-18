@@ -25,15 +25,24 @@ function encrypt(text) {
  * @returns {string}
  */
 function decrypt(encryptedText) {
-    if (!encryptedText) return null;
-    const [ivHex, encrypted] = encryptedText.split(':');
-    if (!ivHex || !encrypted) return null;
+    if (!encryptedText || typeof encryptedText !== 'string') return encryptedText;
     
-    const iv = Buffer.from(ivHex, 'hex');
-    const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv);
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
+    const parts = encryptedText.split(':');
+    if (parts.length !== 2) return encryptedText; // Return as-is if not in iv:encrypted format
+    
+    try {
+        const [ivHex, encrypted] = parts;
+        if (ivHex.length !== 32) return encryptedText; // IV should be 16 bytes = 32 hex chars
+
+        const iv = Buffer.from(ivHex, 'hex');
+        const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv);
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
+    } catch (e) {
+        // Fallback to original text if decryption fails (e.g. invalid hex or key mismatch)
+        return encryptedText;
+    }
 }
 
 module.exports = {
