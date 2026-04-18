@@ -120,7 +120,7 @@ exports.getAllProfiles = async (req, res, next) => {
         } 
       } 
     });
-    res.status(200).json({ success: true, data: profiles });
+    res.status(200).json({ success: true, data: profiles.map(p => payrollService.formatProfile(p)) });
   } catch (err) { next(err); }
 };
 
@@ -138,7 +138,7 @@ exports.getProfile = async (req, res, next) => {
         } 
       } 
     });
-    res.status(200).json({ success: true, data: profile });
+    res.status(200).json({ success: true, data: payrollService.formatProfile(profile) });
   } catch (err) { next(err); }
 };
 
@@ -156,7 +156,7 @@ exports.getProfileByEmployeeId = async (req, res, next) => {
         } 
       } 
     });
-    res.status(200).json({ success: true, data: profile });
+    res.status(200).json({ success: true, data: payrollService.formatProfile(profile) });
   } catch (err) { next(err); }
 };
 
@@ -333,7 +333,7 @@ exports.getPayrollHistory = async (req, res, next) => {
         }, 
         orderBy: { createdAt: 'desc' } 
     });
-    res.status(200).json({ success: true, data: history });
+    res.status(200).json({ success: true, data: history.map(h => payrollService.formatProcessedPayroll(h)) });
   } catch (err) { next(err); }
 };
 

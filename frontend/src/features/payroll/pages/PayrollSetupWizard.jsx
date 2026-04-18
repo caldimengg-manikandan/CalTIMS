@@ -323,7 +323,7 @@ const PayrollSetupWizard = () => {
     const annualCTC = ctcType === 'annual' ? parseFloat(ctcValue) : parseFloat(ctcValue) * 12;
     
     setupProfileMutation.mutate({
-      employeeId: selectedUser.employee.id,
+      employeeId: selectedUser?.employee?.id,
       annualCTC,
       earnings: structure.earnings,
       deductions: structure.deductions,

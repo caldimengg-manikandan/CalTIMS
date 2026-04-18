@@ -11,7 +11,7 @@ const getPayrollPolicy = async (req, res) => {
   try {
     const organizationId = req.organizationId || null;
     const policy = await policyService.getPolicy(organizationId);
-    res.status(200).json(policy);
+    res.status(200).json({ success: true, data: policy });
   } catch (error) {
     logger.error('Error fetching payroll policy: ' + error.message);
     res.status(500).json({ message: 'Error fetching payroll policy', error: error.message });

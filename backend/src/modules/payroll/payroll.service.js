@@ -1299,11 +1299,11 @@ const upsertFullPayrollProfile = async (data, organizationId, performerId) => {
         if (bankDetails) {
             if (employee.userId) {
                 const bankUpdate = {};
-                if (bankDetails.bankName) bankUpdate.bankName = bankDetails.bankName;
-                if (bankDetails.accountNumber) bankUpdate.accountNumber = bankDetails.accountNumber;
-                if (bankDetails.ifscCode) bankUpdate.ifscCode = bankDetails.ifscCode;
-                if (bankDetails.pan) bankUpdate.pan = bankDetails.pan;
-                if (bankDetails.uan) bankUpdate.uan = bankDetails.uan;
+                if (bankDetails.bankName) bankUpdate.bankName = encrypt(bankDetails.bankName);
+                if (bankDetails.accountNumber) bankUpdate.accountNumber = encrypt(bankDetails.accountNumber);
+                if (bankDetails.ifscCode) bankUpdate.ifscCode = encrypt(bankDetails.ifscCode);
+                if (bankDetails.pan) bankUpdate.pan = encrypt(bankDetails.pan);
+                if (bankDetails.uan) bankUpdate.uan = encrypt(bankDetails.uan);
 
                 if (Object.keys(bankUpdate).length > 0) {
                     await tx.user.update({
@@ -1682,5 +1682,7 @@ module.exports = {
   calculateSalaryBreakdown,
   upsertFullPayrollProfile,
   getReadinessCheck,
-  getPayrollPreview
+  getPayrollPreview,
+  formatProfile,
+  formatProcessedPayroll
 };
