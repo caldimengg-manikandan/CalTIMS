@@ -9,6 +9,20 @@ const { ROLES, ROLE_PERMISSIONS } = require('../../constants');
 const bcrypt = require('bcryptjs');
 const { enforceOrg } = require('../../shared/utils/prismaHelper');
 const { hasPermission } = require('../../shared/utils/rbac');
+const { encrypt, decrypt } = require('../../shared/utils/security');
+
+// Helper to decrypt JSON blobs
+const decryptJson = (str) => {
+    if (!str || typeof str !== 'string') return str;
+    try {
+        const decrypted = decrypt(str);
+        return decrypted ? JSON.parse(decrypted) : str;
+    } catch (e) {
+        return str; 
+    }
+};
+
+const PII_FIELDS = ['accountNumber', 'uan', 'pan', 'aadhaar', 'ifscCode', 'bankName', 'branchName'];
 
 const userService = {
   async getAll(query, context) {
@@ -155,13 +169,13 @@ const userService = {
           isOnboardingComplete: true,
           provider: 'local',
           providers: ['local'],
-          bankName: data.bankName || null,
-          accountNumber: data.accountNumber || null,
-          branchName: data.branchName || null,
-          ifscCode: data.ifscCode || null,
-          uan: data.uan || null,
-          pan: data.pan || null,
-          aadhaar: data.aadhaar || null,
+          bankName: data.bankName ? encrypt(data.bankName) : null,
+          accountNumber: data.accountNumber ? encrypt(data.accountNumber) : null,
+          branchName: data.branchName ? encrypt(data.branchName) : null,
+          ifscCode: data.ifscCode ? encrypt(data.ifscCode) : null,
+          uan: data.uan ? encrypt(data.uan) : null,
+          pan: data.pan ? encrypt(data.pan) : null,
+          aadhaar: data.aadhaar ? encrypt(data.aadhaar) : null,
         },
         include: { roleRef: true },
       });
@@ -313,13 +327,13 @@ const userService = {
         roleId: data.roleId ?? undefined,
         isActive: data.isActive ?? undefined,
         avatar: data.avatar ?? undefined,
-        bankName: data.bankName ?? undefined,
-        accountNumber: data.accountNumber ?? undefined,
-        branchName: data.branchName ?? undefined,
-        ifscCode: data.ifscCode ?? undefined,
-        uan: data.uan ?? undefined,
-        pan: data.pan ?? undefined,
-        aadhaar: data.aadhaar ?? undefined,
+        bankName: data.bankName !== undefined ? (data.bankName ? encrypt(data.bankName) : null) : undefined,
+        accountNumber: data.accountNumber !== undefined ? (data.accountNumber ? encrypt(data.accountNumber) : null) : undefined,
+        branchName: data.branchName !== undefined ? (data.branchName ? encrypt(data.branchName) : null) : undefined,
+        ifscCode: data.ifscCode !== undefined ? (data.ifscCode ? encrypt(data.ifscCode) : null) : undefined,
+        uan: data.uan !== undefined ? (data.uan ? encrypt(data.uan) : null) : undefined,
+        pan: data.pan !== undefined ? (data.pan ? encrypt(data.pan) : null) : undefined,
+        aadhaar: data.aadhaar !== undefined ? (data.aadhaar ? encrypt(data.aadhaar) : null) : undefined,
       };
 
       const updatedUser = await tx.user.update({
@@ -660,13 +674,13 @@ function formatUser(u) {
     providers: u.providers,
     avatar: u.avatar,
     lastLogin: u.lastLogin,
-    bankName: u.bankName,
-    accountNumber: u.accountNumber,
-    branchName: u.branchName,
-    ifscCode: u.ifscCode,
-    uan: u.uan,
-    pan: u.pan,
-    aadhaar: u.aadhaar,
+    bankName: decrypt(u.bankName),
+    accountNumber: decrypt(u.accountNumber),
+    branchName: decrypt(u.branchName),
+    ifscCode: decrypt(u.ifscCode),
+    uan: decrypt(u.uan),
+    pan: decrypt(u.pan),
+    aadhaar: decrypt(u.aadhaar),
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
     employeeId: u.employee?.employeeCode,
@@ -684,7 +698,14 @@ function formatUser(u) {
       }
       return balanceObj;
     })(),
-    employee: u.employee || null,
+    employee: u.employee ? {
+      ...u.employee,
+      payrollProfile: u.employee.payrollProfile ? {
+        ...u.employee.payrollProfile,
+        earnings: decryptJson(u.employee.payrollProfile.earnings),
+        deductions: decryptJson(u.employee.payrollProfile.deductions),
+      } : null
+    } : null,
   };
 }
 

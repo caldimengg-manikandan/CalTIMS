@@ -9,6 +9,54 @@ const path = require('path');
 const logger = require('../../shared/utils/logger');
 const auditService = require('../audit/audit.service');
 const AppError = require('../../shared/utils/AppError');
+const { encrypt, decrypt } = require('../../shared/utils/security');
+
+// Helper to encrypt JSON blobs
+const encryptJson = (obj) => (obj && typeof obj === 'object') ? encrypt(JSON.stringify(obj)) : obj;
+// Helper to decrypt JSON blobs
+const decryptJson = (str) => {
+    if (!str || typeof str !== 'string') return str;
+    try {
+        const decrypted = decrypt(str);
+        return decrypted ? JSON.parse(decrypted) : str;
+    } catch (e) {
+        return str; 
+    }
+};
+
+const formatProfile = (p) => {
+    if (!p) return p;
+    return {
+        ...p,
+        earnings: decryptJson(p.earnings),
+        deductions: decryptJson(p.deductions)
+    };
+};
+
+const formatProcessedPayroll = (p) => {
+    if (!p) return p;
+    return {
+        ...p,
+        breakdown: decryptJson(p.breakdown),
+        earnings: decryptJson(p.earnings),
+        deductions: decryptJson(p.deductions),
+        attendance: decryptJson(p.attendance),
+        employeeInfo: decryptJson(p.employeeInfo),
+        bankDetails: decryptJson(p.bankDetails)
+    };
+};
+
+const formatPayslip = (p) => {
+    if (!p) return p;
+    return {
+        ...p,
+        earnings: decryptJson(p.earnings),
+        deductions: decryptJson(p.deductions),
+        breakdown: decryptJson(p.breakdown),
+        employeeInfo: decryptJson(p.employeeInfo),
+        bankDetails: decryptJson(p.bankDetails)
+    };
+};
 
 /**
  * Resolves a salary component based on its calculation type and formula.
@@ -422,7 +470,7 @@ const simulateUserPayroll = async (userId, month, year, organizationId, options 
 
   const policy = await getPolicy(organizationId);
   const employee = user.employee;
-  const profile = employee?.payrollProfile;
+  const profile = formatProfile(employee?.payrollProfile);
   if (!profile) throw new AppError('Payroll profile not configured', 400);
 
   // Apply runtime overrides (e.g. from UI wizard toggles)
@@ -538,10 +586,12 @@ const ensureBatchExists = async (month, year, organizationId) => {
     });
     const paidEmployeeIds = new Set(paidRecords.map(r => r.employeeId));
 
-    const employeesToProcess = activeEmployees.filter(u => 
-      u.employee?.payrollProfile && 
-      !paidEmployeeIds.has(u.employee.id)
-    );
+    const employeesToProcess = activeEmployees.filter(u => {
+      if (u.employee?.payrollProfile) {
+        u.employee.payrollProfile = formatProfile(u.employee.payrollProfile);
+      }
+      return u.employee?.payrollProfile && !paidEmployeeIds.has(u.employee.id);
+    });
 
     if (employeesToProcess.length === 0) {
       await prisma.payrollBatch.update({
@@ -582,10 +632,10 @@ const ensureBatchExists = async (month, year, organizationId) => {
           year,
           paymentType: payrollData.paymentType || 'Bank Transfer',
           currencySymbol: payrollData.currencySymbol || '₹',
-          attendance: payrollData.attendance,
-          breakdown: payrollData, 
-          earnings: payrollData.earnings || [],
-          deductions: payrollData.deductions || [],
+          attendance: encryptJson(payrollData.attendance),
+          breakdown: encryptJson(payrollData), 
+          earnings: encryptJson(payrollData.earnings || []),
+          deductions: encryptJson(payrollData.deductions || []),
           grossYield: parseFloat(payrollData.grossPay) || 0,
           liability: parseFloat(payrollData.totalDeductions) || 0,
           netPay: parseFloat(payrollData.netSalary) || 0,
@@ -593,7 +643,7 @@ const ensureBatchExists = async (month, year, organizationId) => {
           isPaid: false,
           processedAt: new Date(),
           payslipTemplateId: payslipTemplateId || null,
-          employeeInfo: {
+          employeeInfo: encryptJson({
             name: user.name,
             email: user.email,
             employeeId: user.employee?.employeeCode || '-',
@@ -601,15 +651,15 @@ const ensureBatchExists = async (month, year, organizationId) => {
             designation: user.employee?.designation?.name || '-',
             joiningDate: user.employee?.joiningDate,
             branch: user.employee?.branch || 'Head Office'
-          },
-          bankDetails: {
-            bankName: user.bankName,
-            accountNumber: user.accountNumber,
-            ifscCode: user.ifscCode,
-            uan: user.uan,
-            pan: user.pan,
-            aadhaar: user.aadhaar
-          }
+          }),
+          bankDetails: encryptJson({
+            bankName: decrypt(user.bankName),
+            accountNumber: decrypt(user.accountNumber),
+            ifscCode: decrypt(user.ifscCode),
+            uan: decrypt(user.uan),
+            pan: decrypt(user.pan),
+            aadhaar: decrypt(user.aadhaar)
+          })
         };
 
         payrollResults.push(formatted);
@@ -1222,8 +1272,8 @@ const upsertFullPayrollProfile = async (data, organizationId, performerId) => {
             update: {
                 annualCTC: parseFloat(annualCTC),
                 monthlyCTC: parseFloat(annualCTC) / 12,
-                earnings: earnings || [],
-                deductions: deductions || [],
+                earnings: encryptJson(earnings) || [],
+                deductions: encryptJson(deductions) || [],
                 profileVersion: { increment: 1 },
                 organizationId
             },
@@ -1232,8 +1282,8 @@ const upsertFullPayrollProfile = async (data, organizationId, performerId) => {
                 organizationId,
                 annualCTC: parseFloat(annualCTC),
                 monthlyCTC: parseFloat(annualCTC) / 12,
-                earnings: earnings || [],
-                deductions: deductions || [],
+                earnings: encryptJson(earnings) || [],
+                deductions: encryptJson(deductions) || [],
                 profileVersion: 1
             }
         });
@@ -1272,7 +1322,7 @@ const upsertFullPayrollProfile = async (data, organizationId, performerId) => {
             include: { employee: { include: { payrollProfile: true } } }
         });
 
-        return { profile, user: updatedUser };
+        return { profile: formatProfile(profile), user: updatedUser };
     });
 };
 
@@ -1379,19 +1429,20 @@ const generatePayslips = async (month, year, organizationId, generatedBy) => {
     }
 
     const results = [];
-    for (const record of processedPayrolls) {
+    for (let record of processedPayrolls) {
+        record = formatProcessedPayroll(record);
         const breakdown = record.breakdown || {};
         
         const payslipData = {
-            netSalary: record.netPay, // legacy
+            netSalary: record.netPay, 
             netPay: record.netPay,
             gross: record.grossYield,
             totalDeductions: record.liability,
-            earnings: Array.isArray(breakdown.earnings) ? breakdown.earnings : (breakdown.earnings?.components || []),
-            deductions: Array.isArray(breakdown.deductions) ? breakdown.deductions : (breakdown.deductions?.components || []),
-            breakdown: record.breakdown,
-            employeeInfo: record.employeeInfo,
-            bankDetails: record.bankDetails,
+            earnings: encryptJson(Array.isArray(breakdown.earnings) ? breakdown.earnings : (breakdown.earnings?.components || [])),
+            deductions: encryptJson(Array.isArray(breakdown.deductions) ? breakdown.deductions : (breakdown.deductions?.components || [])),
+            breakdown: encryptJson(record.breakdown),
+            employeeInfo: encryptJson(record.employeeInfo),
+            bankDetails: encryptJson(record.bankDetails),
             updatedAt: new Date(),
             generatedBy
         };
@@ -1552,34 +1603,35 @@ const getGeneratedPayslips = async (filters) => {
 
     // Map to a unified format that the frontend expects (compatible with Payslip model)
     return history.map(record => {
-        const payslip = record.payslip;
+        const pRecord = formatProcessedPayroll(record);
+        const payslip = pRecord.payslip;
         return {
-            id: payslip?.id || `pp-${record.id}`, // fallback ID if not generated
-            processedPayrollId: record.id,
-            status: record.isPaid ? 'PAID' : (payslip?.status || 'PENDING'), // PENDING means processed but no payslip yet
+            id: payslip?.id || `pp-${pRecord.id}`, // fallback ID if not generated
+            processedPayrollId: pRecord.id,
+            status: pRecord.isPaid ? 'PAID' : (payslip?.status || 'PENDING'), 
             isEmailSent: payslip?.isEmailSent || false,
             lastEmailSentAt: payslip?.lastEmailSentAt,
-            month: record.month,
-            year: record.year,
+            month: pRecord.month,
+            year: pRecord.year,
             
-            // Standardized Fields (Single Source of Truth)
-            netPay: record.netPay,
-            netSalary: record.netPay, // legacy
-            gross: payslip?.gross || record.grossYield,
-            totalDeductions: payslip?.totalDeductions || record.liability,
-            earnings: payslip?.earnings || record.earnings || [],
-            deductions: payslip?.deductions || record.deductions || [],
+            // Standardized Fields
+            netPay: pRecord.netPay,
+            netSalary: pRecord.netPay,
+            gross: payslip?.gross || pRecord.grossYield,
+            totalDeductions: payslip?.totalDeductions || pRecord.liability,
+            earnings: payslip?.earnings || pRecord.earnings || [],
+            deductions: payslip?.deductions || pRecord.deductions || [],
             
-            grossYield: record.grossYield,
-            liability: record.liability,
-            breakdown: record.breakdown,
-            employeeInfo: record.employeeInfo,
-            bankDetails: record.bankDetails,
-            paidAt: record.isPaid ? record.paidAt : payslip?.paidAt,
-            paidBy: record.isPaid ? record.paidBy : payslip?.paidBy,
+            grossYield: pRecord.grossYield,
+            liability: pRecord.liability,
+            breakdown: pRecord.breakdown,
+            employeeInfo: pRecord.employeeInfo,
+            bankDetails: pRecord.bankDetails,
+            paidAt: pRecord.isPaid ? pRecord.paidAt : payslip?.paidAt,
+            paidBy: pRecord.isPaid ? pRecord.paidBy : payslip?.paidBy,
             generatedAt: payslip?.generatedAt,
             isGenerated: !!payslip,
-            employeeId: record.employeeId
+            employeeId: pRecord.employeeId
         };
     });
 };
@@ -1604,7 +1656,7 @@ const getEmployeePayslips = async (userId, organizationId, month, year) => {
     });
 
     return payslips.map(p => ({
-        ...p,
+        ...formatPayslip(p),
         isPaid: p.processedPayroll?.isPaid || p.status === 'PAID'
     }));
 };
