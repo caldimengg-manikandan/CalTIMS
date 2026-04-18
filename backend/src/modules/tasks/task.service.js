@@ -18,7 +18,7 @@ class TaskService {
     }
 
     if (status) {
-      where.status = status;
+      where.status = { equals: status.toUpperCase().replace('-', '_'), mode: 'insensitive' };
     }
 
     // Filter by assignee if requested OR if the user is an employee/manager (unless they are admin)

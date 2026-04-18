@@ -286,8 +286,8 @@ export default function TasksPage() {
             name: task.name || '',
             description: task.description || '',
             projectId: task.projectId?.id || task.projectId || '',
-            status: task.status || 'pending',
-            priority: task.priority || 'medium',
+            status: task.status?.toLowerCase().replace('_', '-') || 'pending',
+            priority: task.priority?.toLowerCase() || 'medium',
             isActive: task.isActive !== undefined ? task.isActive : true,
             onlyProjectTasks: task.projectId?.onlyProjectTasks || false
         })
