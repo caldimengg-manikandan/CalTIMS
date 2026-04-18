@@ -16,7 +16,7 @@ const userService = {
     const { page, limit, skip } = parsePagination(query);
 
     // Use enforceOrg to start with a safe base filter
-    const baseQuery = enforceOrg({}, organizationId);
+    const baseQuery = enforceOrg({ where: { isDeleted: false } }, organizationId);
     const where = baseQuery.where;
 
     if (query.status === 'active') where.isActive = true;
