@@ -627,7 +627,7 @@ const timesheetService = {
 
     // 1. Global counts for organization (regardless of week)
     const [approvedTotal, submittedTotal, rejectedTotal, totalEmployees] = await Promise.all([
-      prisma.timesheetWeek.count({ where: { organizationId, status: 'APPROVED', isDeleted: false } }),
+      prisma.timesheetWeek.count({ where: { organizationId, status: { in: ['APPROVED', 'ADMIN_FILLED'] }, isDeleted: false } }),
       prisma.timesheetWeek.count({ where: { organizationId, status: 'SUBMITTED', isDeleted: false } }),
       prisma.timesheetWeek.count({ where: { organizationId, status: 'REJECTED', isDeleted: false } }),
       prisma.user.count({ where: { organizationId, isDeleted: false } }),
@@ -966,7 +966,7 @@ const timesheetService = {
     const [total, pending, approved, rejected, users, allSheets] = await Promise.all([
         prisma.timesheetWeek.count({ where: { organizationId, status: { not: 'DRAFT' }, isDeleted: false } }),
         prisma.timesheetWeek.count({ where: { organizationId, status: 'SUBMITTED', isDeleted: false } }),
-        prisma.timesheetWeek.count({ where: { organizationId, status: 'APPROVED', isDeleted: false } }),
+        prisma.timesheetWeek.count({ where: { organizationId, status: { in: ['APPROVED', 'ADMIN_FILLED'] }, isDeleted: false } }),
         prisma.timesheetWeek.count({ where: { organizationId, status: 'REJECTED', isDeleted: false } }),
         prisma.timesheetWeek.groupBy({
           by: ['userId'],

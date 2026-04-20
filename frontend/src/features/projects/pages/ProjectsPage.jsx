@@ -267,7 +267,12 @@ function ProjectFormModal({ project, onClose }) {
                                 max="9999-12-31" 
                                 className={`input ${errors.startDate ? 'border-rose-400' : ''}`} 
                                 onChange={e => {
-                                    const val = e.target.value;
+                                    let val = e.target.value;
+                                    const parts = val.split('-');
+                                    if (parts[0] && parts[0].length > 4) {
+                                        parts[0] = parts[0].slice(0, 4);
+                                        val = parts.join('-');
+                                    }
                                     const currentEnd = watch('endDate');
                                     setValue('startDate', val);
                                     if (currentEnd && val > currentEnd) {
@@ -284,6 +289,15 @@ function ProjectFormModal({ project, onClose }) {
                                 type="date" 
                                 max="9999-12-31" 
                                 min={watch('startDate')}
+                                onChange={e => {
+                                    let val = e.target.value;
+                                    const parts = val.split('-');
+                                    if (parts[0] && parts[0].length > 4) {
+                                        parts[0] = parts[0].slice(0, 4);
+                                        val = parts.join('-');
+                                    }
+                                    setValue('endDate', val);
+                                }}
                                 className={`input ${errors.endDate ? 'border-rose-400' : ''}`} 
                             />
                             {errors.endDate && <p className="text-[10px] text-rose-500">{errors.endDate.message}</p>}

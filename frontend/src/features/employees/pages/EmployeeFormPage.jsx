@@ -108,7 +108,15 @@ export default function EmployeeFormPage() {
                 roleId: selectedRole?.id || ''
             }))
         } else {
-            setFormData(prev => ({ ...prev, [name]: value }))
+            let finalValue = value;
+            if (name === 'joinDate') {
+                const parts = value.split('-');
+                if (parts[0] && parts[0].length > 4) {
+                    parts[0] = parts[0].slice(0, 4);
+                    finalValue = parts.join('-');
+                }
+            }
+            setFormData(prev => ({ ...prev, [name]: finalValue }))
         }
 
         if (errors[name]) {

@@ -155,11 +155,12 @@ class PDFGeneratorService {
             // ── Compliance values ────────────────────────────────────────
             const cv = (k) => complianceStats[k.toUpperCase()] || complianceStats[k.toLowerCase()] || 0;
             const cApproved  = cv('approved');
+            const cAdminFill = cv('admin_filled');
             const cSubmitted = cv('submitted');
             const cDraft     = cv('draft');
             const cRejected  = cv('rejected');
-            const cTotal     = complianceStats.total || (cApproved + cSubmitted + cDraft + cRejected) || 1;
-            const compRate   = pct(cApproved, cTotal);
+            const cTotal     = complianceStats.total || (cApproved + cAdminFill + cSubmitted + cDraft + cRejected) || 1;
+            const compRate   = pct(cApproved + cAdminFill, cTotal);
 
             const totalHrs   = parseFloat(stats.totalHours) || 0;
             const totalShts  = stats.totalTimesheets || 0;
@@ -274,6 +275,7 @@ class PDFGeneratorService {
 
             const compRows = [
                 { label: 'Approved',  val: cApproved,  color: C.success },
+                { label: 'Admin Resol.', val: cAdminFill, color: C.accent },
                 { label: 'Submitted', val: cSubmitted,  color: C.warning  },
                 { label: 'Draft',     val: cDraft,      color: '#94a3b8'  },
                 { label: 'Rejected',  val: cRejected,   color: C.danger   },
@@ -290,7 +292,7 @@ class PDFGeneratorService {
 
             // Legend row
             compRows.forEach((cr, i) => {
-                const lx = ML + i * (CW / 4);
+                const lx = ML + i * (CW / 5);
                 doc.rect(lx, y + 1, 7, 7).fill(cr.color);
                 doc.font('Helvetica').fontSize(7.5).fillColor(C.muted)
                    .text(`${cr.label}  ${cr.val}  (${pct(cr.val, cTotal)}%)`,

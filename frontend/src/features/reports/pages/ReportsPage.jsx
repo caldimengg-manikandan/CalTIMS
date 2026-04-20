@@ -268,9 +268,9 @@ export default function ReportsPage() {
 
     const complianceRate = useMemo(() => {
         if (!complianceData?.length) return 0
-        const approved = complianceData.find(d => d.name === 'Approved')?.value || 0
+        const approved = (complianceData.find(d => d.name === 'Approved')?.value || 0) + (complianceData.find(d => d.name === 'Admin Filled')?.value || 0)
         const total = complianceData.reduce((s, d) => s + d.value, 0)
-        return total ? Math.round((approved / total) * 100) : 0
+        return total ? Math.round((approved / total) * 100) : 0;
     }, [complianceData])
 
     const weeklyAvg = weeklyTrend?.length
@@ -412,8 +412,15 @@ export default function ReportsPage() {
                         <div className="flex items-center gap-2">
                             <input type="date" className="input py-2 text-sm w-36 bg-slate-50 dark:bg-slate-800"
                                 value={range.from} 
+                                max="9999-12-31"
                                 onChange={e => {
-                                    const val = e.target.value;
+                                    let val = e.target.value;
+                                    // Protect against 5+ digit years
+                                    const parts = val.split('-');
+                                    if (parts[0] && parts[0].length > 4) {
+                                        parts[0] = parts[0].slice(0, 4);
+                                        val = parts.join('-');
+                                    }
                                     setRange(r => ({ 
                                         ...r, 
                                         from: val,
@@ -425,7 +432,16 @@ export default function ReportsPage() {
                             <input type="date" className="input py-2 text-sm w-36 bg-slate-50 dark:bg-slate-800"
                                 value={range.to} 
                                 min={range.from}
-                                onChange={e => setRange(r => ({ ...r, to: e.target.value }))} 
+                                max="9999-12-31"
+                                onChange={e => {
+                                    let val = e.target.value;
+                                    const parts = val.split('-');
+                                    if (parts[0] && parts[0].length > 4) {
+                                        parts[0] = parts[0].slice(0, 4);
+                                        val = parts.join('-');
+                                    }
+                                    setRange(r => ({ ...r, to: val }))
+                                }} 
                             />
                         </div>
 
@@ -500,7 +516,7 @@ export default function ReportsPage() {
                 </div>
 
                 {/* ── 2. Executive KPI Section ── */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5 mb-6">
                     <KpiCard icon={Clock} label="Total Hours Logged" value={`${totalHours.toFixed(2)}h`}
                         color="#6366f1" sub="Approved hours in period" trend={5.2} />
 
@@ -512,6 +528,9 @@ export default function ReportsPage() {
 
                     <KpiCard icon={TrendingUp} label="Average Weekly Hours" value={`${weeklyAvg}h`}
                         color="#8b5cf6" sub="Per active employee" />
+
+                    <KpiCard icon={CheckCircle2} label="Admin Resolved" value={complianceData?.find(d => d.name === 'Admin Filled')?.value || 0}
+                        color="#6366f1" sub="Timesheets filled by Admin" />
                 </div>
 
                 {tsLoading ? (

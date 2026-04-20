@@ -59,7 +59,7 @@ router.get('/timesheet-summary', asyncHandler(async (req, res) => {
 
   const where = {
     organizationId: req.organizationId,
-    status: 'APPROVED',
+    status: { in: ['APPROVED', 'ADMIN_FILLED'] },
     isDeleted: false
   };
 
@@ -151,6 +151,7 @@ router.get('/compliance-summary', requireFeature('advanced_reports'), asyncHandl
 
   const result = {
     APPROVED: 0,
+    ADMIN_FILLED: 0,
     SUBMITTED: 0,
     REJECTED: 0,
     DRAFT: 0
@@ -170,6 +171,7 @@ router.get('/compliance-summary', requireFeature('advanced_reports'), asyncHandl
 
   const formattedData = [
     { name: 'Approved', value: result.APPROVED, fill: '#22c55e' },
+    { name: 'Admin Filled', value: result.ADMIN_FILLED, fill: '#6366f1' },
     { name: 'Pending Review', value: result.SUBMITTED, fill: '#f59e0b' },
     { name: 'Rejected', value: result.REJECTED, fill: '#ef4444' },
     { name: 'Draft/Incomplete', value: result.DRAFT, fill: '#94a3b8' }
@@ -190,7 +192,7 @@ router.get('/project-utilization', requireFeature('advanced_reports'), asyncHand
 
   const where = {
     organizationId: req.organizationId,
-    status: 'APPROVED',
+    status: { in: ['APPROVED', 'ADMIN_FILLED'] },
     isDeleted: false
   };
 
@@ -376,7 +378,7 @@ router.get('/timesheet-details', asyncHandler(async (req, res) => {
   const { userId, projectId, from, to } = req.query;
   const where = {
     organizationId: req.organizationId,
-    status: TIMESHEET_STATUS.APPROVED,
+    status: { in: [TIMESHEET_STATUS.APPROVED, TIMESHEET_STATUS.ADMIN_FILLED] },
     isDeleted: false
   };
   if (userId) where.userId = userId;
@@ -420,7 +422,7 @@ router.get('/employee-attendance', asyncHandler(async (req, res) => {
 
   const where = {
     organizationId: req.organizationId,
-    status: TIMESHEET_STATUS.APPROVED,
+    status: { in: [TIMESHEET_STATUS.APPROVED, TIMESHEET_STATUS.ADMIN_FILLED] },
     isDeleted: false
   };
   if (from) where.weekStartDate = { gte: new Date(from) };
@@ -478,7 +480,7 @@ router.get('/weekly-trend', requireFeature('advanced_reports'), asyncHandler(asy
 
   const where = {
     organizationId: req.organizationId,
-    status: TIMESHEET_STATUS.APPROVED,
+    status: { in: [TIMESHEET_STATUS.APPROVED, TIMESHEET_STATUS.ADMIN_FILLED] },
     isDeleted: false
   };
   if (from) where.weekStartDate = { gte: new Date(from) };
@@ -543,7 +545,7 @@ router.get('/department-summary', requireFeature('advanced_reports'), asyncHandl
 
   const where = {
     organizationId: req.organizationId,
-    status: TIMESHEET_STATUS.APPROVED,
+    status: { in: [TIMESHEET_STATUS.APPROVED, TIMESHEET_STATUS.ADMIN_FILLED] },
     isDeleted: false
   };
   if (from) where.weekStartDate = { gte: new Date(from) };
@@ -623,7 +625,7 @@ router.get('/smart-insights', requireFeature('advanced_reports'), asyncHandler(a
 
   const where = {
     organizationId: req.organizationId,
-    status: TIMESHEET_STATUS.APPROVED,
+    status: { in: [TIMESHEET_STATUS.APPROVED, TIMESHEET_STATUS.ADMIN_FILLED] },
     isDeleted: false
   };
   if (from) where.weekStartDate = { gte: new Date(from) };
@@ -704,7 +706,7 @@ router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async
 
   const where = {
     organizationId: req.organizationId,
-    status: TIMESHEET_STATUS.APPROVED,
+    status: { in: [TIMESHEET_STATUS.APPROVED, TIMESHEET_STATUS.ADMIN_FILLED] },
     isDeleted: false
   };
   if (from) where.weekStartDate = { gte: from };
@@ -855,7 +857,7 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
 
   const where = {
     organizationId: req.organizationId,
-    status: TIMESHEET_STATUS.APPROVED,
+    status: { in: [TIMESHEET_STATUS.APPROVED, TIMESHEET_STATUS.ADMIN_FILLED] },
     isDeleted: false
   };
   if (from) where.weekStartDate = { gte: from };
@@ -919,7 +921,7 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
   let totalComp = 0, approvedComp = 0;
   complianceRes.forEach(r => {
     totalComp += r._count._all;
-    if (r.status === 'APPROVED') approvedComp = r._count._all;
+    if (r.status === 'APPROVED' || r.status === 'ADMIN_FILLED') approvedComp += r._count._all;
   });
   const complianceRate = totalComp > 0 ? ((approvedComp / totalComp) * 100).toFixed(0) : '0';
   const avgHours = uniqueEmployees.size > 0 ? (totalHours / uniqueEmployees.size).toFixed(1) : '0';
