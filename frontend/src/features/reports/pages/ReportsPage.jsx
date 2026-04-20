@@ -206,11 +206,37 @@ export default function ReportsPage() {
         queryFn: () => userAPI.getAll({ limit: 200, role: 'employee' }).then(r => r.data.data),
     })
 
-    const departments = useMemo(() => {
+    const visibleEmployees = useMemo(() => {
         if (!employees) return []
-        const depts = new Set(employees.map(e => e.department).filter(Boolean))
-        return Array.from(depts)
-    }, [employees])
+        if (selectedProjectId === 'all') return employees
+
+        const project = projects?.find(p => (p._id || p.id) === selectedProjectId)
+        if (!project) return employees
+
+        // Projects from getAll include allocatedEmployees with resolved user objects
+        const memberUserIds = project.allocatedEmployees?.map(m => m.userId?._id || m.userId?.id || m.userId) || []
+        return employees.filter(e => memberUserIds.includes(e._id))
+    }, [employees, selectedProjectId, projects])
+
+    const visibleDepartments = useMemo(() => {
+        const sourceEmployees = selectedProjectId === 'all' ? employees : visibleEmployees
+        if (!sourceEmployees) return []
+        const depts = new Set(sourceEmployees.map(e => e.department).filter(Boolean))
+        return Array.from(depts).sort()
+    }, [employees, visibleEmployees, selectedProjectId])
+
+    // ─── Auto-reset Dependent Filters ──────────────────────────────────────────
+    // If project changes, ensure selected employee/department are still valid
+    React.useEffect(() => {
+        if (selectedProjectId !== 'all') {
+            if (selectedUserId !== 'all' && !visibleEmployees.some(e => e._id === selectedUserId)) {
+                setSelectedUserId('all')
+            }
+            if (selectedDepartment !== 'all' && !visibleDepartments.includes(selectedDepartment)) {
+                setSelectedDepartment('all')
+            }
+        }
+    }, [selectedProjectId, visibleEmployees, visibleDepartments])
 
     const { data: tsData, isLoading: tsLoading } = useQuery({
         queryKey: ['reports', 'timesheet-summary', filterParams],
@@ -346,8 +372,8 @@ export default function ReportsPage() {
 
     const resetFilters = () => {
         setRange({ from: '', to: '' })
-        setSelectedProjectId('all')
         setSelectedUserId('all')
+        setSelectedProjectId('all')
         setSelectedDepartment('all')
         setSelectedYear(new Date().getFullYear())
         setSelectedMonth('all')
@@ -447,16 +473,24 @@ export default function ReportsPage() {
 
                         <div className="h-8 w-px bg-slate-200 dark:bg-white/10 hidden md:block"></div>
 
+                        <select className="input py-2 text-sm w-44 bg-slate-50 dark:bg-slate-800 font-medium"
+                            value={selectedProjectId} 
+                            onChange={e => setSelectedProjectId(e.target.value)}
+                        >
+                            <option value="all">All Projects</option>
+                            {projects?.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                        </select>
+
                         <select className="input py-2 text-sm w-40 bg-slate-50 dark:bg-slate-800 font-medium"
                             value={selectedDepartment} onChange={e => setSelectedDepartment(e.target.value)}>
                             <option value="all">All Departments</option>
-                            {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                            {visibleDepartments.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
 
                         <select className="input py-2 text-sm w-44 bg-slate-50 dark:bg-slate-800 font-medium"
                             value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)}>
                             <option value="all">All Employees</option>
-                            {employees?.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+                            {visibleEmployees?.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
                         </select>
 
                         <div className="flex items-center gap-2">
@@ -501,15 +535,12 @@ export default function ReportsPage() {
                             </select>
                         </div>
 
-                        <select className="input py-2 text-sm w-44 bg-slate-50 dark:bg-slate-800 font-medium"
-                            value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
-                            <option value="all">All Projects</option>
-                            {projects?.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
-                        </select>
-
-                        {(range.from || range.to || selectedUserId !== 'all' || selectedProjectId !== 'all' || selectedDepartment !== 'all') && (
-                            <button onClick={resetFilters} className="ml-auto text-sm font-semibold text-slate-500 hover:text-red-500 flex items-center gap-1 transition-colors">
-                                <X size={16} /> Clear
+                        {(range.from || range.to || selectedUserId !== 'all' || selectedProjectId !== 'all' || selectedDepartment !== 'all' || selectedMonth !== 'all' || selectedWeek !== 'all') && (
+                            <button 
+                                onClick={resetFilters} 
+                                className="ml-auto text-xs font-bold text-slate-400 hover:text-rose-500 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-slate-100 dark:border-white/5 flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
+                            >
+                                <RefreshCw size={14} className="opacity-70" /> Clear Filters
                             </button>
                         )}
                     </div>
