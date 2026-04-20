@@ -3493,8 +3493,12 @@ export const PayrollReports = () => {
             const deductionNames = new Set();
 
             relevantHistory.forEach(h => {
-               (h.breakdown?.earnings || []).forEach(e => earningNames.add(e.name));
-               (h.breakdown?.deductions || []).forEach(d => deductionNames.add(d.name));
+               if (Array.isArray(h.breakdown?.earnings)) {
+                  h.breakdown.earnings.forEach(e => earningNames.add(e.name));
+               }
+               if (Array.isArray(h.breakdown?.deductions)) {
+                  h.breakdown.deductions.forEach(d => deductionNames.add(d.name));
+               }
             });
 
             const sortedEarnings = Array.from(earningNames).sort();
@@ -3522,10 +3526,14 @@ export const PayrollReports = () => {
             // 3. Map Rows
             const rows = relevantHistory.map(h => {
                const earningsMap = {};
-               (h.breakdown?.earnings || []).forEach(e => earningsMap[e.name] = e.value);
+               if (Array.isArray(h.breakdown?.earnings)) {
+                  h.breakdown.earnings.forEach(e => earningsMap[e.name] = e.value);
+               }
 
                const deductionsMap = {};
-               (h.breakdown?.deductions || []).forEach(d => deductionsMap[d.name] = d.value);
+               if (Array.isArray(h.breakdown?.deductions)) {
+                  h.breakdown.deductions.forEach(d => deductionsMap[d.name] = d.value);
+               }
 
                const ctcVal = h.user?.annualCTC ? (parseFloat(h.user.annualCTC) / 12) : (h.breakdown?.monthlyCTC || h.grossYield);
 
