@@ -17,8 +17,8 @@ Our application uses a subpath-based architecture on the VPS to share the server
 ### File Paths
 - **Main Code Directory (VPS):** `/var/www/caltims`
 - **Nginx Config Location:** `/etc/nginx/sites-enabled/caldimproducts.conf`
-- **Nginx Frontend Alias:** `/caltims/` maps to `/var/www/caltims/frontend/dist/`
-- **Nginx API Proxy:** `/caltims/api//` maps to `http://localhost:5005/api/`
+- **Nginx PM2 Subpath:** `/caltims` maps to `/var/www/caltims/frontend/dist/`
+- **Nginx API Subpath:** `/caltims/api` maps to `http://localhost:5005/api/`
 
 ### Important Configuration (VPS Only - .gitignore'd)
 1. **Backend Env:** `/var/www/caltims/backend/.env` (DB URL and secrets)
