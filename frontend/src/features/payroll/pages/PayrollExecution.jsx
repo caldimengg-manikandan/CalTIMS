@@ -12,6 +12,7 @@ import { formatCurrency, getCurrencySymbol } from '../../../utils/formatters';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 
 const PayrollExecution = () => {
     const { year, month } = useParams();
@@ -91,12 +92,15 @@ const PayrollExecution = () => {
     }, [payrollRecords]);
 
 
+    const [bulkMarkPaidConfirm, setBulkMarkPaidConfirm] = useState(false);
+    const [markPaidConfirmItem, setMarkPaidConfirmItem] = useState(null);
+
     const handleMarkPaid = (record) => {
         if (!record.payslip) {
             toast.error('Generate payslip first to mark as paid');
             return;
         }
-        markPaidMutation.mutate(record.payslip.id);
+        setMarkPaidConfirmItem(record);
     };
 
     const handleMarkAllPaid = () => {
@@ -108,10 +112,7 @@ const PayrollExecution = () => {
             toast.error('No pending payments to process (Ensure payslips are generated)');
             return;
         }
-
-        if (window.confirm(`Mark ${pendingIds.length} payments as completed?`)) {
-            bulkMarkPaidMutation.mutate(pendingIds);
-        }
+        setBulkMarkPaidConfirm(true);
     };
 
     if (isLoading) {
@@ -414,6 +415,39 @@ const PayrollExecution = () => {
                     </div>
                 </div>
             </div>
+            <ConfirmModal
+                isOpen={!!markPaidConfirmItem}
+                onClose={() => setMarkPaidConfirmItem(null)}
+                onConfirm={() => {
+                    markPaidMutation.mutate(markPaidConfirmItem.payslip.id);
+                    setMarkPaidConfirmItem(null);
+                }}
+                title="Confirm Salary Disbursement?"
+                message={(
+                    <span>
+                        Are you sure you want to mark salary for <strong className="text-slate-900 dark:text-white">{markPaidConfirmItem?.employeeInfo?.name}</strong> as <strong className="text-emerald-600">PAID</strong>? 
+                        This action will be logged and cannot be undone.
+                    </span>
+                )}
+                confirmText="Yes, Mark as Paid"
+                isLoading={markPaidMutation.isPending}
+            />
+
+            <ConfirmModal
+                isOpen={bulkMarkPaidConfirm}
+                onClose={() => setBulkMarkPaidConfirm(false)}
+                onConfirm={() => {
+                    const pendingIds = payrollRecords
+                        .filter(r => !r.isPaid && r.payslip && r.bankDetails?.accountNumber && r.bankDetails?.ifscCode)
+                        .map(r => r.payslip.id);
+                    bulkMarkPaidMutation.mutate(pendingIds);
+                    setBulkMarkPaidConfirm(false);
+                }}
+                title="Confirm Bulk Disbursement?"
+                message={`Are you sure you want to mark all eligible generated payslips as PAID? This will process multiple records at once.`}
+                confirmText="Yes, Confirm Bulk Action"
+                isLoading={bulkMarkPaidMutation.isPending}
+            />
         </div>
     );
 };

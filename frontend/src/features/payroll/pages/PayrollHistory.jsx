@@ -23,6 +23,8 @@ const PayrollHistory = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [isExportOpen, setIsExportOpen] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
 
     const { data: settings } = useQuery({
         queryKey: ['settings'],
@@ -50,6 +52,17 @@ const PayrollHistory = () => {
             return matchesSearch && matchesStatus;
         });
     }, [runs, searchTerm, statusFilter]);
+
+    const paginatedRuns = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return filteredRuns.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredRuns, currentPage, itemsPerPage]);
+
+    const totalPages = Math.ceil(filteredRuns.length / itemsPerPage);
+
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, statusFilter, itemsPerPage]);
 
     const stats = useMemo(() => {
         const totalRuns = runs.length;
@@ -224,18 +237,19 @@ const PayrollHistory = () => {
                                 <h3 className="font-black text-slate-800 dark:text-white text-sm uppercase tracking-widest">Historical Run Ledger</h3>
                                 
                             </div>
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-50/50 dark:bg-white/5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-[#333333]">
-                                        <th className="px-6 py-4 text-[10px]">Run Period</th>
-                                        <th className="px-6 py-4 text-[10px]">Month / Year</th>
-                                        <th className="px-6 py-4 text-[10px]">Employees</th>
-                                        <th className="px-6 py-4 text-[10px]">Gross Amount</th>
-                                        <th className="px-6 py-4 text-[10px]">Net Disbursed</th>
-                                        <th className="px-6 py-4 text-[10px]">Status</th>
-                                        <th className="px-6 py-4 text-[10px] text-right">Actions</th>
-                                    </tr>
-                                </thead>
+                            <div className="overflow-x-auto max-h-[500px] overflow-y-auto scroll-smooth">
+                                <table className="w-full text-left border-separate border-spacing-0">
+                                    <thead className="sticky top-0 z-30">
+                                        <tr className="bg-slate-50 dark:bg-[#1a1a1a] text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <th className="px-6 py-4 text-[10px] bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Run Period</th>
+                                            <th className="px-6 py-4 text-[10px] bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Month / Year</th>
+                                            <th className="px-6 py-4 text-[10px] bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Employees</th>
+                                            <th className="px-6 py-4 text-[10px] bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Gross Amount</th>
+                                            <th className="px-6 py-4 text-[10px] bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Net Payout</th>
+                                            <th className="px-6 py-4 text-[10px] bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Status</th>
+                                            <th className="px-6 py-4 text-[10px] text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Actions</th>
+                                        </tr>
+                                    </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-[#333333]">
                                     {isLoading ? (
                                         <tr>
@@ -267,7 +281,7 @@ const PayrollHistory = () => {
                                                 </div>
                                             </td>
                                         </tr>
-                                    ) : filteredRuns.map((run) => {
+                                    ) : paginatedRuns.map((run) => {
                                         const runId = `${run.year}-${String(run.month).padStart(2, '0')}`;
                                         return (
                                             <tr
@@ -329,7 +343,70 @@ const PayrollHistory = () => {
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* 📄 Pagination Controls */}
+                        <div className="p-4 border-t border-slate-50 dark:border-white/5 flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-[#111111] gap-4">
+                            <div className="flex items-center gap-4">
+                                <p className="text-xs font-bold text-slate-400 dark:text-gray-500">
+                                    Showing <span className="text-slate-900 dark:text-white">{Math.min(filteredRuns.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className="text-slate-900 dark:text-white">{Math.min(filteredRuns.length, currentPage * itemsPerPage)}</span> of <span className="text-slate-900 dark:text-white">{filteredRuns.length}</span> cycles
+                                </p>
+                                
+                                <div className="h-4 w-px bg-slate-100 dark:bg-white/10 hidden sm:block" />
+
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rows:</span>
+                                    <select 
+                                        value={itemsPerPage} 
+                                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                                        className="bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-md px-2 py-0.5 text-[10px] font-black text-slate-600 dark:text-gray-400 outline-none cursor-pointer"
+                                    >
+                                        {[5, 10, 20, 50, 100].map(size => (
+                                            <option key={size} value={size}>{size}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {totalPages > 1 && (
+                                <div className="flex items-center gap-1.5">
+                                    <button
+                                        disabled={currentPage === 1}
+                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                        className="p-2 border border-slate-100 dark:border-white/5 rounded-lg text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 transition-all hover:bg-slate-50 dark:hover:bg-white/5"
+                                    >
+                                        <ChevronRight className="rotate-180" size={16} />
+                                    </button>
+                                    
+                                    <div className="flex items-center gap-1 mx-1">
+                                        {[...Array(totalPages)].map((_, idx) => {
+                                            if (idx === 0 || idx === totalPages - 1 || (idx >= currentPage - 2 && idx <= currentPage)) {
+                                                return (
+                                                    <button
+                                                        key={idx}
+                                                        onClick={() => setCurrentPage(idx + 1)}
+                                                        className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${currentPage === idx + 1 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none' : 'text-slate-400 dark:text-gray-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                                                    >
+                                                        {idx + 1}
+                                                    </button>
+                                                );
+                                            }
+                                            if (idx === 1 || idx === totalPages - 2) return <span key={idx} className="text-slate-300 dark:text-gray-600 font-black">...</span>;
+                                            return null;
+                                        })}
+                                    </div>
+
+                                    <button
+                                        disabled={currentPage === totalPages}
+                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                        className="p-2 border border-slate-100 dark:border-white/5 rounded-lg text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 transition-all hover:bg-slate-50 dark:hover:bg-white/5"
+                                    >
+                                        <ChevronRight size={16} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
+                </div>
                 </div>
             </div>
         </div>

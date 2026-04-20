@@ -14,7 +14,7 @@ const createUserSchema = Joi.object({
   phone: Joi.string().trim().pattern(/^\d{10}$/).messages({
     'string.pattern.base': 'Phone number must be exactly 10 digits',
   }),
-  employeeId: Joi.string().trim().max(50),
+  employeeId: Joi.string().trim().max(50).required(),
   joiningDate: Joi.date().iso(),
   bankName: Joi.string().trim().required(),
   accountNumber: Joi.string().trim().pattern(/^\d+$/).required().messages({

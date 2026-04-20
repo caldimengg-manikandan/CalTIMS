@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import { settingsAPI } from '@/services/endpoints'
 import Spinner from '@/components/ui/Spinner'
 import Modal from '@/components/ui/Modal'
@@ -740,44 +741,20 @@ export default function UsersAndRolesTab() {
                 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; }
             `}</style>
 
-            {/* Delete Confirmation Modal */}
-            <Modal
+            <ConfirmModal
                 isOpen={confirmDeleteIndex !== null}
                 onClose={() => setConfirmDeleteIndex(null)}
-                title="Confirm Role Deletion"
-                maxWidth="max-w-md"
-            >
-                <div className="p-6 space-y-6">
-                    <div className="flex items-center gap-4 p-4 rounded-2xl bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/30">
-                        <div className="w-12 h-12 rounded-2xl bg-rose-500 flex items-center justify-center shadow-lg shadow-rose-200">
-                            <Trash2 className="text-white" size={24} />
-                        </div>
-                        <div>
-                            <p className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-tight">Delete "{roles[confirmDeleteIndex]?.name}"?</p>
-                            <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">This action cannot be undone after syncing.</p>
-                        </div>
-                    </div>
-                    
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
-                        Deleting this role will remove all associated permissions. Employees currently assigned to this role will lose access until you reassign them.
-                    </p>
-
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => setConfirmDeleteIndex(null)}
-                            className="flex-1 px-6 py-4 rounded-2xl bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 dark:hover:bg-white/10 transition-all"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={onConfirmDelete}
-                            className="flex-1 px-6 py-4 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-rose-200 transition-all active:scale-95"
-                        >
-                            Confirm Delete
-                        </button>
-                    </div>
-                </div>
-            </Modal>
+                onConfirm={onConfirmDelete}
+                title="Permanently Delete Role?"
+                message={(
+                    <span>
+                        Are you sure you want to delete <strong className="text-slate-900 dark:text-white">{roles[confirmDeleteIndex]?.name}</strong>? 
+                        You won't be able to see this data again and this action <strong>cannot be undone</strong>.
+                    </span>
+                )}
+                confirmText="Yes, Delete Role"
+                danger
+            />
         </div>
     )
 }

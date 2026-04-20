@@ -489,7 +489,7 @@ export const EmployeePayrollProfiles = () => {
    const [deptFilter, setDeptFilter] = React.useState('All');
    const [statusFilter, setStatusFilter] = React.useState('All');
    const [currentPage, setCurrentPage] = React.useState(1);
-   const itemsPerPage = 10;
+   const [itemsPerPage, setItemsPerPage] = React.useState(10);
 
    const { data: users } = useQuery({
       queryKey: ['users'],
@@ -565,12 +565,12 @@ export const EmployeePayrollProfiles = () => {
 
    React.useEffect(() => {
       setCurrentPage(1);
-   }, [searchTerm, deptFilter, statusFilter]);
+   }, [searchTerm, deptFilter, statusFilter, itemsPerPage]);
 
    const paginatedUsers = React.useMemo(() => {
       const startIndex = (currentPage - 1) * itemsPerPage;
       return enrichedUsers.slice(startIndex, startIndex + itemsPerPage);
-   }, [enrichedUsers, currentPage]);
+   }, [enrichedUsers, currentPage, itemsPerPage]);
 
    const totalPages = Math.ceil(enrichedUsers.length / itemsPerPage);
 
@@ -666,20 +666,19 @@ export const EmployeePayrollProfiles = () => {
             </div>
          </div>
 
-         {/* 📋 Main Table */}
-         <div className="bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden flex flex-col">
-            <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
-               <table className="w-full text-left border-collapse">
-                  <thead className="sticky top-0 z-20">
-                     <tr className="bg-slate-50 dark:bg-white/5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-[#333333]">
-                        <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a]">Employee</th>
-                        <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a]">Role / Designation</th>
-                        <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a]">Defined CTC</th>
-                        <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a]">Payroll Status</th>
-                        <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a]">Bank Status</th>
-                        <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a]">Actions</th>
-                     </tr>
-                  </thead>
+          <div className="bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden flex flex-col">
+             <div className="overflow-x-auto max-h-[calc(100vh-420px)] overflow-y-auto scroll-smooth">
+                <table className="w-full text-left border-separate border-spacing-0">
+                   <thead className="sticky top-0 z-30">
+                      <tr className="bg-slate-50 dark:bg-[#1a1a1a] text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                         <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Employee</th>
+                         <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Role / Designation</th>
+                         <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Defined CTC</th>
+                         <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Payroll Status</th>
+                         <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Bank Status</th>
+                         <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Actions</th>
+                      </tr>
+                   </thead>
                   <tbody className="divide-y divide-slate-50">
                      {profilesLoading ? (
                         <tr>
@@ -781,39 +780,73 @@ export const EmployeePayrollProfiles = () => {
             </div>
 
             {/* 📄 Pagination Controls */}
-            {totalPages > 1 && (
-               <div className="p-4 border-t border-slate-50 dark:border-white/5 flex items-center justify-between bg-white dark:bg-[#111111]">
+            <div className="p-4 border-t border-slate-50 dark:border-white/5 flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-[#111111] gap-4">
+               <div className="flex items-center gap-4">
                   <p className="text-xs font-bold text-slate-400 dark:text-gray-500">
                      Showing <span className="text-slate-900 dark:text-white">{Math.min(enrichedUsers.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className="text-slate-900 dark:text-white">{Math.min(enrichedUsers.length, currentPage * itemsPerPage)}</span> of <span className="text-slate-900 dark:text-white">{enrichedUsers.length}</span> employees
                   </p>
+                  
+                  <div className="h-4 w-px bg-slate-100 dark:bg-white/10 hidden sm:block" />
+
                   <div className="flex items-center gap-2">
+                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rows:</span>
+                     <select 
+                        value={itemsPerPage} 
+                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                        className="bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-md px-2 py-0.5 text-[10px] font-black text-slate-600 dark:text-gray-400 outline-none cursor-pointer"
+                     >
+                        {[5, 10, 20, 50, 100].map(size => (
+                           <option key={size} value={size}>{size}</option>
+                        ))}
+                     </select>
+                  </div>
+               </div>
+
+               {totalPages > 1 && (
+                  <div className="flex items-center gap-1.5">
                      <button
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                        className="p-2 border border-slate-100 dark:border-white/5 rounded-lg text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 transition-all"
+                        className="p-2 border border-slate-100 dark:border-white/5 rounded-lg text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 transition-all hover:bg-slate-50 dark:hover:bg-white/5"
                      >
                         <ChevronLeft size={16} />
                      </button>
-                     {[...Array(totalPages)].map((_, idx) => (
-                        <button
-                           key={idx}
-                           onClick={() => setCurrentPage(idx + 1)}
-                           className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${currentPage === idx + 1 ? 'bg-indigo-600 text-white' : 'text-slate-400 dark:text-gray-500 hover:bg-slate-50 dark:hover:bg-white/5'
-                              }`}
-                        >
-                           {idx + 1}
-                        </button>
-                     ))}
+                     
+                     <div className="flex items-center gap-1 mx-1">
+                        {[...Array(totalPages)].map((_, idx) => {
+                           // Show first, last, and pages around current
+                           if (
+                              idx === 0 || 
+                              idx === totalPages - 1 || 
+                              (idx >= currentPage - 2 && idx <= currentPage)
+                           ) {
+                              return (
+                                 <button
+                                    key={idx}
+                                    onClick={() => setCurrentPage(idx + 1)}
+                                    className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${currentPage === idx + 1 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none' : 'text-slate-400 dark:text-gray-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                                 >
+                                    {idx + 1}
+                                 </button>
+                              );
+                           }
+                           if (idx === 1 || idx === totalPages - 2) {
+                              return <span key={idx} className="text-slate-300 dark:text-gray-600 font-black">...</span>;
+                           }
+                           return null;
+                        })}
+                     </div>
+
                      <button
                         disabled={currentPage === totalPages}
                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                        className="p-2 border border-slate-100 rounded-lg text-slate-400 hover:text-indigo-600 disabled:opacity-30 transition-all"
+                        className="p-2 border border-slate-100 dark:border-white/5 rounded-lg text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 transition-all hover:bg-slate-50 dark:hover:bg-white/5"
                      >
                         <ChevronRight size={16} />
                      </button>
                   </div>
-               </div>
-            )}
+               )}
+            </div>
          </div>
 
          {/* Delete Confirmation Modal */}
@@ -821,9 +854,11 @@ export const EmployeePayrollProfiles = () => {
             isOpen={deleteConfirm.isOpen}
             onClose={() => setDeleteConfirm({ isOpen: false, id: null })}
             onConfirm={() => deleteConfirm.id && deleteProfileMutation.mutate(deleteConfirm.id)}
-            title="Remove Salary Configuration?"
-            message="Are you sure you want to clear the salary structure for this employee? This will stop future salary processing, but bank details and historical records will remain intact."
-            confirmText="Yes, Remove Salary"
+            title="Permanently Remove Payroll Profile?"
+            message="Are you sure you want to delete this payroll profile? You won't be able to see this data again and this action cannot be undone."
+            confirmText="Yes, Remove Profile"
+            isLoading={deleteProfileMutation.isPending}
+            danger
          />
 
          {/* Clean Profile View Modal */}
@@ -1590,14 +1625,20 @@ export const SalaryStructures = () => {
             confirmText={statusConfirm.isActive ? "Yes, Deactivate" : "Yes, Activate"}
          />
 
-         <ConfirmModal
+          <ConfirmModal
             isOpen={hardDeleteConfirm.isOpen}
             onClose={() => setHardDeleteConfirm({ isOpen: false, id: null })}
             onConfirm={() => hardDeleteConfirm.id && deleteMutation.mutate(hardDeleteConfirm.id)}
-            title="Delete Structure Permanently?"
-            message="Are you sure? This permanently removes this structure from the database."
+            title="Permanently Delete Structure?"
+            message={(
+               <span>
+                  Are you sure you want to delete this salary structure?
+                  You won't be able to see this data again and this action <strong>cannot be undone</strong>.
+               </span>
+            )}
             confirmText="Yes, Delete Permanently"
-            variant="danger"
+            isLoading={deleteMutation.isPending}
+            danger
          />
 
          <ConfirmModal
@@ -2189,6 +2230,8 @@ export const PayslipGeneration = () => {
    const [activePayslipId, setActivePayslipId] = React.useState(null);
    const [downloadingId, setDownloadingId] = React.useState(null);
    const [sendingEmailId, setSendingEmailId] = React.useState(null);
+   const [currentPage, setCurrentPage] = React.useState(1);
+   const [itemsPerPage, setItemsPerPage] = React.useState(10);
    const [markPaidConfirm, setMarkPaidConfirm] = React.useState({ isOpen: false, id: null, name: '' });
    const [bulkMarkPaidConfirm, setBulkMarkPaidConfirm] = React.useState(false);
 
@@ -2231,6 +2274,17 @@ export const PayslipGeneration = () => {
          return matchesSearch && matchesDept && matchesStatus;
       });
    }, [payslips, searchTerm, filters]);
+
+   const paginatedPayslips = React.useMemo(() => {
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      return enrichedPayslips.slice(startIndex, startIndex + itemsPerPage);
+   }, [enrichedPayslips, currentPage, itemsPerPage]);
+
+   const totalPages = Math.ceil(enrichedPayslips.length / itemsPerPage);
+
+   React.useEffect(() => {
+      setCurrentPage(1);
+   }, [searchTerm, filters, itemsPerPage]);
 
    const stats = React.useMemo(() => {
       const total = history?.length || 0;
@@ -2589,11 +2643,11 @@ ${filename}`,
                </div>
             )}
 
-            <div className="overflow-x-auto">
-               <table className="w-full text-left border-collapse">
-                  <thead>
-                     <tr className="bg-slate-50 dark:bg-white/5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-[#333333]">
-                        <th className="px-6 py-4 w-10">
+            <div className="overflow-x-auto max-h-[calc(100vh-450px)] overflow-y-auto scroll-smooth">
+               <table className="w-full text-left border-separate border-spacing-0">
+                  <thead className="sticky top-0 z-30">
+                     <tr className="bg-slate-50 dark:bg-[#1a1a1a] text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <th className="px-6 py-4 w-10 bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">
                            <input
                               type="checkbox"
                               className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
@@ -2601,13 +2655,13 @@ ${filename}`,
                               onChange={toggleAll}
                            />
                         </th>
-                        <th className="px-6 py-4">Employee</th>
-                        <th className="px-6 py-4">Role</th>
-                        <th className="px-6 py-4 text-right">Gross Amount</th>
-                        <th className="px-6 py-4 text-right">Deductions</th>
-                        <th className="px-6 py-4 text-right">Net Payout</th>
-                        <th className="px-6 py-4 text-center">Status</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Employee</th>
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Role</th>
+                        <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Gross Amount</th>
+                        <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Deductions</th>
+                        <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Net Payout</th>
+                        <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Status</th>
+                        <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Actions</th>
                      </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 dark:divide-[#333333]">
@@ -2621,43 +2675,43 @@ ${filename}`,
                      ) : enrichedPayslips.length === 0 ? (
                         <tr>
                            <td colSpan="8" className="px-6 py-32 text-center">
-                              <div className="max-w-xs mx-auto space-y-4">
-                                 <div className="w-20 h-20 bg-slate-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto text-slate-300 dark:text-gray-600">
-                                    <Receipt size={40} />
+                        <div className="max-w-xs mx-auto space-y-4">
+                           <div className="w-20 h-20 bg-slate-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto text-slate-300 dark:text-gray-600">
+                              <Receipt size={40} />
+                           </div>
+                           {history?.length > 0 ? (
+                              <div className="space-y-4">
+                                 <div>
+                                    <h3 className="text-slate-900 dark:text-white font-bold">Payroll Processed but Statements Not Generated</h3>
+                                    <p className="text-slate-500 dark:text-gray-400 text-xs mt-1">We found {history.length} processed payroll records for {monthLabel} ready for final statement generation.</p>
                                  </div>
-                                 {history?.length > 0 ? (
-                                    <div className="space-y-4">
-                                       <div>
-                                          <h3 className="text-slate-900 dark:text-white font-bold">Payroll Processed but Statements Not Generated</h3>
-                                          <p className="text-slate-500 dark:text-gray-400 text-xs mt-1">We found {history.length} processed payroll records for {new Date(2024, filters.month - 1).toLocaleString('default', { month: 'long' })} ready for final statement generation.</p>
-                                       </div>
-                                       <button
-                                          onClick={handleGenerate}
-                                          className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-100 dark:shadow-none flex items-center justify-center gap-2 mx-auto"
-                                       >
-                                          <RefreshCw size={14} /> Generate & Finalize Payslips
-                                       </button>
-                                       <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-2 italic">Generating payslips will create immutable records for employee distribution.</p>
-                                    </div>
-                                 ) : (
-                                    <div className="space-y-4">
-                                       <div>
-                                          <h3 className="text-slate-900 dark:text-white font-bold">No Payslips Generated Yet</h3>
-                                          <p className="text-slate-500 dark:text-gray-400 text-xs mt-1">Start by processing payroll for {new Date(2024, filters.month - 1).toLocaleString('default', { month: 'long' })} to generate statements.</p>
-                                       </div>
-                                       <button
-                                          onClick={() => navigate('/payroll/run')}
-                                          className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-100 dark:shadow-none"
-                                       >
-                                          Run Payroll Wizard
-                                       </button>
-                                       <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-2">Payslips are only available after payroll execution.</p>
-                                    </div>
-                                 )}
+                                 <button
+                                    onClick={handleGenerate}
+                                    className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-100 dark:shadow-none flex items-center justify-center gap-2 mx-auto"
+                                 >
+                                    <RefreshCw size={14} /> Generate & Finalize Payslips
+                                 </button>
+                                 <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-2 italic">Generating payslips will create immutable records for employee distribution.</p>
                               </div>
-                           </td>
-                        </tr>
-                     ) : enrichedPayslips.map((p) => {
+                           ) : (
+                              <div className="space-y-4">
+                                 <div>
+                                    <h3 className="text-slate-900 dark:text-white font-bold">No Payslips Generated Yet</h3>
+                                    <p className="text-slate-500 dark:text-gray-400 text-xs mt-1">Start by processing payroll for {monthLabel} to generate statements.</p>
+                                 </div>
+                                 <button
+                                    onClick={() => navigate('/payroll/run')}
+                                    className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-100 dark:shadow-none"
+                                 >
+                                    Run Payroll Wizard
+                                 </button>
+                                 <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-2">Payslips are only available after payroll execution.</p>
+                              </div>
+                           )}
+                        </div>
+                     </td>
+                  </tr>
+               ) : paginatedPayslips.map((p) => {
                         const isGenerated = p.isGenerated || p.status === 'GENERATED';
                         const isPaid = p.status === 'PAID';
                         const isSent = p.status === 'SENT' || p.isEmailSent;
@@ -2715,6 +2769,68 @@ ${filename}`,
 
                   </tbody>
                </table>
+            </div>
+            
+            {/* 📄 Pagination Controls */}
+            <div className="p-4 border-t border-slate-50 dark:border-white/5 flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-[#111111] gap-4">
+               <div className="flex items-center gap-4">
+                  <p className="text-xs font-bold text-slate-400 dark:text-gray-500">
+                     Showing <span className="text-slate-900 dark:text-white">{Math.min(enrichedPayslips.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className="text-slate-900 dark:text-white">{Math.min(enrichedPayslips.length, currentPage * itemsPerPage)}</span> of <span className="text-slate-900 dark:text-white">{enrichedPayslips.length}</span> employees
+                  </p>
+                  
+                  <div className="h-4 w-px bg-slate-100 dark:bg-white/10 hidden sm:block" />
+
+                  <div className="flex items-center gap-2">
+                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rows:</span>
+                     <select 
+                        value={itemsPerPage} 
+                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                        className="bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-md px-2 py-0.5 text-[10px] font-black text-slate-600 dark:text-gray-400 outline-none cursor-pointer"
+                     >
+                        {[5, 10, 20, 50, 100].map(size => (
+                           <option key={size} value={size}>{size}</option>
+                        ))}
+                     </select>
+                  </div>
+               </div>
+
+               {totalPages > 1 && (
+                  <div className="flex items-center gap-1.5">
+                     <button
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        className="p-2 border border-slate-100 dark:border-white/5 rounded-lg text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 transition-all hover:bg-slate-50 dark:hover:bg-white/5"
+                     >
+                        <ChevronLeft size={16} />
+                     </button>
+                     
+                     <div className="flex items-center gap-1 mx-1">
+                        {[...Array(totalPages)].map((_, idx) => {
+                           if (idx === 0 || idx === totalPages - 1 || (idx >= currentPage - 2 && idx <= currentPage)) {
+                              return (
+                                 <button
+                                    key={idx}
+                                    onClick={() => setCurrentPage(idx + 1)}
+                                    className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${currentPage === idx + 1 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none' : 'text-slate-400 dark:text-gray-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                                 >
+                                    {idx + 1}
+                                 </button>
+                              );
+                           }
+                           if (idx === 1 || idx === totalPages - 2) return <span key={idx} className="text-slate-300 dark:text-gray-600 font-black">...</span>;
+                           return null;
+                        })}
+                     </div>
+
+                     <button
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        className="p-2 border border-slate-100 dark:border-white/5 rounded-lg text-slate-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 transition-all hover:bg-slate-50 dark:hover:bg-white/5"
+                     >
+                        <ChevronRight size={16} />
+                     </button>
+                  </div>
+               )}
             </div>
          </div>
 

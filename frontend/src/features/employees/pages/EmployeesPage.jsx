@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { userAPI, auditAPI } from '@/services/endpoints'
 import { useAuthStore } from '@/store/authStore'
 import StatusBadge from '@/components/ui/StatusBadge'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import Spinner from '@/components/ui/Spinner'
 import PageHeader from '@/components/ui/PageHeader'
 import {
@@ -191,9 +192,9 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5 col-span-2">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Employee ID (Optional)</label>
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Employee ID *</label>
                         <input name="employeeId" maxLength={20} className={getInputClass('employeeId')} placeholder="e.g. EMP001" value={formData.employeeId || ''} onChange={onChange} />
-                        {errors.employeeId && <p className="text-[10px] text-red-500 font-medium">{typeof errors.employeeId === 'string' ? errors.employeeId : 'This Employee ID is already taken'}</p>}
+                        {errors.employeeId && <p className="text-[10px] text-red-500 font-medium">{typeof errors.employeeId === 'string' ? errors.employeeId : 'Employee ID is required'}</p>}
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name *</label>
@@ -482,6 +483,7 @@ export default function EmployeesPage() {
         if (!data.phone?.trim() || data.phone.replace(/\D/g, '').length !== 10) errors.phone = true
         if (!data.joinDate) errors.joinDate = true
         if (!data.role && !data.roleId) errors.role = true
+        if (!data.employeeId?.trim()) errors.employeeId = true
 
         // Bank Details Validation
         if (!data.bankName?.trim()) errors.bankName = true
@@ -1079,28 +1081,21 @@ export default function EmployeesPage() {
                 </div>
             </Modal>
 
-            <Modal open={!!deleteEmp} onClose={() => !deleteMut.isPending && setDeleteEmp(null)} maxWidth="max-w-md">
-                <div className="px-6 pt-6 pb-2 text-center space-y-3">
-                    <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto">
-                        <Trash2 size={24} className="text-red-500" />
-                    </div>
-                    <h2 className="text-lg font-bold text-slate-800 dark:text-white">Delete Employee?</h2>
-                    <p className="text-sm text-slate-500">
-                        Are you sure you want to permanently delete <strong className="text-slate-700 dark:text-white">{deleteEmp?.name}</strong>?
-                        This action <span className="text-red-500 font-semibold">cannot be undone</span>.
-                    </p>
-                </div>
-                <div className="flex items-center justify-center gap-3 px-6 py-5">
-                    <button onClick={() => setDeleteEmp(null)} disabled={deleteMut.isPending} className="btn-secondary min-w-[120px]">Cancel</button>
-                    <button
-                        onClick={() => deleteMut.mutate(deleteEmp._id)}
-                        disabled={deleteMut.isPending}
-                        className="min-w-[120px] bg-red-500 hover:bg-red-600 text-white py-2 rounded-xl font-bold transition-all"
-                    >
-                        {deleteMut.isPending ? 'Deleting...' : 'Delete'}
-                    </button>
-                </div>
-            </Modal>
+            <ConfirmModal
+                isOpen={!!deleteEmp}
+                onClose={() => setDeleteEmp(null)}
+                onConfirm={() => deleteMut.mutate(deleteEmp._id)}
+                title="Permanently Delete Employee?"
+                message={(
+                    <span>
+                        Are you sure you want to delete <strong className="text-slate-900 dark:text-white">{deleteEmp?.name}</strong>? 
+                        You won't be able to see this data again and this action <strong>cannot be undone</strong>.
+                    </span>
+                )}
+                confirmText="Yes, Delete Employee"
+                isLoading={deleteMut.isPending}
+                danger
+            />
 
             {/* Trial limit upgrade modal */}
             <TrialLimitModal

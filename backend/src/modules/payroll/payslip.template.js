@@ -351,3 +351,85 @@ exports.getEnterprisePayslipHtml = (payroll, settings = {}) => {
 </html>
     `;
 };
+
+/**
+ * Professional Payslip Email Notification Template
+ * High-end design for the email body that notifies the user.
+ */
+exports.getProfessionalPayslipEmailBody = (payroll, settings = {}) => {
+    const employeeName = payroll.user?.name || payroll.employeeInfo?.name || 'Employee';
+    const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+    const monthName = monthNames[(payroll.month || 1) - 1];
+    const year = payroll.year || new Date().getFullYear();
+    const net = payroll.breakdown?.netPay || 0;
+    const companyName = settings?.organization?.companyName || 'CALTIMS';
+    const currencySymbol = settings?.organization?.currency === 'USD' ? '$' : '₹';
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7fa; color: #334155; margin: 0; padding: 0; }
+        .wrapper { padding: 40px 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        .header { background: linear-gradient(135deg, #4f46e5, #7c3aed); padding: 40px; text-align: center; color: white; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+        .body { padding: 40px; line-height: 1.6; }
+        .greeting { font-size: 18px; font-weight: 700; color: #1e293b; margin-bottom: 16px; }
+        .message { font-size: 15px; color: #475569; margin-bottom: 24px; }
+        .summary-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+        .summary-row { display: flex; justify-content: space-between; margin-bottom: 12px; }
+        .label { font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+        .value { font-size: 15px; font-weight: 700; color: #1e293b; }
+        .net-value { font-size: 20px; font-weight: 800; color: #4f46e5; }
+        .footer { padding: 24px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; }
+        .attachment-note { font-size: 13px; color: #64748b; font-style: italic; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div class="container">
+            <div class="header">
+                <h1 style="color: white; margin: 0;">${companyName}</h1>
+            </div>
+            <div class="body">
+                <div class="greeting">Hello ${employeeName},</div>
+                <div class="message">
+                    Your payroll statement for <strong>${monthName} ${year}</strong> has been processed and is now available for your review.
+                </div>
+                
+                <div class="summary-card">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding-bottom: 10px;"><span class="label">Pay Period</span></td>
+                            <td style="text-align: right; padding-bottom: 10px;"><span class="value">${monthName} ${year}</span></td>
+                        </tr>
+                        <tr>
+                            <td style="padding-top: 10px; border-top: 1px solid #e2e8f0;"><span class="label">Net Disbursement</span></td>
+                            <td style="text-align: right; padding-top: 10px; border-top: 1px solid #e2e8f0;"><span class="net-value">${currencySymbol}${net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="message">
+                    Please find the detailed payslip attached as a PDF document to this email for your records.
+                </div>
+
+                <div class="attachment-note">
+                    Note: If you have any discrepancies or questions regarding this payout, please reach out to the HR or Finance department.
+                </div>
+            </div>
+            <div class="footer">
+                &copy; ${year} ${companyName} | Secure Payroll Services
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+    `;
+};

@@ -598,7 +598,7 @@ const emailService = {
   async sendPayslipsBulk(payrolls, companyName = 'CALTIMS') {
     const transporter = getTransporter();
     const pdfGeneratorService = require('../../modules/reports/pdfGenerator.service');
-    const { getEnterprisePayslipHtml } = require('../../modules/payroll/payslip.template');
+    const { getProfessionalPayslipEmailBody } = require('../../modules/payroll/payslip.template');
     
     logger.info(`[EmailService] Initiating bulk dispatch for ${payrolls.length} employees`);
     
@@ -614,8 +614,8 @@ const emailService = {
 
             const fileName = `Payslip_${data.user?.employeeId || data.employeeInfo?.employeeId || 'NA'}_${monthName}_${data.year}.pdf`;
             
-            // Get premium HTML body for email
-            const html = getEnterprisePayslipHtml(data, { organization: { companyName } });
+            // Get premium professional email body
+            const html = getProfessionalPayslipEmailBody(data, { organization: { companyName } });
 
             await transporter.sendMail({
                 from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
@@ -670,9 +670,9 @@ const emailService = {
 
 /** Internal HTML Helper (Not used if using template) */
 function _getPayslipEmailHtml(payroll, monthName, companyName) {
-  const { getEnterprisePayslipHtml } = require('../../modules/payroll/payslip.template');
-  // Return the full premium template directly
-  return getEnterprisePayslipHtml(payroll, { organization: { companyName } });
+  const { getProfessionalPayslipEmailBody } = require('../../modules/payroll/payslip.template');
+  // Return the professional email body
+  return getProfessionalPayslipEmailBody(payroll, { organization: { companyName } });
 }
 
 module.exports = emailService;

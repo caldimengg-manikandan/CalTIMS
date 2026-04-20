@@ -141,6 +141,10 @@ const projectService = {
 
   async create(data, organizationId) {
     if (!data.code) throw new AppError('Project code is required', 400);
+    if (!data.endDate) throw new AppError('End date is required', 400);
+    if (!data.allocatedEmployees || data.allocatedEmployees.length === 0) {
+      throw new AppError('At least one team member is required', 400);
+    }
 
     // Check uniqueness within the organization
     const existing = await prisma.project.findFirst({ 
@@ -253,6 +257,11 @@ const projectService = {
         } 
       });
       if (existing) throw new AppError(`Project with code '${data.code}' already exists`, 409);
+    }
+
+    if (data.endDate === null || data.endDate === '') throw new AppError('End date cannot be empty', 400);
+    if (data.allocatedEmployees && data.allocatedEmployees.length === 0) {
+      throw new AppError('At least one team member must be assigned', 400);
     }
 
     let { managerId, allocatedEmployees, startDate, endDate, ...updateData } = data;

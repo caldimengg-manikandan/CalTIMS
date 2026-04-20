@@ -10,6 +10,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import CalendarEventModal from '../components/CalendarEventModal'
 import { toast } from 'react-hot-toast'
 import { Plus, Globe, User, X, Palmtree, Pencil, Trash2, Calendar as CalendarIcon, Info } from 'lucide-react'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 
 const localizer = momentLocalizer(moment)
 
@@ -225,9 +226,16 @@ export default function CalendarPage() {
         }
     }
 
+    const [deleteEventId, setDeleteEventId] = useState(null)
+
     const handleDelete = (id) => {
-        if (window.confirm('Delete this event?')) {
-            deleteMutation.mutate(id)
+        setDeleteEventId(id)
+    }
+
+    const confirmDelete = () => {
+        if (deleteEventId) {
+            deleteMutation.mutate(deleteEventId)
+            setDeleteEventId(null)
         }
     }
 
@@ -305,6 +313,22 @@ export default function CalendarPage() {
                 onSave={handleSave}
                 onDelete={handleDelete}
                 isAdmin={isAdmin()}
+            />
+
+            <ConfirmModal
+                isOpen={!!deleteEventId}
+                onClose={() => setDeleteEventId(null)}
+                onConfirm={confirmDelete}
+                title="Permanently Delete Event?"
+                message={(
+                    <span>
+                        Are you sure you want to delete this event? 
+                        You won't be able to see this data again and this action <strong>cannot be undone</strong>.
+                    </span>
+                )}
+                confirmText="Yes, Delete Event"
+                isLoading={deleteMutation.isPending}
+                danger
             />
         </div>
     )

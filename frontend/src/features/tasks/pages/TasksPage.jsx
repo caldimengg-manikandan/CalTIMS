@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { taskAPI, projectAPI } from '@/services/endpoints'
 import StatusBadge from '@/components/ui/StatusBadge'
 import Spinner from '@/components/ui/Spinner'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import {
     Search, Plus, SlidersHorizontal, Download, Eye,
     X, Save, ChevronDown, Pencil, Trash2, ListTodo,
@@ -668,28 +669,21 @@ export default function TasksPage() {
                 </div>
             </Modal>
 
-            {/* ══════════════ DELETE CONFIRM MODAL ══════════════ */}
-            <Modal open={!!deleteTask} onClose={() => !deleteMut.isLoading && setDeleteTask(null)} maxWidth="max-w-md">
-                <div className="px-6 pt-6 pb-2 text-center space-y-3">
-                    <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto">
-                        <Trash2 size={24} className="text-red-500" />
-                    </div>
-                    <h2 className="text-lg font-bold text-slate-800 dark:text-white">Delete Task?</h2>
-                    <p className="text-sm text-slate-500">
-                        Are you sure you want to permanently delete <strong className="text-slate-700 dark:text-white">{deleteTask?.name}</strong>?
-                    </p>
-                </div>
-                <div className="flex items-center justify-center gap-3 px-6 py-5">
-                    <button onClick={() => setDeleteTask(null)} disabled={deleteMut.isLoading} className="btn-secondary min-w-[120px]">Cancel</button>
-                    <button
-                        onClick={() => deleteMut.mutate(deleteTask.id)}
-                        disabled={deleteMut.isLoading}
-                        className="min-w-[120px] flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
-                    >
-                        {deleteMut.isLoading ? 'Deleting...' : <><Trash2 size={14} /> Delete</>}
-                    </button>
-                </div>
-            </Modal>
+            <ConfirmModal
+                isOpen={!!deleteTask}
+                onClose={() => setDeleteTask(null)}
+                onConfirm={() => deleteMut.mutate(deleteTask.id)}
+                title="Permanently Delete Task?"
+                message={(
+                    <span>
+                        Are you sure you want to delete <strong className="text-slate-900 dark:text-white">{deleteTask?.name}</strong>? 
+                        You won't be able to see this data again and this action <strong>cannot be undone</strong>.
+                    </span>
+                )}
+                confirmText="Yes, Delete Task"
+                isLoading={deleteMut.isPending}
+                danger
+            />
 
             {/* ══ BULK ADD MODAL ══ */}
             <Modal open={bulkAddOpen} onClose={() => !bulkCreateMut.isPending && setBulkAddOpen(false)} maxWidth="max-w-md">

@@ -2,6 +2,8 @@ import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { projectAPI, userAPI } from '@/services/endpoints'
 import StatusBadge from '@/components/ui/StatusBadge'
+import ConfirmModal from '@/components/ui/ConfirmModal'
+
 import Spinner from '@/components/ui/Spinner'
 import {
     Search, Plus, SlidersHorizontal, Download, Eye, X,
@@ -24,19 +26,19 @@ const projectSchema = z.object({
     description: z.string().max(500, 'Description cannot exceed 500 characters').optional().nullable(),
     clientName: z.string().max(100, 'Client name cannot exceed 100 characters').optional().nullable(),
     startDate: z.string().min(1, 'Start date is required').regex(/^\d{4}-/, 'Year must be exactly 4 digits'),
-    endDate: z.string().optional().nullable().or(z.literal('')).refine(val => !val || /^\d{4}-/.test(val), 'Year must be exactly 4 digits'),
+    endDate: z.string().min(1, 'End date is required').regex(/^\d{4}-/, 'Year must be exactly 4 digits'),
     status: z.enum(['active', 'completed', 'on-hold']).default('active'),
     managerId: z.string().min(1, 'Project manager is required'),
     allocatedEmployees: z.array(z.object({
-        userId: z.string().optional().nullable(),
+        userId: z.string().min(1, 'Member selection is required'),
         role: z.string().max(50, 'Role cannot exceed 50 characters').default('Developer'),
         allocationPercent: z.number().min(0, 'Min 0%').max(100, 'Max 100%').default(100),
         budgetHours: z.preprocess((val) => val === '' ? 0 : Number(val), z.number().min(0).default(0))
-    })).default([]),
+    })).min(1, 'At least one team member is required').default([]),
     onlyProjectTasks: z.boolean().default(false),
     budgetHours: z.preprocess((val) => val === '' ? 0 : Number(val), z.number().min(0).default(0))
 }).refine((data) => {
-    if (!data.endDate) return true;
+    if (!data.endDate || !data.startDate) return true;
     return new Date(data.endDate) >= new Date(data.startDate);
 }, {
     message: "End date cannot be before start date",
@@ -276,7 +278,7 @@ function ProjectFormModal({ project, onClose }) {
                             {errors.startDate && <p className="text-[10px] text-rose-500">{errors.startDate.message}</p>}
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">End Date</label>
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">End Date *</label>
                             <input 
                                 {...register('endDate')} 
                                 type="date" 
@@ -298,15 +300,6 @@ function ProjectFormModal({ project, onClose }) {
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
                             <textarea {...register('description')} maxLength={500} rows={2} className="input resize-none" placeholder="Optional project details..." />
                         </div>
-                        {/* <div className="col-span-2 space-y-1.5 pt-2">
-                            <label className="flex items-center gap-2 cursor-pointer group">
-                                <input type="checkbox" {...register('onlyProjectTasks')} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-indigo-500 transition-all cursor-pointer" />
-                                <div className="flex flex-col">
-                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-primary transition-colors">Only show project-specific tasks in timesheet</span>
-                                    <span className="text-[10px] text-slate-400 font-normal leading-tight">If checked, global task categories will be hidden for this project.</span>
-                                </div>
-                            </label>
-                        </div> */}
                     </div>
                 </div>
 
@@ -314,7 +307,7 @@ function ProjectFormModal({ project, onClose }) {
                 <div>
                     <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700">
                         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                            <Users size={13} /> Team Assignment
+                            <Users size={13} /> Team Assignment *
                         </h3>
                         <button type="button" onClick={() => append({ userId: '', role: 'Developer', allocationPercent: 100, budgetHours: 0 })}
                             className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1">
@@ -325,10 +318,13 @@ function ProjectFormModal({ project, onClose }) {
                         {fields.map((field, index) => (
                             <div key={field.id} className="flex gap-3 items-start bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
                                 <div className="flex-1">
-                                    <select {...register(`allocatedEmployees.${index}.userId`)} className="input text-xs h-9">
+                                    <select {...register(`allocatedEmployees.${index}.userId`)} className={`input text-xs h-9 ${errors.allocatedEmployees?.[index]?.userId ? 'border-rose-400' : ''}`}>
                                         <option value="">{isAllLoading ? 'Loading members...' : 'Select Member...'}</option>
                                         {allEmployees?.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
                                     </select>
+                                    {errors.allocatedEmployees?.[index]?.userId && (
+                                        <p className="text-[10px] text-rose-500 mt-0.5">{errors.allocatedEmployees[index].userId.message}</p>
+                                    )}
                                 </div>
                                 <div className="w-32">
                                     <input {...register(`allocatedEmployees.${index}.role`)} maxLength={50} className="input text-xs h-9" placeholder="Dev, PM..." />
@@ -366,6 +362,11 @@ function ProjectFormModal({ project, onClose }) {
                                 </button>
                             </div>
                         ))}
+                        {errors.allocatedEmployees?.message && (
+                            <p className="text-[10px] text-rose-500 font-bold mt-2 flex items-center gap-1">
+                                <AlertCircle size={10} /> {errors.allocatedEmployees.message}
+                            </p>
+                        )}
                         {fields.length === 0 && (
                             <p className="text-xs text-slate-400 text-center py-5 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
                                 No team members assigned yet
@@ -927,28 +928,21 @@ export default function ProjectsPage() {
             )}
 
             {/* ══ DELETE CONFIRM MODAL ══ */}
-            <Modal open={!!deleteProject} onClose={() => !deleteMut.isLoading && setDeleteProject(null)} maxWidth="max-w-md">
-                <div className="px-6 pt-6 pb-2 text-center space-y-3">
-                    <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto">
-                        <Trash2 size={24} className="text-red-500" />
-                    </div>
-                    <h2 className="text-lg font-bold text-slate-800 dark:text-white">Delete Project?</h2>
-                    <p className="text-sm text-slate-500">
-                        Are you sure you want to permanently delete <strong className="text-slate-700 dark:text-white">{deleteProject?.name}</strong>?
-                        This action <span className="text-red-500 font-semibold">cannot be undone</span>.
-                    </p>
-                </div>
-                <div className="flex items-center justify-center gap-3 px-6 py-5">
-                    <button onClick={() => setDeleteProject(null)} disabled={deleteMut.isLoading} className="btn-secondary min-w-[120px]">Cancel</button>
-                    <button
-                        onClick={() => deleteMut.mutate(deleteProject._id)}
-                        disabled={deleteMut.isLoading}
-                        className="min-w-[120px] flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
-                    >
-                        {deleteMut.isLoading ? 'Deleting...' : <><Trash2 size={14} /> Delete</>}
-                    </button>
-                </div>
-            </Modal>
+            <ConfirmModal
+                isOpen={!!deleteProject}
+                onClose={() => setDeleteProject(null)}
+                onConfirm={() => deleteMut.mutate(deleteProject._id)}
+                title="Permanently Delete Project?"
+                message={(
+                    <span>
+                        Are you sure you want to delete <strong className="text-slate-900 dark:text-white">{deleteProject?.name}</strong>? 
+                        You won't be able to see this data again and this action <strong>cannot be undone</strong>.
+                    </span>
+                )}
+                confirmText="Yes, Delete Project"
+                isLoading={deleteMut.isPending}
+                danger
+            />
         </div>
     )
 }

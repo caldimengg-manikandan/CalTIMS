@@ -66,6 +66,7 @@ export default function EmployeeFormPage() {
         if (!formData.designation?.trim() || formData.designation.length > 50) newErrors.designation = true
         if (!formData.phone?.trim() || formData.phone.replace(/\D/g, '').length !== 10) newErrors.phone = true
         if (!formData.joinDate) newErrors.joinDate = true
+        if (!formData.employeeId?.trim()) newErrors.employeeId = true
 
         // Bank Details Validation
         if (!formData.bankName?.trim()) newErrors.bankName = true
@@ -152,7 +153,7 @@ export default function EmployeeFormPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700 dark:text-white">Employee ID (Optional)</label>
+                        <label className="text-sm font-medium text-slate-700 dark:text-white">Employee ID *</label>
                         <input name="employeeId" className={getInputClass('employeeId')} placeholder="e.g. EMP001"
                             value={formData.employeeId} onChange={handleChange} />
                         {errors.employeeId && <p className="text-[10px] text-red-500 font-medium">{typeof errors.employeeId === 'string' ? errors.employeeId : ''}</p>}
