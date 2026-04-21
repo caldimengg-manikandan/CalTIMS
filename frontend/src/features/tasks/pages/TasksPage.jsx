@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { taskAPI, projectAPI } from '@/services/endpoints'
 import StatusBadge from '@/components/ui/StatusBadge'
 import Spinner from '@/components/ui/Spinner'
-import ConfirmModal from '@/components/ui/ConfirmModal'
+import TwoStepConfirmModal from '@/components/ui/TwoStepConfirmModal'
 import {
     Search, Plus, SlidersHorizontal, Download, Eye,
     X, Save, ChevronDown, Pencil, Trash2, ListTodo,
@@ -669,11 +669,11 @@ export default function TasksPage() {
                 </div>
             </Modal>
 
-            <ConfirmModal
+            <TwoStepConfirmModal
                 isOpen={!!deleteTask}
                 onClose={() => setDeleteTask(null)}
                 onConfirm={() => deleteMut.mutate(deleteTask.id)}
-                title="Permanently Delete Task?"
+                title="Are you sure you want to delete this?"
                 message={(
                     <span>
                         Are you sure you want to delete <strong className="text-slate-900 dark:text-white">{deleteTask?.name}</strong>? 

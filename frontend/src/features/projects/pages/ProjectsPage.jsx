@@ -2,7 +2,7 @@ import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { projectAPI, userAPI } from '@/services/endpoints'
 import StatusBadge from '@/components/ui/StatusBadge'
-import ConfirmModal from '@/components/ui/ConfirmModal'
+import TwoStepConfirmModal from '@/components/ui/TwoStepConfirmModal'
 
 import Spinner from '@/components/ui/Spinner'
 import {
@@ -942,11 +942,11 @@ export default function ProjectsPage() {
             )}
 
             {/* ══ DELETE CONFIRM MODAL ══ */}
-            <ConfirmModal
+            <TwoStepConfirmModal
                 isOpen={!!deleteProject}
                 onClose={() => setDeleteProject(null)}
                 onConfirm={() => deleteMut.mutate(deleteProject._id)}
-                title="Permanently Delete Project?"
+                title="Are you sure you want to delete this?"
                 message={(
                     <span>
                         Are you sure you want to delete <strong className="text-slate-900 dark:text-white">{deleteProject?.name}</strong>? 

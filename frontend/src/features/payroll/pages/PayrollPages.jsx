@@ -9,6 +9,7 @@ import Spinner from '@/components/ui/Spinner';
 import StatementPreview from '../components/StatementPreview';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart as RePieChart, Pie, LineChart, Line } from 'recharts';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import TwoStepConfirmModal from '@/components/ui/TwoStepConfirmModal';
 import Modal from '@/components/ui/Modal';
 import { formatCurrency, getCurrencySymbol } from '@/utils/formatters';
 import { exportToPdf } from '@/utils/pdfExport';
@@ -850,11 +851,11 @@ export const EmployeePayrollProfiles = () => {
          </div>
 
          {/* Delete Confirmation Modal */}
-         <ConfirmModal
+         <TwoStepConfirmModal
             isOpen={deleteConfirm.isOpen}
             onClose={() => setDeleteConfirm({ isOpen: false, id: null })}
             onConfirm={() => deleteConfirm.id && deleteProfileMutation.mutate(deleteConfirm.id)}
-            title="Permanently Remove Payroll Profile?"
+            title="Are you sure you want to delete this?"
             message="Are you sure you want to delete this payroll profile? You won't be able to see this data again and this action cannot be undone."
             confirmText="Yes, Remove Profile"
             isLoading={deleteProfileMutation.isPending}
@@ -1625,11 +1626,11 @@ export const SalaryStructures = () => {
             confirmText={statusConfirm.isActive ? "Yes, Deactivate" : "Yes, Activate"}
          />
 
-          <ConfirmModal
+          <TwoStepConfirmModal
             isOpen={hardDeleteConfirm.isOpen}
             onClose={() => setHardDeleteConfirm({ isOpen: false, id: null })}
             onConfirm={() => hardDeleteConfirm.id && deleteMutation.mutate(hardDeleteConfirm.id)}
-            title="Permanently Delete Structure?"
+            title="Are you sure you want to delete this?"
             message={(
                <span>
                   Are you sure you want to delete this salary structure?

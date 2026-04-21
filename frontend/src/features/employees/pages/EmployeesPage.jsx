@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { userAPI, auditAPI } from '@/services/endpoints'
 import { useAuthStore } from '@/store/authStore'
 import StatusBadge from '@/components/ui/StatusBadge'
-import ConfirmModal from '@/components/ui/ConfirmModal'
+import TwoStepConfirmModal from '@/components/ui/TwoStepConfirmModal'
 import Spinner from '@/components/ui/Spinner'
 import PageHeader from '@/components/ui/PageHeader'
 import {
@@ -1081,11 +1081,11 @@ export default function EmployeesPage() {
                 </div>
             </Modal>
 
-            <ConfirmModal
+            <TwoStepConfirmModal
                 isOpen={!!deleteEmp}
                 onClose={() => setDeleteEmp(null)}
                 onConfirm={() => deleteMut.mutate(deleteEmp._id)}
-                title="Permanently Delete Employee?"
+                title="Are you sure you want to delete this?"
                 message={(
                     <span>
                         Are you sure you want to delete <strong className="text-slate-900 dark:text-white">{deleteEmp?.name}</strong>? 
