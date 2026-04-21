@@ -90,12 +90,13 @@ const userService = {
       },
     };
 
-    const [users, total] = await Promise.all([
+    const [users, total, leaveTypes] = await Promise.all([
       prisma.user.findMany({ where, include, skip, take: limit, orderBy: { createdAt: 'desc' } }),
       prisma.user.count({ where }),
+      prisma.leaveType.findMany({ where: { organizationId, isDeleted: false } })
     ]);
 
-    return { users: users.map(formatUser), pagination: buildPaginationMeta(total, page, limit) };
+    return { users: users.map(u => formatUser(u, leaveTypes)), pagination: buildPaginationMeta(total, page, limit) };
   },
 
   async getById(id, organizationId) {
@@ -114,7 +115,9 @@ const userService = {
       },
     });
     if (!user || user.isDeleted) throw new AppError('User not found', 404);
-    return formatUser(user);
+    
+    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId, isDeleted: false } });
+    return formatUser(user, leaveTypes);
   },
 
   async create(data, context, ipAddress) {
@@ -282,7 +285,8 @@ const userService = {
       logAction({ userId: requestorId, action: 'CREATE_EMPLOYEE', entityType: 'User', entityId: user.id, details: { name: user.name, email: user.email }, ipAddress });
     }
 
-    return formatUser(user);
+    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId, isDeleted: false } });
+    return formatUser(user, leaveTypes);
   },
 
   async update(id, data, context) {
@@ -493,7 +497,8 @@ const userService = {
       return updatedUser;
     });
 
-    return formatUser(updated);
+    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId, isDeleted: false } });
+    return formatUser(updated, leaveTypes);
   },
 
   async resetPassword(id, newPassword, organizationId) {
@@ -556,7 +561,9 @@ const userService = {
       },
     });
     if (!user || user.isDeleted) throw new AppError('User not found', 404);
-    return formatUser(user);
+
+    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId, isDeleted: false } });
+    return formatUser(user, leaveTypes);
   },
 
   async deleteUser(id, organizationId) {
@@ -645,7 +652,7 @@ const userService = {
   },
 };
 
-function formatUser(u) {
+function formatUser(u, allLeaveTypes = []) {
   if (!u) return null;
   return {
     id: u.id,
@@ -719,6 +726,13 @@ function formatUser(u) {
     joinDate: u.employee?.joiningDate,
     leaveBalance: (() => {
       const balanceObj = {};
+      
+      // 1. Initialize with theoretical defaults from organization policy
+      allLeaveTypes.forEach(lt => {
+          balanceObj[lt.name] = lt.yearlyQuota;
+      });
+
+      // 2. Override with actual records from the leaveBalance table
       if (u.employee?.leaveBalances) {
         u.employee.leaveBalances.forEach(lb => {
           if (lb.leaveType?.name) {

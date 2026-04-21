@@ -66,6 +66,15 @@ router.get('/timesheet-summary', asyncHandler(async (req, res) => {
   if (from) where.weekStartDate = { gte: new Date(from) };
   if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
   if (userId) where.userId = userId;
+  if (req.query.department) {
+    where.user = {
+      employee: {
+        department: {
+          name: { equals: req.query.department, mode: 'insensitive' }
+        }
+      }
+    };
+  }
 
   const timesheetWeeks = await prisma.timesheetWeek.findMany({
     where,
@@ -146,6 +155,16 @@ router.get('/compliance-summary', requireFeature('advanced_reports'), asyncHandl
   if (from) where.weekStartDate = { gte: new Date(from) };
   if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
 
+  if (req.query.department) {
+    where.user = {
+      employee: {
+        department: {
+          name: { equals: req.query.department, mode: 'insensitive' }
+        }
+      }
+    };
+  }
+
   // Note: if projectId is passed, we must filter at JS level because it's inside JSON rows
   const timesheetWeeks = await prisma.timesheetWeek.findMany({ where });
 
@@ -198,6 +217,16 @@ router.get('/project-utilization', requireFeature('advanced_reports'), asyncHand
 
   if (from) where.weekStartDate = { gte: new Date(from) };
   if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
+
+  if (req.query.department) {
+    where.user = {
+      employee: {
+        department: {
+          name: { equals: req.query.department, mode: 'insensitive' }
+        }
+      }
+    };
+  }
 
   const timesheetWeeks = await prisma.timesheetWeek.findMany({ where });
 
@@ -318,6 +347,14 @@ router.get('/leave-summary', asyncHandler(async (req, res) => {
   if (from) where.startDate = { gte: new Date(from) };
   if (to) where.startDate = { ...where.startDate, lte: new Date(to) };
 
+  if (req.query.department) {
+    where.employee = {
+      department: {
+        name: { equals: req.query.department, mode: 'insensitive' }
+      }
+    };
+  }
+
   // Use Prisma groupBy
   const groups = await prisma.leave.groupBy({
     by: ['leaveTypeId', 'status'],
@@ -342,6 +379,14 @@ router.get('/leave-details', asyncHandler(async (req, res) => {
   if (leaveType) where.leaveTypeId = leaveType;
   if (from) where.startDate = { gte: new Date(from) };
   if (to) where.startDate = { ...where.startDate, lte: new Date(to) };
+
+  if (req.query.department) {
+    where.employee = {
+      department: {
+        name: { equals: req.query.department, mode: 'insensitive' }
+      }
+    };
+  }
 
   const groups = await prisma.leave.groupBy({
     by: ['employeeId'],
@@ -385,6 +430,16 @@ router.get('/timesheet-details', asyncHandler(async (req, res) => {
   if (from) where.weekStartDate = { gte: new Date(from) };
   if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
 
+  if (req.query.department) {
+    where.user = {
+      employee: {
+        department: {
+          name: { equals: req.query.department, mode: 'insensitive' }
+        }
+      }
+    };
+  }
+
   const timesheetWeeks = await prisma.timesheetWeek.findMany({ where });
 
   const details = [];
@@ -427,6 +482,16 @@ router.get('/employee-attendance', asyncHandler(async (req, res) => {
   };
   if (from) where.weekStartDate = { gte: new Date(from) };
   if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
+
+  if (req.query.department) {
+    where.user = {
+      employee: {
+        department: {
+          name: { equals: req.query.department, mode: 'insensitive' }
+        }
+      }
+    };
+  }
 
   const timesheetWeeks = await prisma.timesheetWeek.findMany({
     where,
@@ -486,6 +551,16 @@ router.get('/weekly-trend', requireFeature('advanced_reports'), asyncHandler(asy
   if (from) where.weekStartDate = { gte: new Date(from) };
   if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
   if (userId) where.userId = userId;
+
+  if (req.query.department) {
+    where.user = {
+      employee: {
+        department: {
+          name: { equals: req.query.department, mode: 'insensitive' }
+        }
+      }
+    };
+  }
 
   // For projectId, we must fetch and filter in JS because it's in JSON rows
   const timesheetWeeks = await prisma.timesheetWeek.findMany({ where });
@@ -631,6 +706,16 @@ router.get('/smart-insights', requireFeature('advanced_reports'), asyncHandler(a
   if (from) where.weekStartDate = { gte: new Date(from) };
   if (to) where.weekStartDate = { ...where.weekStartDate, lte: new Date(to) };
 
+  if (req.query.department) {
+    where.user = {
+      employee: {
+        department: {
+          name: { equals: req.query.department, mode: 'insensitive' }
+        }
+      }
+    };
+  }
+
   const [timesheetWeeks, leaveStats] = await Promise.all([
     prisma.timesheetWeek.findMany({
       where,
@@ -712,6 +797,16 @@ router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async
   if (from) where.weekStartDate = { gte: from };
   if (to) where.weekStartDate = { ...where.weekStartDate, lte: to };
   if (userId) where.userId = userId;
+
+  if (req.query.department) {
+    where.user = {
+      employee: {
+        department: {
+          name: { equals: req.query.department, mode: 'insensitive' }
+        }
+      }
+    };
+  }
 
   // Fetch all needed data in parallel
   const [timesheetWeeks, leaveRes, complianceRes] = await Promise.all([
@@ -863,6 +958,16 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
   if (from) where.weekStartDate = { gte: from };
   if (to) where.weekStartDate = { ...where.weekStartDate, lte: to };
   if (userId) where.userId = userId;
+
+  if (req.query.department) {
+    where.user = {
+      employee: {
+        department: {
+          name: { equals: req.query.department, mode: 'insensitive' }
+        }
+      }
+    };
+  }
 
   const timesheetWeeks = await prisma.timesheetWeek.findMany({
     where,

@@ -37,13 +37,19 @@ const userController = {
   }),
 
   update: asyncHandler(async (req, res) => {
+    const before = await userService.getById(req.params.id, req.context.organizationId);
     const user = await userService.update(req.params.id, req.body, req.context);
+    
     auditService.log(
       req.context.userId,
       'UPDATE_EMPLOYEE',
       'Employee',
       req.params.id,
-      { updatedFields: Object.keys(req.body) },
+      { 
+        before, 
+        after: user,
+        updatedFields: Object.keys(req.body) 
+      },
       'SUCCESS',
       req.ip
     ).catch(() => {});

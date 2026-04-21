@@ -458,65 +458,161 @@ const AuditLogPage = () => {
                   : [];
                 const changedKeys = allKeys.filter(k => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
 
-                const fmtVal = (v) => {
-                  if (v === null || v === undefined) return <span className="italic text-slate-400">—</span>;
-                  if (typeof v === 'object') return <span className="font-mono text-[10px]">{JSON.stringify(v)}</span>;
-                  return <span>{String(v)}</span>;
+                const humanize = (s) => s.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^./, str => str.toUpperCase()).trim();
+
+                const fmtVal = (val, isNested = false) => {
+                  if (val === null || val === undefined || val === '') return <span className="italic text-slate-400">—</span>;
+                  
+                  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) {
+                    try {
+                      return <span className="font-semibold text-slate-700 dark:text-slate-200">{format(new Date(val), 'MMM d, yyyy h:mm a')}</span>;
+                    } catch(e) { return <span>{val}</span>; }
+                  }
+
+                  if (typeof val === 'boolean') {
+                    return (
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${val ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200' : 'bg-rose-500 text-white shadow-sm shadow-rose-200'}`}>
+                        {val ? 'YES' : 'NO'}
+                      </span>
+                    );
+                  }
+
+                  if (Array.isArray(val)) {
+                    if (val.length === 0) return <span className="italic text-slate-400 text-[10px]">None</span>;
+                    
+                    if (typeof val[0] === 'object') {
+                      return (
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {val.map((item, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 rounded-md text-[9px] font-bold border border-slate-200 dark:border-white/10">
+                              {item.name || item.title || item.label || item.id || `Item ${i+1}`}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return <span className="font-bold text-slate-700 dark:text-slate-200">{val.join(', ')}</span>;
+                  }
+
+                  if (typeof val === 'object') {
+                    if (val.name || val.title || val.label) {
+                      return <span className="font-bold text-cyan-600 dark:text-cyan-400">{val.name || val.title || val.label}</span>;
+                    }
+
+                    const entries = Object.entries(val);
+                    if (entries.length === 0) return <span className="italic text-slate-400">Empty Object</span>;
+
+                    return (
+                        <div className={`space-y-1 ${isNested ? 'ml-3 pl-3 border-l-2 border-slate-100 dark:border-white/5' : ''}`}>
+                            {entries.map(([k, v]) => (
+                                <div key={k} className="flex items-center justify-between gap-4 py-1 border-b border-slate-50 dark:border-white/[0.03] last:border-0 border-dashed">
+                                    <span className="text-[9px] text-slate-400 font-black uppercase shrink-0 tracking-tight">{humanize(k)}</span>
+                                    <div className="min-w-0 flex-1 flex justify-end text-[10px]">
+                                        {typeof v === 'object' ? fmtVal(v, true) : fmtVal(v, true)}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                  }
+
+                  return <span className="font-black text-slate-800 dark:text-white">{String(val)}</span>;
                 };
 
                 return (
-                  <div className="space-y-3">
-                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Changes</h4>
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1 w-8 bg-cyan-500 rounded-full" />
+                      <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Activity Details</h4>
+                    </div>
 
                     {/* Human-readable message */}
                     {hasMessage && (
-                      <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-500/20 rounded-xl text-sm text-blue-700 dark:text-blue-300 font-medium">
+                      <div className="px-4 py-3 bg-cyan-50/50 dark:bg-cyan-500/5 border border-cyan-100/50 dark:border-cyan-500/10 rounded-xl text-[13px] text-cyan-800 dark:text-cyan-400 font-semibold leading-relaxed shadow-sm">
                         {message}
                       </div>
                     )}
 
-                    {/* Before / After diff table */}
-                    {hasDiff && changedKeys.length > 0 && (
-                      <div className="rounded-xl border border-slate-200 dark:border-[#333333] overflow-hidden">
-                        <div className="grid grid-cols-3 bg-slate-50 dark:bg-[#0a0a0a] border-b border-slate-200 dark:border-[#333333] px-4 py-2">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Field</span>
-                          <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wide">Before</span>
-                          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">After</span>
+                    <div className="space-y-4">
+                      {changedKeys.map(key => {
+                        const isComplex = typeof before[key] === 'object' || typeof after[key] === 'object';
+                        
+                        if (isComplex) {
+                          return (
+                            <div key={key} className="group rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden bg-white dark:bg-slate-900 shadow-sm transition-all hover:shadow-md">
+                              <div className="px-4 py-2 bg-slate-50/80 dark:bg-white/[0.02] border-b border-slate-200 dark:border-white/5 flex items-center justify-between">
+                                <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">{humanize(key)}</span>
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400">STRUCTURED CONTENT</span>
+                              </div>
+                              <div className="grid grid-cols-2 divide-x divide-slate-100 dark:divide-white/5">
+                                <div className="p-4 bg-rose-50/10">
+                                  <p className="text-[9px] font-black text-rose-500 uppercase mb-3 tracking-widest flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Previous
+                                  </p>
+                                  <div className="bg-white/50 dark:bg-black/20 p-3 rounded-xl border border-rose-100/50 dark:border-white/5 shadow-sm">
+                                    {fmtVal(before[key])}
+                                  </div>
+                                </div>
+                                <div className="p-4 bg-emerald-50/10">
+                                  <p className="text-[9px] font-black text-emerald-500 uppercase mb-3 tracking-widest flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Current
+                                  </p>
+                                  <div className="bg-white/50 dark:bg-black/20 p-3 rounded-xl border border-emerald-100/50 dark:border-white/5 shadow-sm">
+                                    {fmtVal(after[key])}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={key} className="group flex items-center hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-all rounded-xl p-3 border border-transparent hover:border-slate-100 dark:hover:border-white/5">
+                            <div className="w-32 shrink-0">
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{humanize(key)}</span>
+                            </div>
+                            <div className="flex-1 flex items-center gap-4 min-w-0">
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[9px] text-rose-400 font-bold uppercase mb-0.5">Prev</div>
+                                  <div className="truncate text-xs text-rose-600 dark:text-rose-400">{fmtVal(before[key])}</div>
+                                </div>
+                                <div className="flex-none text-slate-300 dark:text-slate-700">→</div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[9px] text-emerald-400 font-bold uppercase mb-0.5">Now</div>
+                                  <div className="truncate text-xs font-black text-emerald-700 dark:text-emerald-400">{fmtVal(after[key])}</div>
+                                </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {hasDiff && changedKeys.length === 0 && (
+                        <div className="py-12 flex flex-col items-center justify-center bg-slate-50 dark:bg-white/[0.02] rounded-3xl border border-dashed border-slate-200 dark:border-white/10">
+                          <Activity className="w-8 h-8 text-slate-200 dark:text-white/10 mb-2" />
+                          <p className="text-xs text-slate-400 font-medium italic">No field-level changes recorded</p>
                         </div>
-                        {changedKeys.map(key => (
-                          <div key={key} className="grid grid-cols-3 border-b border-slate-100 dark:border-[#222222] last:border-0 px-4 py-2.5 hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-colors">
-                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 capitalize pr-2">
-                              {key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim()}
-                            </span>
-                            <span className="text-xs text-rose-600 dark:text-rose-400 pr-2 break-all">{fmtVal(before[key])}</span>
-                            <span className="text-xs text-emerald-700 dark:text-emerald-400 break-all">{fmtVal(after[key])}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                      )}
 
-                    {/* Unchanged fields note */}
-                    {hasDiff && changedKeys.length === 0 && (
-                      <p className="text-xs text-slate-400 italic">No field-level changes detected.</p>
-                    )}
-
-                    {/* Extra contextual fields */}
-                    {hasExtras && (
-                      <div className="rounded-xl border border-slate-200 dark:border-[#333333] overflow-hidden">
-                        {extraKeys.map(k => (
-                          <div key={k} className="flex items-start gap-4 border-b border-slate-100 dark:border-[#222222] last:border-0 px-4 py-2.5 hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-colors">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide w-28 shrink-0 pt-0.5">
-                              {k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim()}
-                            </span>
-                            <span className="text-xs text-slate-700 dark:text-slate-300 break-all font-mono">
-                              {typeof details[k] === 'object'
-                                ? JSON.stringify(details[k], null, 2)
-                                : String(details[k])}
-                            </span>
+                      {/* Extra contextual fields */}
+                      {hasExtras && (
+                        <div className="mt-8 pt-6 border-t border-slate-100 dark:border-white/5">
+                           <div className="flex items-center gap-2 mb-4">
+                            <span className="w-1.5 h-4 bg-orange-400 rounded-full shadow-sm" />
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Additional Context</h4>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          <div className="grid grid-cols-1 gap-3">
+                            {extraKeys.map(k => (
+                              <div key={k} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 shadow-sm">
+                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-tight">{humanize(k)}</span>
+                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                                  {fmtVal(details[k])}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })()}

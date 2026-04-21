@@ -27,7 +27,11 @@ exports.updateConfig = async (req, res, next) => {
       update: { data: merged }, 
       create: { organizationId: req.organizationId, data: merged } 
     });
-    await auditService.log(req.user?.id, 'POLICY_UPDATE', 'OrgSettings', null, req.body, 'SUCCESS', req.ip, req.organizationId);
+    await auditService.log(req.user?.id, 'POLICY_UPDATE', 'OrgSettings', null, { 
+      before: current.payroll || {}, 
+      after: merged.payroll,
+      message: 'Updated payroll configuration settings'
+    }, 'SUCCESS', req.ip, req.organizationId);
     res.status(200).json({ success: true, data: merged.payroll });
   } catch (err) { next(err); }
 };
@@ -168,11 +172,25 @@ exports.createOrUpdateProfile = async (req, res, next) => {
     if (updateData.salaryStructureId === '') updateData.salaryStructureId = null;
     ['monthlyCTC'].forEach(field => { if (updateData[field] === '') updateData[field] = 0; });
     
+    const before = await prisma.payrollProfile.findUnique({ where: { employeeId } });
+
     const profile = await prisma.payrollProfile.upsert({
       where: { employeeId },
       update: updateData,
       create: { employeeId, organizationId: req.organizationId, ...updateData },
     });
+
+    await auditService.log(
+      req.user?.id, 
+      'PAYROLL_PROFILE_UPDATE', 
+      'PayrollProfile', 
+      profile.id, 
+      { before, after: profile }, 
+      'SUCCESS', 
+      req.ip, 
+      req.organizationId
+    ).catch(() => {});
+
     res.status(200).json({ success: true, data: profile });
   } catch (err) { logger.error('Error in createOrUpdateProfile:', err.message); next(err); }
 };

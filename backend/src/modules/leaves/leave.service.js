@@ -551,30 +551,47 @@ const leaveService = {
   async getBalance(userId, organizationId) {
     const employee = await prisma.employee.findUnique({ 
       where: { userId },
-      include: { leaveBalances: { include: { leaveType: true } } }
+      include: { 
+        leaveBalances: { include: { leaveType: true } }
+      }
     });
+
     if (!employee || employee.isDeleted) return {};
 
-    // If balances table is empty, compute from leaves
-    if (employee.leaveBalances.length === 0) {
-      const types = await prisma.leaveType.findMany({ 
-        where: { organizationId } 
-      });
-      const approved = await prisma.leave.findMany({ 
-        where: { employeeId: employee.id, status: 'APPROVED', isDeleted: false }
-      });
-      const balance = {};
-      types.forEach(t => {
-        const used = approved.filter(l => l.leaveTypeId === t.id).reduce((acc, l) => acc + (l.totalDays || 0), 0);
-        balance[t.name] = t.yearlyQuota - used;
-      });
-      return balance;
-    }
+    // 1. Fetch all leave types for the organization
+    const allTypes = await prisma.leaveType.findMany({ 
+      where: { organizationId, isDeleted: false } 
+    });
+
+    // 2. Fetch all approved leaves to compute baseline used days (as a fallback)
+    const approvedLeaves = await prisma.leave.findMany({
+      where: { 
+        employeeId: employee.id, 
+        status: 'APPROVED', 
+        isDeleted: false 
+      },
+      select: { leaveTypeId: true, totalDays: true }
+    });
 
     const balance = {};
-    employee.leaveBalances.forEach(lb => {
-      balance[lb.leaveType.name] = lb.remaining;
+    
+    // 3. Construct a complete balance object mapping every leave type
+    allTypes.forEach(type => {
+      const existingBalance = employee.leaveBalances.find(lb => lb.leaveTypeId === type.id);
+      
+      if (existingBalance) {
+        // If a formal balance record exists, we trust its current state
+        balance[type.name] = existingBalance.remaining;
+      } else {
+        // Fallback: Compute remaining days from yearly quota minus approved leaves
+        const used = approvedLeaves
+          .filter(l => l.leaveTypeId === type.id)
+          .reduce((sum, l) => sum + (l.totalDays || 0), 0);
+        
+        balance[type.name] = type.yearlyQuota - used;
+      }
     });
+
     return balance;
   },
 

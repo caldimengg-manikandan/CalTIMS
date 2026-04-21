@@ -15,7 +15,7 @@ import {
     X, Eye, FileText, Calendar, Clock, Download, TrendingUp,
     Users, Briefcase, BarChart2, PieChart as PieIcon, Activity,
     Filter, RefreshCw, AlertCircle, CheckCircle2, Award, Zap, ShieldAlert,
-    ChevronDown, FileSpreadsheet
+    ChevronDown, FileSpreadsheet, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { 
     format, 
@@ -145,6 +145,8 @@ export default function ReportsPage() {
     const [selectedUserId, setSelectedUserId] = useState('all')
     const [selectedProjectId, setSelectedProjectId] = useState('all')
     const [selectedDepartment, setSelectedDepartment] = useState('all')
+    const [page, setPage] = useState(1)
+    const ITEMS_PER_PAGE = 10
 
     // ─── Filter Data ──────────────────────────────────────────────────────────
     const { data: filterOptions } = useQuery({
@@ -192,8 +194,9 @@ export default function ReportsPage() {
             ...(to && { to }),
             ...(selectedUserId !== 'all' && { userId: selectedUserId }),
             ...(selectedProjectId !== 'all' && { projectId: selectedProjectId }),
+            ...(selectedDepartment !== 'all' && { department: selectedDepartment }),
         }
-    }, [range, selectedYear, selectedMonth, selectedWeek, selectedUserId, selectedProjectId]);
+    }, [range, selectedYear, selectedMonth, selectedWeek, selectedUserId, selectedProjectId, selectedDepartment]);
 
     // ─── Data Queries ──────────────────────────────────────────────────────────
     const { data: projects } = useQuery({
@@ -203,27 +206,39 @@ export default function ReportsPage() {
 
     const { data: employees } = useQuery({
         queryKey: ['employees-minimal'],
-        queryFn: () => userAPI.getAll({ limit: 200, role: 'employee' }).then(r => r.data.data),
+        queryFn: () => userAPI.getAll({ limit: 1000 }).then(r => r.data.data),
     })
 
     const visibleEmployees = useMemo(() => {
         if (!employees) return []
-        if (selectedProjectId === 'all') return employees
+        let list = employees
+        
+        if (selectedProjectId !== 'all') {
+            const project = projects?.find(p => (p._id || p.id) === selectedProjectId)
+            const memberUserIds = project.allocatedEmployees?.map(m => m.userId?._id || m.userId?.id || m.userId) || []
+            list = list.filter(e => memberUserIds.includes(e._id))
+        }
 
-        const project = projects?.find(p => (p._id || p.id) === selectedProjectId)
-        if (!project) return employees
+        if (selectedDepartment !== 'all') {
+            list = list.filter(e => e.department === selectedDepartment)
+        }
 
-        // Projects from getAll include allocatedEmployees with resolved user objects
-        const memberUserIds = project.allocatedEmployees?.map(m => m.userId?._id || m.userId?.id || m.userId) || []
-        return employees.filter(e => memberUserIds.includes(e._id))
-    }, [employees, selectedProjectId, projects])
+        return list
+    }, [employees, selectedProjectId, selectedDepartment, projects])
 
     const visibleDepartments = useMemo(() => {
-        const sourceEmployees = selectedProjectId === 'all' ? employees : visibleEmployees
-        if (!sourceEmployees) return []
-        const depts = new Set(sourceEmployees.map(e => e.department).filter(Boolean))
+        if (!employees) return []
+        let list = employees
+        
+        if (selectedProjectId !== 'all') {
+            const project = projects?.find(p => (p._id || p.id) === selectedProjectId)
+            const memberUserIds = project.allocatedEmployees?.map(m => m.userId?._id || m.userId?.id || m.userId) || []
+            list = list.filter(e => memberUserIds.includes(e._id))
+        }
+        
+        const depts = new Set(list.map(e => e.department).filter(Boolean))
         return Array.from(depts).sort()
-    }, [employees, visibleEmployees, selectedProjectId])
+    }, [employees, projects, selectedProjectId])
 
     // ─── Auto-reset Dependent Filters ──────────────────────────────────────────
     // If project changes, ensure selected employee/department are still valid
@@ -237,6 +252,10 @@ export default function ReportsPage() {
             }
         }
     }, [selectedProjectId, visibleEmployees, visibleDepartments])
+    
+    React.useEffect(() => {
+        setPage(1)
+    }, [selectedYear, selectedMonth, selectedWeek, range, selectedUserId, selectedProjectId, selectedDepartment])
 
     const { data: tsData, isLoading: tsLoading } = useQuery({
         queryKey: ['reports', 'timesheet-summary', filterParams],
@@ -288,6 +307,13 @@ export default function ReportsPage() {
     if (selectedDepartment !== 'all') {
         filteredTsData = filteredTsData.filter(r => r.user?.department === selectedDepartment)
     }
+
+    const totalItems = filteredTsData.length;
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+    const currentTableData = useMemo(() => {
+        const start = (page - 1) * ITEMS_PER_PAGE;
+        return filteredTsData.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredTsData, page]);
 
     const totalHours = filteredTsData.reduce((s, r) => s + (r.totalHours || 0), 0) || 0
     const uniqueEmployees = new Set(filteredTsData.map(r => r._id?.userId)).size || 0
@@ -741,21 +767,21 @@ export default function ReportsPage() {
                             <div className="flex items-center justify-between mb-4 border-b border-slate-100 dark:border-white/10 pb-4">
                                 <SectionHeader icon={FileText} title="Detailed Employee Report" color="#06b6d4" subtitle="Comprehensive breakdown of individual contributions" />
                             </div>
-                            <div className="table-wrapper overflow-x-auto">
-                                <table className="w-full min-w-[800px]">
-                                    <thead>
-                                        <tr className="bg-slate-50 dark:bg-slate-800/50">
-                                            <th className="text-left py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Employee</th>
-                                            <th className="text-left py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Department</th>
-                                            <th className="text-left py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider hidden md:table-cell">Project</th>
-                                            <th className="text-right py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Hours Logged</th>
-                                            <th className="text-right py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Sheets</th>
-                                            <th className="text-right py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Utilization</th>
-                                            <th className="text-right py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Action</th>
+                            <div className="table-wrapper relative overflow-auto max-h-[600px] border border-slate-100 dark:border-white/5 rounded-xl">
+                                <table className="w-full min-w-[800px] border-collapse">
+                                    <thead className="sticky top-0 z-20 shadow-sm">
+                                        <tr className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                                            <th className="text-left py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-100 dark:bg-slate-800">Employee</th>
+                                            <th className="text-left py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-100 dark:bg-slate-800">Department</th>
+                                            <th className="text-left py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider hidden md:table-cell bg-slate-100 dark:bg-slate-800">Project</th>
+                                            <th className="text-right py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-100 dark:bg-slate-800">Hours Logged</th>
+                                            <th className="text-right py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider hidden sm:table-cell bg-slate-100 dark:bg-slate-800">Sheets</th>
+                                            <th className="text-right py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-100 dark:bg-slate-800">Utilization</th>
+                                            <th className="text-right py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-100 dark:bg-slate-800">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                        {filteredTsData.map((row, i) => {
+                                        {currentTableData.map((row, i) => {
                                             // Mock utilization based on hours vs a 40h typical week, capped at 100% for display
                                             const utilPercentage = Math.min(100, Math.round((row.totalHours / 40) * 100))
 
@@ -816,6 +842,49 @@ export default function ReportsPage() {
                                     </tbody>
                                 </table>
                             </div>
+
+                            {/* ── Pagination Controls ── */}
+                            {totalPages > 1 && (
+                                <div className="flex items-center justify-between px-6 py-4 bg-slate-50 dark:bg-white/[0.02] border-t border-slate-100 dark:border-white/5">
+                                    <p className="text-xs font-semibold text-slate-500">
+                                        Showing <span className="text-slate-800 dark:text-slate-200">{(page-1)*ITEMS_PER_PAGE + 1}</span> to <span className="text-slate-800 dark:text-slate-200">{Math.min(page*ITEMS_PER_PAGE, totalItems)}</span> of <span className="text-slate-800 dark:text-slate-200">{totalItems}</span> entries
+                                    </p>
+                                    <div className="flex items-center gap-1">
+                                        <button 
+                                            disabled={page === 1}
+                                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                                            className="p-2 rounded-lg hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 disabled:opacity-30 disabled:pointer-events-none transition-all"
+                                        >
+                                            <ChevronLeft size={18} />
+                                        </button>
+                                        
+                                        {[...Array(totalPages)].map((_, i) => {
+                                            const pNum = i + 1;
+                                            if (totalPages > 7 && Math.abs(pNum - page) > 2 && pNum !== 1 && pNum !== totalPages) return null;
+                                            
+                                            return (
+                                                <button
+                                                    key={pNum}
+                                                    onClick={() => setPage(pNum)}
+                                                    className={`w-9 h-9 rounded-lg text-sm font-black transition-all ${page === pNum 
+                                                        ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200/50' 
+                                                        : 'hover:bg-white dark:hover:bg-slate-800 text-slate-500 hover:text-cyan-600 border border-transparent hover:border-slate-200'}`}
+                                                >
+                                                    {pNum}
+                                                </button>
+                                            )
+                                        })}
+
+                                        <button 
+                                            disabled={page === totalPages}
+                                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                            className="p-2 rounded-lg hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 disabled:opacity-30 disabled:pointer-events-none transition-all"
+                                        >
+                                            <ChevronRight size={18} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </>
                 )}
