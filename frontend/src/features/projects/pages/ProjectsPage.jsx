@@ -96,13 +96,22 @@ function ProjectFormModal({ project, onClose }) {
     const queryClient = useQueryClient()
     const isEdit = !!project
 
+    const { data: managers } = useQuery({
+        queryKey: ['users', 'managers'],
+        queryFn: () => userAPI.getAll({ role: 'manager' }).then(r => r.data.data || [])
+    })
+    const { data: allEmployees, isLoading: isAllLoading } = useQuery({
+        queryKey: ['users', 'all'],
+        queryFn: () => userAPI.getAll({ limit: 5000 }).then(r => r.data.data || [])
+    })
+
     const { register, handleSubmit, control, watch, reset, setValue, formState: { errors } } = useForm({
         resolver: zodResolver(projectSchema),
         defaultValues: project ? {
             ...project,
             startDate: project.startDate ? format(new Date(project.startDate), 'yyyy-MM-dd') : '',
             endDate: project.endDate && isValid(new Date(project.endDate)) ? format(new Date(project.endDate), 'yyyy-MM-dd') : '',
-            managerId: project.manager?._id || project.manager?.id || project.managerId || '',
+            managerId: project.manager?._id || project.manager?.id || project.managerId?._id || project.managerId || '',
             allocatedEmployees: (project.team_members || project.allocatedEmployees)?.map(a => ({
                 userId: a.user?._id || a.user?.id || a.userId?._id || a.userId || '',
                 role: a.role || 'Developer',
@@ -118,12 +127,12 @@ function ProjectFormModal({ project, onClose }) {
     })
 
     React.useEffect(() => {
-        if (project) {
+        if (project && managers && allEmployees) {
             reset({
                 ...project,
                 startDate: project.startDate ? format(new Date(project.startDate), 'yyyy-MM-dd') : '',
                 endDate: project.endDate && isValid(new Date(project.endDate)) ? format(new Date(project.endDate), 'yyyy-MM-dd') : '',
-                managerId: project.manager?._id || project.manager?.id || project.managerId || '',
+                managerId: project.manager?._id || project.manager?.id || project.managerId?._id || project.managerId || '',
                 allocatedEmployees: (project.team_members || project.allocatedEmployees)?.map(a => ({
                     userId: a.user?._id || a.user?.id || a.userId?._id || a.userId || '',
                     role: a.role || 'Developer',
@@ -132,18 +141,9 @@ function ProjectFormModal({ project, onClose }) {
                 })) || []
             })
         }
-    }, [project, reset])
+    }, [project, reset, managers, allEmployees])
 
     const { fields, append, remove } = useFieldArray({ control, name: 'allocatedEmployees' })
-
-    const { data: managers } = useQuery({
-        queryKey: ['users', 'managers'],
-        queryFn: () => userAPI.getAll({ role: 'manager' }).then(r => r.data.data || [])
-    })
-    const { data: allEmployees, isLoading: isAllLoading } = useQuery({
-        queryKey: ['users', 'all'],
-        queryFn: () => userAPI.getAll({ limit: 5000 }).then(r => r.data.data || [])
-    })
 
     const mutation = useMutation({
         mutationFn: (payload) => isEdit ? projectAPI.update(project._id, payload) : projectAPI.create(payload),
@@ -316,6 +316,29 @@ function ProjectFormModal({ project, onClose }) {
                         </div>
                     </div>
                 </div>
+                {/* Settings & Isolation */}
+                {/* <div className="space-y-4">
+                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-100 dark:border-slate-700">
+                        Settings & Isolation
+                    </h3>
+                    <div className="flex items-center gap-3 p-4 bg-primary-50 dark:bg-primary-900/10 rounded-xl border border-primary-100 dark:border-primary-700/30">
+                        <input
+                            {...register('onlyProjectTasks')}
+                            type="checkbox"
+                            id="onlyProjectTasks"
+                            className="w-4 h-4 text-primary-600 border-slate-300 rounded focus:ring-primary-500 cursor-pointer"
+                        />
+                        <label htmlFor="onlyProjectTasks" className="flex-1 cursor-pointer">
+                            <span className="block text-sm font-bold text-primary-900 dark:text-primary-300">Private Project Category</span>
+                            <span className="block text-[10px] text-primary-600/70 dark:text-primary-400/60 mt-0.5">
+                                If enabled, only tasks specifically created for this project will be available in timesheets.
+                            </span>
+                        </label>
+                    </div>
+                </div> */}
+
+
+
 
                 {/* Team */}
                 <div>

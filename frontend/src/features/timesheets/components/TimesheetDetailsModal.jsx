@@ -143,8 +143,8 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
                         </div>
                     </div>
 
-                    {timesheets.data[0].rows.map((row) => (
-                        <div key={row.id || row._id} className="bg-slate-50 dark:bg-black/50 rounded-2xl border border-slate-100 dark:border-white overflow-hidden">
+                    {timesheets.data[0].rows.map((row, rowIdx) => (
+                        <div key={row.id || row._id || `row-${rowIdx}`} className="bg-slate-50 dark:bg-black/50 rounded-2xl border border-slate-100 dark:border-white overflow-hidden">
                             {/* Row Header */}
                             <div className="px-6 py-4 bg-white dark:bg-black border-b border-slate-100 dark:border-white flex flex-wrap items-center justify-between gap-4">
                                 <div className="flex items-center gap-3">
@@ -170,7 +170,7 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
                                     {row.entries.map((entry, idx) => {
                                         const swipeHrs = calculateSwipeHours(entry.date)
                                         return (
-                                            <div key={idx} className="flex flex-col items-center">
+                                            <div key={entry.date || idx} className="flex flex-col items-center">
                                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                                                     {safeFormat(entry.date, 'EEE')}
                                                 </span>
@@ -203,7 +203,7 @@ export default function TimesheetDetailsModal({ weekStartDate, userId, isOpen, o
                                     </div> */}
                                     <div className="grid grid-cols-1 gap-2">
                                         {row.entries.filter(e => e.taskDescription).map((entry, idx) => (
-                                            <div key={idx} className="flex gap-3 p-3 bg-white dark:bg-black rounded-xl border border-slate-100 dark:border-white">
+                                            <div key={`${entry.date}-${idx}`} className="flex gap-3 p-3 bg-white dark:bg-black rounded-xl border border-slate-100 dark:border-white">
                                                 <div className="shrink-0 w-12 text-center py-1 bg-slate-50 dark:bg-black rounded-lg text-[10px] font-bold text-slate-500 uppercase">
                                                     {safeFormat(entry.date, 'MMM d')}
                                                 </div>

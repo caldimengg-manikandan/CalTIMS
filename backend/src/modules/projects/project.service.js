@@ -123,7 +123,7 @@ const projectService = {
       manager: project.manager ? { ...project.manager.user, id: project.manager.id, _id: project.manager.user.id } : null,
       team_members: project.members.map(m => ({
         userId: m.employee.user.id,
-        user: { ...m.employee.user, id: m.employee.id, _id: project.manager.user.id },
+        user: { ...m.employee.user, id: m.employee.id, _id: m.employee.user.id },
         role: m.role,
         allocationPercent: m.allocationPercent,
         budgetHours: m.budgetHours
