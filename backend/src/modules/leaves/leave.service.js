@@ -560,7 +560,7 @@ const leaveService = {
 
     // 1. Fetch all leave types for the organization
     const allTypes = await prisma.leaveType.findMany({ 
-      where: { organizationId, isDeleted: false } 
+      where: { organizationId } 
     });
 
     // 2. Fetch all approved leaves to compute baseline used days (as a fallback)

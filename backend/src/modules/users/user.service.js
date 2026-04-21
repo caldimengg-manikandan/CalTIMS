@@ -93,7 +93,7 @@ const userService = {
     const [users, total, leaveTypes] = await Promise.all([
       prisma.user.findMany({ where, include, skip, take: limit, orderBy: { createdAt: 'desc' } }),
       prisma.user.count({ where }),
-      prisma.leaveType.findMany({ where: { organizationId, isDeleted: false } })
+      prisma.leaveType.findMany({ where: { organizationId } })
     ]);
 
     return { users: users.map(u => formatUser(u, leaveTypes)), pagination: buildPaginationMeta(total, page, limit) };
@@ -116,7 +116,7 @@ const userService = {
     });
     if (!user || user.isDeleted) throw new AppError('User not found', 404);
     
-    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId, isDeleted: false } });
+    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId } });
     return formatUser(user, leaveTypes);
   },
 
@@ -285,7 +285,7 @@ const userService = {
       logAction({ userId: requestorId, action: 'CREATE_EMPLOYEE', entityType: 'User', entityId: user.id, details: { name: user.name, email: user.email }, ipAddress });
     }
 
-    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId, isDeleted: false } });
+    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId } });
     return formatUser(user, leaveTypes);
   },
 
@@ -497,7 +497,7 @@ const userService = {
       return updatedUser;
     });
 
-    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId, isDeleted: false } });
+    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId } });
     return formatUser(updated, leaveTypes);
   },
 
@@ -562,7 +562,7 @@ const userService = {
     });
     if (!user || user.isDeleted) throw new AppError('User not found', 404);
 
-    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId, isDeleted: false } });
+    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId } });
     return formatUser(user, leaveTypes);
   },
 
