@@ -463,6 +463,7 @@ function AdminLeaveView() {
     const [rejectTarget, setRejectTarget] = React.useState(null)
     const [viewTarget, setViewTarget] = React.useState(null)
     const [editTarget, setEditTarget] = React.useState(null)
+    const [viewEmployeeTarget, setViewEmployeeTarget] = React.useState(null)
 
     // Pagination state for applications
     const [appPage, setAppPage] = React.useState(1)
@@ -642,22 +643,24 @@ function AdminLeaveView() {
 
 
                 {/* Stats Row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {[
-                        { label: 'Total', value: stats.total, icon: ClipboardList, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-                        { label: 'Pending', value: stats.pending, icon: AlertCircle, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-                        { label: 'Approved', value: stats.approved, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-                        { label: 'Rejected', value: stats.rejected, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
-                    ].map((st) => (
-                        <div key={st.label} className="card p-4 flex items-center gap-3">
-                            <div className={`p-2.5 rounded-xl ${st.bg} ${st.color} shrink-0`}><st.icon size={18} /></div>
-                            <div>
-                                <p className="text-xl font-bold text-slate-800 dark:text-white leading-none mb-0.5">{st.value}</p>
-                                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">{st.label}</p>
+                {activeTab === 'applications' && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {[
+                            { label: 'Total', value: stats.total, icon: ClipboardList, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+                            { label: 'Pending', value: stats.pending, icon: AlertCircle, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+                            { label: 'Approved', value: stats.approved, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+                            { label: 'Rejected', value: stats.rejected, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
+                        ].map((st) => (
+                            <div key={st.label} className="card p-4 flex items-center gap-3">
+                                <div className={`p-2.5 rounded-xl ${st.bg} ${st.color} shrink-0`}><st.icon size={18} /></div>
+                                <div>
+                                    <p className="text-xl font-bold text-slate-800 dark:text-white leading-none mb-0.5">{st.value}</p>
+                                    <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">{st.label}</p>
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
 
                 {activeTab === 'applications' ? (
                     <>
@@ -1001,12 +1004,21 @@ function AdminLeaveView() {
                                                     </td>
                                                 ))}
                                                 <td className="text-right">
-                                                    <button
-                                                        onClick={() => setEditTarget(emp)}
-                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-primary-600 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 text-xs font-bold transition-colors"
-                                                    >
-                                                        Edit Eligibility
-                                                    </button>
+                                                    <div className="flex justify-end items-center gap-2">
+                                                        <button
+                                                            onClick={() => setViewEmployeeTarget(emp)}
+                                                            className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+                                                            title="View Balances"
+                                                        >
+                                                            <Eye size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setEditTarget(emp)}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-primary-600 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 text-xs font-bold transition-colors"
+                                                        >
+                                                            Edit Eligibility
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -1063,6 +1075,51 @@ function AdminLeaveView() {
                         />
                     )
                 }
+                <Modal open={!!viewEmployeeTarget} onClose={() => setViewEmployeeTarget(null)} maxWidth="max-w-md">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700 shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
+                                <Eye size={18} className="text-white" />
+                            </div>
+                            <div>
+                                <h2 className="text-base font-bold text-slate-800 dark:text-white">Leave Balance Overview</h2>
+                                <p className="text-xs text-slate-400">{viewEmployeeTarget?.name}</p>
+                            </div>
+                        </div>
+                        <button onClick={() => setViewEmployeeTarget(null)} className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"><X size={18} /></button>
+                    </div>
+                    <div className="px-6 py-5 space-y-4 overflow-y-auto">
+                        <div className="grid grid-cols-2 gap-4">
+                            {[
+                                { label: 'Employee ID', value: viewEmployeeTarget?.employeeId },
+                                { label: 'Department', value: viewEmployeeTarget?.department },
+                                { label: 'Designation', value: viewEmployeeTarget?.designation },
+                                { label: 'Role', value: viewEmployeeTarget?.role, className: 'capitalize' },
+                            ].map((info, idx) => (
+                                <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">{info.label}</p>
+                                    <p className={`text-sm font-bold text-slate-700 dark:text-white ${info.className || ''}`}>{info.value || '—'}</p>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="pt-2">
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Leave Balances</h3>
+                            <div className="grid grid-cols-1 gap-2">
+                                {LEAVE_TYPES.map((type) => (
+                                    <div key={type} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                        <span className="text-sm font-semibold text-slate-600 dark:text-slate-300 capitalize">{type} Leave</span>
+                                        <span className="px-3 py-1 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 font-bold">
+                                            {viewEmployeeTarget?.leaveBalance?.[type] || 0} <span className="text-[10px] font-medium opacity-60">Days</span>
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0">
+                        <button onClick={() => setViewEmployeeTarget(null)} className="btn-secondary w-full justify-center">Close Details</button>
+                    </div>
+                </Modal>
             </div>
         </ProGuard>
     )
@@ -1195,7 +1252,7 @@ function EmployeeLeaveView() {
                             <table className="w-full text-left border-collapse">
                                 <thead className="sticky top-0 z-20 bg-white dark:bg-black border-b border-slate-100 dark:border-white/10">
                                     <tr>
-                                        <th>ID</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th><th>Applied On</th><th></th>
+                                        <th>ID</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th><th>Applied On</th><th className="text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1227,8 +1284,8 @@ function EmployeeLeaveView() {
                                                 </div>
                                             </td>
                                             <td className="text-slate-400">{format(new Date(leave.createdAt), 'MMM d, yyyy')}</td>
-                                            <td>
-                                                <div className="flex items-center gap-1">
+                                            <td className="text-right">
+                                                <div className="flex justify-end items-center gap-1">
                                                     <button onClick={() => setViewTarget(leave)} className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"><Eye size={16} /></button>
                                                     {leave.status?.toLowerCase() === 'pending' && (
                                                         <button

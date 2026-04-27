@@ -19,7 +19,7 @@ const commonStyles = `
 exports.DEFAULT_TEMPLATES = [
   {
     name: 'CORPORATE',
-    description: 'High-fidelity, blue-themed header, dual-column breakdown.',
+    description: 'TIMS Signature Layout - High-fidelity, blue-themed.',
     isSystemDefault: true,
     htmlContent: `
 <!DOCTYPE html>
@@ -28,80 +28,116 @@ exports.DEFAULT_TEMPLATES = [
     <meta charset="utf-8">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-        body { ${commonStyles} background-color: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        .container { max-width: 800px; margin: 0 auto; border: 1px solid #f1f5f9; border-radius: 24px; padding: 40px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); min-height: 280mm; box-sizing: border-box; }
-        .header { display: flex; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px; margin-bottom: 35px; align-items: flex-start; }
-        .company-name { font-size: 26px; font-weight: 900; color: #4f46e5; text-transform: uppercase; letter-spacing: -0.5px; }
-        .company-address { font-size: 12px; color: #64748b; margin-top: 6px; line-height: 1.5; max-width: 320px; }
-        .title { font-size: 20px; font-weight: 800; text-align: right; color: #0f172a; }
-        .info-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; margin-bottom: 40px; }
-        .section-title { font-size: 11px; font-weight: 800; color: #6366f1; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 18px; border-bottom: 2px solid #f8fafc; padding-bottom: 6px; }
-        .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; border-bottom: 1px solid #f8fafc; padding-bottom: 4px; }
-        .label { color: #94a3b8; font-weight: 500; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
-        .value { color: #1e293b; font-weight: 700; }
-        .table-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-        .summary-box { padding: 16px; border-radius: 12px; margin-top: 15px; display: flex; justify-content: space-between; font-weight: 800; font-size: 14px; }
-        .earnings { background: #f0fdf4; color: #166534; }
-        .deductions { background: #fef2f2; color: #991b1b; }
-        .net-pay { background: #0f172a; color: white; padding: 35px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; margin-top: 45px; position: relative; overflow: hidden; }
-        .net-pay::after { content: ''; position: absolute; right: -20px; top: -20px; width: 100px; height: 100px; background: rgba(255,255,255,0.03); border-radius: 50%; }
-        .net-val { font-size: 40px; font-weight: 900; letter-spacing: -1px; }
-        .disclaimer { font-size: 10px; color: #94a3b8; text-align: center; margin-top: 40px; font-style: italic; opacity: 0.8; }
+        body { font-family: 'Inter', sans-serif; color: #1e293b; margin: 0; padding: 0; background-color: white; }
+        .container { max-width: 850px; margin: 0 auto; padding: 40px; box-sizing: border-box; min-height: 297mm; position: relative; }
+        .main-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 40px; padding-bottom: 10px; }
+        .grid-table { width: 100%; margin-bottom: 40px; table-layout: fixed; border-collapse: collapse; }
+        .section-header { border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 20px; }
+        .section-title { font-size: 12px; font-weight: 800; color: #3b82f6; text-transform: uppercase; letter-spacing: 1px; }
+        .table-container { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f8fafc; padding: 12px 15px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; }
+        .th-blue { color: #3b82f6; }
+        .th-red { color: #ef4444; }
+        td { padding: 8px 15px; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
+        .td-label { width: 130px; color: #64748b; font-weight: 600; border: none; padding: 6px 0; }
+        .td-value { color: #0f172a; font-weight: 700; border: none; padding: 6px 0; }
+        .td-name { color: #64748b; font-weight: 500; border-right: 1px solid #e2e8f0; }
+        .td-val { font-weight: 700; text-align: right; }
+        .val-blue { color: #0f172a; border-right: 1px solid #e2e8f0; }
+        .deduction-val { color: #ef4444; }
+        .total-row { background: #f8fafc; font-weight: 800; font-size: 12px; }
+        .summary-banner { background: #0f172a; color: white; padding: 30px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
+        .net-large { font-size: 42px; font-weight: 950; letter-spacing: -2px; }
+        .footer-grid { display: flex; justify-content: space-between; margin-top: 60px; align-items: flex-end; }
+        .token { font-size: 9px; color: #cbd5e1; font-family: monospace; }
+        .signatory { text-align: right; }
+        .sign-title { font-size: 12px; font-weight: 900; color: #3b82f6; text-transform: uppercase; }
+        .company-name { font-size: 32px; font-weight: 950; color: #0f172a; text-transform: uppercase; letter-spacing: -1.5px; line-height: 1; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
+        <div class="main-header">
             <div>
                 <div class="company-name">{{companyName}}</div>
-                <div class="company-address">{{companyAddress}}</div>
+                <div style="font-size: 12px; color: #64748b; font-weight: 700; margin-top: 10px; letter-spacing: 2px;">SALARY STATEMENT</div>
             </div>
-            <div class="title">
-                <div>PAYSLIP {{monthName}} {{year}}</div>
-                <div style="font-size: 10px; color: #94a3b8;">REF: {{refNo}}</div>
-            </div>
-        </div>
-        
-        <div class="info-grid">
-            <div>
-                <div class="section-title">Employee Information</div>
-                <div class="row"><span class="label">Name</span><span class="value">{{employeeName}}</span></div>
-                <div class="row"><span class="label">Employee ID</span><span class="value">{{employeeId}}</span></div>
-                <div class="row"><span class="label">Department</span><span class="value">{{department}}</span></div>
-                <div class="row"><span class="label">Designation</span><span class="value">{{designation}}</span></div>
-            </div>
-            <div>
-                <div class="section-title">Payment Account</div>
-                <div class="row"><span class="label">Bank</span><span class="value">{{bankName}}</span></div>
-                <div class="row"><span class="label">A/C No</span><span class="value">{{accountNo}}</span></div>
-                <div class="row"><span class="label">PAN ID</span><span class="value">{{panId}}</span></div>
-                <div class="row"><span class="label">LOP Days</span><span class="value">{{lopDays}}</span></div>
+            <div style="text-align: right; min-width: 200px;">
+                <div style="font-size: 11px; font-weight: 900; color: #3b82f6; text-transform: uppercase; letter-spacing: 2px; white-space: nowrap;">Payslip Period</div>
+                <div style="font-size: 26px; font-weight: 900; color: #1e293b; margin-top: 2px; white-space: nowrap;">{{monthName}} {{year}}</div>
             </div>
         </div>
 
-        <div class="table-grid">
+        <table class="grid-table">
+            <tr>
+                <td style="vertical-align: top; padding-right: 20px; border: none;">
+                    <div class="section-header"><div class="section-title">Employee Details</div></div>
+                    <table style="width: 100%;">
+                        <tr><td class="td-label">Name</td><td class="td-value">: {{employeeName}}</td></tr>
+                        <tr><td class="td-label">Employee ID</td><td class="td-value">: {{employeeId}}</td></tr>
+                        <tr><td class="td-label">Designation</td><td class="td-value">: {{designation}}</td></tr>
+                        <tr><td class="td-label">Joining Date</td><td class="td-value">: {{joiningDate}}</td></tr>
+                    </table>
+                </td>
+                <td style="vertical-align: top; padding-left: 20px; border: none;">
+                    <div class="section-header"><div class="section-title">Attendance & Banking</div></div>
+                    <table style="width: 100%;">
+                        <tr><td class="td-label">Working Days</td><td class="td-value">: {{standardWorkingDays}}</td></tr>
+                        <tr><td class="td-label">Payable Days</td><td class="td-value">: <span style="color: #3b82f6;">{{payableDays}}</span></td></tr>
+                        <tr><td class="td-label">Bank Name</td><td class="td-value">: {{bankName}}</td></tr>
+                        <tr><td class="td-label">Account No</td><td class="td-value" style="font-family: monospace;">: {{accountNo}}</td></tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="th-blue">Earnings</th>
+                        <th class="th-blue" align="right">Amount</th>
+                        <th class="th-red">Deductions</th>
+                        <th class="th-red" align="right">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{earningsDeductionsRows}}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td style="color: #3b82f6; border-right: 1px solid #e2e8f0;">Gross Total</td>
+                        <td align="right" style="color: #3b82f6; border-right: 1px solid #e2e8f0;">{{grossEarnings}}</td>
+                        <td style="color: #ef4444;">Total Deductions</td>
+                        <td align="right" style="color: #ef4444;">{{totalDeductions}}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="summary-banner">
             <div>
-                <div class="section-title" style="color: #059669;">Earnings</div>
-                {{earningsTable}}
-                <div class="summary-box earnings"><span>Gross Earnings</span><span>{{grossEarnings}}</span></div>
+                <div style="font-size: 11px; font-weight: 700; opacity: 0.8; text-transform: uppercase; letter-spacing: 2px;">Net Monthly Salary Payable</div>
+                <div class="net-large">{{netPay}}</div>
             </div>
-            <div>
-                <div class="section-title" style="color: #e11d48;">Deductions</div>
-                {{deductionsTable}}
-                <div class="summary-box deductions"><span>Total Deductions</span><span>{{totalDeductions}}</span></div>
+            <div style="text-align: right; max-width: 350px;">
+                <div style="font-size: 11px; font-weight: 700; opacity: 0.8; text-transform: uppercase;">Amount in Words</div>
+                <div style="font-size: 14px; font-weight: 700; font-style: italic;">{{amountInWords}}</div>
             </div>
         </div>
 
-        <div class="net-pay">
-            <div><div style="font-size: 11px; opacity: 0.6;">NET DISBURSEMENT</div><div class="net-val">{{netPay}}</div></div>
-            <div style="text-align: right;"><div style="color: #10b981; font-weight: 800;">✓ VERIFIED</div><div style="font-size: 10px; opacity: 0.4;">Electronically Generated</div></div>
+        <div class="footer-grid">
+            <div class="token">VERIFICATION TOKEN: {{refNo}}</div>
+            <div class="signatory">
+                <div class="sign-title">Authorized Signatory</div>
+                <div style="font-size: 9px; color: #94a3b8; margin-top: 5px;">Computer Generated - No Signature Required</div>
+            </div>
         </div>
-
-        <div class="disclaimer">This is a computer-generated document and does not require a signature.</div>
     </div>
 </body>
 </html>
-`
+    `
   },
   {
     name: 'MODERN',

@@ -21,8 +21,30 @@ const getPayrollPolicy = async (req, res) => {
 const updatePayrollPolicy = async (req, res) => {
   try {
     const organizationId = req.organizationId || null;
+    
+    // Safeguard: Check if payroll for current month is finalized
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+    
+    const finalizedBatch = await prisma.payrollBatch.findFirst({
+      where: {
+        organizationId,
+        month,
+        year,
+        status: { in: ['COMPLETED', 'PAID'] }
+      }
+    });
+
+    if (finalizedBatch) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Cannot update rules for a month with finalized or paid payroll (Cycle Locked).' 
+      });
+    }
+
     const updatedPolicy = await policyService.updatePolicy(req.body, organizationId);
-    res.status(200).json(updatedPolicy);
+    res.status(200).json({ success: true, data: updatedPolicy });
   } catch (error) {
     logger.error('Error updating payroll policy: ' + error.message);
     res.status(500).json({ message: 'Error updating payroll policy', error: error.message });
@@ -33,7 +55,7 @@ const createNewPolicyVersion = async (req, res) => {
   try {
     const organizationId = req.organizationId || null;
     const newPolicy = await policyService.createPolicyVersion(req.body, organizationId);
-    res.status(201).json(newPolicy);
+    res.status(201).json({ success: true, data: newPolicy });
   } catch (error) {
     logger.error('Error creating policy version: ' + error.message);
     res.status(500).json({ message: 'Error creating policy version', error: error.message });
@@ -75,7 +97,7 @@ const previewPolicyCalculation = async (req, res) => {
       user: mockUser
     };
 
-    const breakdown = payrollService.calculateSalaryBreakdown(mockProfile, attendance, policy);
+    const breakdown = await payrollService.calculateSalaryBreakdown(mockProfile, attendance, policy);
     res.status(200).json({ breakdown, sampleEmployee: mockUser.name, ctc: mockProfile.monthlyCTC || 0 });
   } catch (error) {
     logger.error('Error previewing calculation: ' + error.message);

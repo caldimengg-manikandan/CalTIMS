@@ -16,10 +16,35 @@ class IncidentService {
         const { organizationId, userId } = context;
         
         // Find employee record for this user (hard-scoped)
-        const employee = await prisma.employee.findUnique({
+        let employee = await prisma.employee.findUnique({
             where: { userId_organizationId: { userId, organizationId } }
         });
-        if (!employee) throw new AppError('Employee profile not found', 404);
+        
+        if (!employee) {
+            // Identity Healing: Create missing employee record for administrative users
+            const lastEmp = await prisma.employee.findFirst({
+                where: { organizationId },
+                orderBy: { employeeCode: 'desc' },
+                select: { employeeCode: true }
+            });
+            
+            let nextNumber = 1;
+            if (lastEmp && lastEmp.employeeCode) {
+                const match = lastEmp.employeeCode.match(/\d+$/);
+                if (match) nextNumber = parseInt(match[0]) + 1;
+            }
+            const employeeCode = `EMP-${nextNumber.toString().padStart(4, '0')}`;
+    
+            employee = await prisma.employee.create({
+                data: {
+                    userId,
+                    organizationId,
+                    employeeCode,
+                    status: 'ACTIVE',
+                    joiningDate: new Date()
+                }
+            });
+        }
 
         const count = await prisma.incident.count({ where: { organizationId } });
         const incidentIdStr = `INC-${(count + 1).toString().padStart(4, '0')}`;

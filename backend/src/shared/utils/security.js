@@ -45,7 +45,30 @@ function decrypt(encryptedText) {
     }
 }
 
+/**
+ * Encrypt JSON object
+ */
+function encryptJson(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    return encrypt(JSON.stringify(obj));
+}
+
+/**
+ * Decrypt string back to JSON object
+ */
+function decryptJson(str) {
+    if (!str || typeof str !== 'string') return str;
+    try {
+        const decrypted = decrypt(str);
+        return decrypted ? JSON.parse(decrypted) : str;
+    } catch (e) {
+        return str; 
+    }
+}
+
 module.exports = {
     encrypt,
-    decrypt
+    decrypt,
+    encryptJson,
+    decryptJson
 };

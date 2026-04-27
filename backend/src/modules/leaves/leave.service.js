@@ -9,6 +9,35 @@ const notificationService = require('../notifications/notification.service');
 const { format } = require('date-fns');
 const { hasPermission } = require('../../shared/utils/rbac');
 
+async function getOrCreateEmployee(userId, organizationId, tx = prisma, include = null) {
+  let employee = await tx.employee.findUnique({ where: { userId }, include });
+  if (employee) return employee;
+
+  // Identity Healing: Create missing employee record for administrative users
+  const lastEmp = await tx.employee.findFirst({
+    where: { organizationId },
+    orderBy: { employeeCode: 'desc' },
+    select: { employeeCode: true }
+  });
+  
+  let nextNumber = 1;
+  if (lastEmp && lastEmp.employeeCode) {
+      const match = lastEmp.employeeCode.match(/\d+$/);
+      if (match) nextNumber = parseInt(match[0]) + 1;
+  }
+  const employeeCode = `EMP-${nextNumber.toString().padStart(4, '0')}`;
+
+  return await tx.employee.create({
+    data: {
+      userId,
+      organizationId,
+      employeeCode,
+      status: 'ACTIVE',
+      joiningDate: new Date()
+    }
+  });
+}
+
 async function getWorkingDaysBetween(startDate, endDate, organizationId) {
   const policy = await policyService.getPolicy(organizationId).catch(() => null);
   const workWeek = policy?.attendance?.workWeek || 'Mon-Fri';
@@ -270,10 +299,7 @@ const leaveService = {
 
   async apply(data, context) {
     const { organizationId, userId } = context;
-    const employee = await prisma.employee.findUnique({ 
-      where: { userId } 
-    });
-    if (!employee) throw new AppError('Employee profile not found', 404);
+    const employee = await getOrCreateEmployee(userId, organizationId);
 
     // If leaveType (string) is passed, find leaveTypeId
     if (data.leaveType && !data.leaveTypeId) {
@@ -383,10 +409,7 @@ const leaveService = {
       
       if (leave.status === 'APPROVED') return leave;
 
-      const approverEmployee = await tx.employee.findUnique({
-        where: { userId: approverId }
-      });
-      if (!approverEmployee) throw new AppError('Approver employee profile not found', 404);
+      const approverEmployee = await getOrCreateEmployee(approverId, organizationId, tx);
 
       const updated = await tx.leave.update({ 
         where: { id_organizationId: { id, organizationId } }, 
@@ -442,10 +465,7 @@ const leaveService = {
 
   async reject(id, rejectorId, reason, organizationId) {
     return await prisma.$transaction(async (tx) => {
-      const rejectorEmployee = await tx.employee.findUnique({
-        where: { userId: rejectorId }
-      });
-      if (!rejectorEmployee) throw new AppError('Rejector employee profile not found', 404);
+      const rejectorEmployee = await getOrCreateEmployee(rejectorId, organizationId, tx);
 
       const leave = await tx.leave.findUnique({ 
         where: { id_organizationId: { id, organizationId } },
@@ -549,14 +569,9 @@ const leaveService = {
 
 
   async getBalance(userId, organizationId) {
-    const employee = await prisma.employee.findUnique({ 
-      where: { userId },
-      include: { 
-        leaveBalances: { include: { leaveType: true } }
-      }
+    const employee = await getOrCreateEmployee(userId, organizationId, prisma, {
+      leaveBalances: { include: { leaveType: true } }
     });
-
-    if (!employee || employee.isDeleted) return {};
 
     // 1. Fetch all leave types for the organization
     const allTypes = await prisma.leaveType.findMany({ 

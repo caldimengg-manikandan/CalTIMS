@@ -30,120 +30,175 @@ export const ROLE_TEMPLATES = {
 };
 
 /**
- * UNIVERSAL FRONTEND CALCULATION ENGINE
- * Rule: Logic must remain byte-identical to Backend payroll.service.js
+ * UNIVERSAL FRONTEND CALCULATION ENGINE v3
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rule: Must remain synchronized with Backend payroll.service.js v3.
+ *       Statutory deductions are driven by Profile Mode overrides.
  */
-/**
- * UNIVERSAL FRONTEND CALCULATION ENGINE
- * Rule: Logic must remain byte-identical to Backend payroll.service.js
- */
-export const calculateSalaryBreakdown = (earnings = [], deductions = [], monthlyCTC = 0, policy = null) => {
-  const annualCTC = monthlyCTC * 12;
+export const calculateSalaryBreakdown = (earnings = [], deductions = [], monthlyCTC = 0, policy = null, attendanceCtx = null) => {
   const results = {
     earnings: [],
     deductions: [],
     statutoryDeductions: [],
+    employerContributions: [],
     grossPay: 0,
     totalDeductions: 0,
     netSalary: 0,
-    breakdown: {} // Context
+    breakdown: {},
+    lopDeduction: 0,
+    adjustedGross: 0,
+    perDaySalary: 0,
+    workingDays: 30,
+    payableDays: 30,
+    daysAfterJoin: 30,
+    preJoinDays: 0
   };
 
-  const applyRounding = (val) => Math.round(val * 100) / 100;
+  const applyRounding = (val) => Math.round((val || 0) * 100) / 100;
 
   const resolveVal = (comp, base) => {
     let val = parseFloat(comp.value) || 0;
-    if (comp.calculationType?.toLowerCase() === 'percentage') {
-       val = (base * val) / 100;
-    }
+    if (comp.calculationType?.toLowerCase() === 'percentage') val = (base * val) / 100;
     return applyRounding(val);
   };
 
-  // 1. Filter out statutory components from the profile if they are enabled in the policy
-  const filterStatutory = (list) => {
-    if (!policy?.statutory) return list;
-    return list.filter(item => {
-      const name = (item.name || '').toLowerCase();
-      const isPF = name.includes('provident fund') || name === 'pf';
-      const isESI = name.includes('esi') || name.includes('state insurance');
-      const isPT = name.includes('professional tax') || name === 'pt';
-      const isGratuity = name.includes('gratuity');
+  // ── 1. Calendar & Proration Foundation ───────────────────────────────────
+  const totalDaysInMonth = attendanceCtx?.calendarDaysInMonth || 30;
+  const rawPreJoinDays = attendanceCtx?.preJoinDays || 0;
+  const rawLopDays = attendanceCtx?.lopDays || 0;
 
-      if (isPF && policy.statutory.pf?.enabled) return false;
-      if (isESI && policy.statutory.esi?.enabled) return false;
-      if (isPT && policy.statutory.pt?.enabled) return false;
-      if (isGratuity && policy.statutory.gratuity?.enabled) return false;
-      return true;
-    });
+  const daysAfterJoin = Math.max(0, totalDaysInMonth - rawPreJoinDays);
+  const lopDays = Math.min(rawLopDays, daysAfterJoin);
+  const payableDays = Math.max(0, daysAfterJoin - lopDays);
+
+  const perDaySalary = applyRounding(totalDaysInMonth > 0 ? monthlyCTC / totalDaysInMonth : 0);
+  const lopDeduction = applyRounding(perDaySalary * rawLopDays);
+  const adjustedGross = applyRounding(perDaySalary * payableDays);
+  const prorationRatio = totalDaysInMonth > 0 ? payableDays / totalDaysInMonth : 0;
+
+  results.workingDays = daysAfterJoin;
+  results.standardMonthlyDays = totalDaysInMonth;
+  results.daysAfterJoin = daysAfterJoin;
+  results.preJoinDays = rawPreJoinDays;
+  results.payableDays = payableDays;
+  results.presentDays = payableDays;
+  results.perDaySalary = perDaySalary;
+  results.adjustedGross = adjustedGross;
+  results.lopDeduction = lopDeduction;
+
+  // ── 2. Resolve Statutory Overrides (Profile-Driven) ──────────────────────
+  const resolveStatutory = (type, profileCfg, policyCfg) => {
+    const cfg = profileCfg?.[type] || { mode: 'default' };
+    const mode = cfg.mode || 'default';
+    
+    if (mode === 'enabled') {
+      return { ...policyCfg?.[type], ...cfg, enabled: true, source: 'Payroll Profile (Override)' };
+    } else if (mode === 'disabled') {
+      return { enabled: false, source: 'Payroll Profile (Override)' };
+    } else {
+      return { ...policyCfg?.[type], source: 'Company Policy' };
+    }
   };
 
-  const filteredEarnings = filterStatutory(earnings);
-  const filteredDeductions = filterStatutory(deductions);
+  const pfConfig = resolveStatutory('pf', policy?.profile, policy?.statutory);
+  const esiConfig = resolveStatutory('esi', policy?.profile, policy?.statutory);
+  const ptConfig = resolveStatutory('pt', policy?.profile, policy?.statutory);
+  const gratuityConfig = resolveStatutory('gratuity', policy?.profile, policy?.statutory);
 
-  // Pass 1: Base Components (BasedOn: CTC)
+  // ── 3. Base Gross (Full-Month, before proration) ──────────────────────────
+  const filteredEarnings = earnings.filter(e => !e.hidden && !e._isStatutoryConfig && !(e.name || '').includes('Metadata'));
+
+  // Pass 1: CTC-based earnings
   filteredEarnings.filter(e => !e.basedOn || e.basedOn === 'CTC').forEach(comp => {
     const val = resolveVal(comp, monthlyCTC);
-    results.earnings.push({ ...comp, calculatedValue: val });
     results.breakdown[comp.name] = val;
-    results.grossPay += val;
   });
 
-  // Pass 2: Dependent Components (BasedOn: Basic, etc.)
+  // Pass 2: Dependent Earnings (e.g. HRA on Basic)
   filteredEarnings.filter(e => e.basedOn && e.basedOn !== 'CTC').forEach(comp => {
     const base = results.breakdown[comp.basedOn] || 0;
     const val = resolveVal(comp, base);
-    results.earnings.push({ ...comp, calculatedValue: val });
     results.breakdown[comp.name] = val;
-    results.grossPay += val;
   });
 
-  results.grossPay = applyRounding(results.grossPay);
-  const basicSalary = results.breakdown['Basic Salary'] || results.breakdown['Basic'] || 0;
+  // ── 4. Apply Proration to Earnings ───────────────────────────────────────
+  let proratedGross = 0;
+  results.earnings = filteredEarnings.map(e => {
+    const proratedVal = applyRounding((results.breakdown[e.name] || 0) * prorationRatio);
+    proratedGross += proratedVal;
+    return { ...e, calculatedValue: proratedVal };
+  });
 
-  // Pass 3: Statutory Deductions (If Policy Enabled) - Match Backend Logic
-  if (policy?.statutory) {
-    if (policy.statutory.pf?.enabled) {
-      const pf = policy.statutory.pf;
-      const pfWageBase = Math.min(basicSalary, pf.wageLimit || 15000);
-      const pfAmount = applyRounding((pfWageBase * (pf.employeeRate || 12)) / 100);
-      results.statutoryDeductions.push({ name: 'Provident Fund (PF)', calculatedValue: pfAmount, isStatutory: true });
-      results.totalDeductions += pfAmount;
+  results.grossPay = applyRounding(proratedGross);
+
+  const basicKey = Object.keys(results.breakdown).find(k => k.toLowerCase().includes('basic'));
+  const basicSalary = basicKey ? applyRounding(results.breakdown[basicKey] * prorationRatio) : (results.grossPay * 0.5);
+
+  // ── 5. Statutory Deductions ──────────────────────────────────────────────
+  // PF
+  if (pfConfig.enabled) {
+    const pfThreshold = pfConfig.threshold || 15000;
+    const pfBase = pfConfig.restrictToCeiling ? Math.min(basicSalary, pfThreshold) : basicSalary;
+    const pfAmount = applyRounding((pfBase * (pfConfig.employeePercent || 12)) / 100);
+    results.statutoryDeductions.push({ name: 'Provident Fund (PF)', calculatedValue: pfAmount, isStatutory: true, source: pfConfig.source });
+    results.totalDeductions += pfAmount;
+
+    if (pfConfig.employerPercent > 0) {
+       results.employerContributions.push({ name: 'Employer PF Share', calculatedValue: applyRounding((pfBase * pfConfig.employerPercent) / 100) });
     }
+  }
 
-    if (policy.statutory.esi?.enabled) {
-      const esi = policy.statutory.esi;
-      if (results.grossPay <= (esi.wageLimit || 21000)) {
-        const esiAmount = applyRounding((results.grossPay * (esi.employeeRate || 0.75)) / 100);
-        results.statutoryDeductions.push({ name: 'ESI', calculatedValue: esiAmount, isStatutory: true });
-        results.totalDeductions += esiAmount;
-      }
+  // ESI
+  if (esiConfig.enabled) {
+    if (adjustedGross <= (esiConfig.threshold || 21000)) {
+      const esiAmount = applyRounding((adjustedGross * (esiConfig.employeePercent || 0.75)) / 100);
+      results.statutoryDeductions.push({ name: 'ESI', calculatedValue: esiAmount, isStatutory: true, source: esiConfig.source });
+      results.totalDeductions += esiAmount;
     }
+  }
 
-    if (policy.statutory.pt?.enabled) {
-      const pt = policy.statutory.pt;
-      // Fixed 200 for simplicity as in backend, unless we have slabs
-      const ptAmount = pt.fixedValue || 200;
-      results.statutoryDeductions.push({ name: 'Professional Tax (PT)', calculatedValue: ptAmount, isStatutory: true });
+  // PT
+  if (ptConfig.enabled) {
+    const slabs = ptConfig.slabs || [];
+    const slab = slabs.find(s => adjustedGross >= s.min && adjustedGross <= (s.max || 999999999));
+    const ptAmount = slab ? (slab.amount || 0) : 0;
+    if (ptAmount > 0) {
+      results.statutoryDeductions.push({ name: 'Professional Tax (PT)', calculatedValue: ptAmount, isStatutory: true, source: ptConfig.source });
       results.totalDeductions += ptAmount;
     }
   }
 
-  // Pass 4: Profile Deductions
-  filteredDeductions.forEach(comp => {
-    let base = 0;
-    if (comp.basedOn === 'CTC') base = monthlyCTC;
-    else if (comp.basedOn === 'Gross') base = results.grossPay;
-    else if (comp.basedOn === 'Basic Salary' || comp.basedOn === 'Basic') base = basicSalary;
-    else base = results.breakdown[comp.basedOn] || 0;
+  // Gratuity
+  if (gratuityConfig.enabled && basicSalary > 0) {
+    const gratuityAmount = applyRounding((basicSalary * (15 / 26)) / 12);
+    results.employerContributions.push({ name: 'Gratuity Provision', calculatedValue: gratuityAmount, source: gratuityConfig.source });
+  }
 
-    const val = resolveVal(comp, base);
-    results.deductions.push({ ...comp, calculatedValue: val });
-    results.totalDeductions += val;
+  // ── 6. Profile Deductions (prorated) ─────────────────────────────────────
+  const filteredDeductions = deductions.filter(d => {
+    const n = (d.name || '').toLowerCase();
+    if (d.hidden || d._isStatutoryConfig || n.includes('metadata')) return false;
+    if ((n.includes('pf') || n.includes('provident')) && pfConfig.enabled) return false;
+    if (n.includes('esi') && esiConfig.enabled) return false;
+    if ((n.includes('pt') || n.includes('tax')) && ptConfig.enabled) return false;
+    return true;
   });
+
+  filteredDeductions.forEach(comp => {
+    const val = resolveVal(comp, results.breakdown[comp.basedOn] || monthlyCTC);
+    const proratedVal = applyRounding(val * prorationRatio);
+    results.deductions.push({ ...comp, calculatedValue: proratedVal });
+    results.totalDeductions += proratedVal;
+  });
+
+  // LOP row
+  if (lopDeduction > 0) {
+    results.deductions.push({ name: 'LOP Deduction', calculatedValue: lopDeduction, isLOP: true });
+    results.totalDeductions += lopDeduction;
+  }
 
   results.totalDeductions = applyRounding(results.totalDeductions);
   results.netSalary = applyRounding(results.grossPay - results.totalDeductions);
 
   return results;
 };
-

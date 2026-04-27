@@ -4,6 +4,7 @@ const PDFDocument = require('pdfkit');
 const { format } = require('date-fns');
 const puppeteer = require('puppeteer');
 const payslipTemplateService = require('../payroll/payslipTemplate.service');
+const { decryptJson } = require('../../shared/utils/security');
 
 class PDFGeneratorService {
     constructor() {
@@ -69,10 +70,11 @@ class PDFGeneratorService {
     async generatePayslip(res, payroll, settings = {}) {
         try {
             const pdfBuffer = await this._renderHtmlToPdf(payroll, settings);
+            const employeeInfo = decryptJson(payroll.employeeInfo) || {};
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Length', pdfBuffer.length);
             res.setHeader('Content-Disposition',
-                `attachment; filename="Payslip-${payroll.employeeInfo.employeeId}-${payroll.month}-${payroll.year}.pdf"`);
+                `attachment; filename="Payslip-${employeeInfo.employeeId || 'EMP'}-${payroll.month}-${payroll.year}.pdf"`);
             return res.end(pdfBuffer, 'binary');
         } catch (error) {
             console.error('PDF Generation Error:', error);

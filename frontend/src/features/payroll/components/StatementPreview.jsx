@@ -156,32 +156,49 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Financial Context</span>
                     </div>
                     <div className="grid grid-cols-2 gap-y-4 text-xs">
+                        <span className="font-bold text-slate-500 dark:text-slate-400">Working Days</span>
+                        <span className="font-black text-slate-800 dark:text-white text-right">{payslip.breakdown?.workingDays || 30} Days</span>
+                        <span className="font-bold text-slate-500 dark:text-slate-400">Payable Days</span>
+                        <span className="font-black text-indigo-500 text-right">{payslip.breakdown?.payableDays || 0} Days</span>
+                        
                         <span className="font-bold text-slate-500 dark:text-slate-400">Bank Interface</span>
                         <span className="font-black text-slate-800 dark:text-white text-right">{payslip.bankDetails?.bankName || 'N/A'}</span>
                         <span className="font-bold text-slate-500 dark:text-slate-400">Account No.</span>
                         <span className="font-black text-slate-800 dark:text-white text-right">****{(payslip.bankDetails?.accountNumber || '').slice(-4) || '----'}</span>
-                        <span className="font-bold text-slate-500 dark:text-slate-400">Pan ID</span>
-                        <span className="font-black text-slate-800 dark:text-white text-right">{payslip.bankDetails?.pan || '---'}</span>
-                        <span className="font-bold text-slate-500 dark:text-slate-400">OT Hours</span>
+                        <span className="font-bold text-slate-500 dark:text-slate-400">OT Duration</span>
                         <span className="font-black text-indigo-500 text-right">{payslip.breakdown?.overtimeHours || 0} hrs</span>
-                        {payslip.attendance?.lopDays > 0 && (
-                            <>
-                                <span className="font-bold text-slate-400">LOP Loss</span>
-                                <span className="font-black text-rose-500 text-right">{currencySymbol}{formatCurrency(payslip.breakdown?.lopDeduction || 0)}</span>
-                            </>
-                        )}
                     </div>
                 </div>
             </div>
+
+            {/* Employer Contributions (Informational) */}
+            {Array.isArray(payslip.breakdown?.employerContributions) && payslip.breakdown.employerContributions.length > 0 && (
+                <div className="p-6 bg-slate-50/50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-slate-200/50 dark:border-white/10 pb-2">
+                        <ShieldCheck size={14} className="text-emerald-500"/>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Employer Contributions (Provisioning)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        {payslip.breakdown.employerContributions.map((c, idx) => (
+                            <div key={idx} className="flex justify-between text-[10px] font-bold">
+                                <span className="text-slate-500">{c.name}</span>
+                                <span className="text-slate-700 dark:text-slate-300">{currencySymbol}{formatCurrency(c.value)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-2 gap-16 border-t border-slate-100 dark:border-white/5 pt-10">
                 <div className="space-y-8">
                     <h4 className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-4">Earnings Breakdown</h4>
                     <div className="space-y-4">
-                        {(Array.isArray(payslip.breakdown?.earnings) ? payslip.breakdown.earnings : payslip.breakdown?.earnings?.components || []).map((comp, idx) => (
+                        {(Array.isArray(payslip.breakdown?.earnings) ? payslip.breakdown.earnings : payslip.breakdown?.earnings?.components || [])
+                            .filter(comp => !comp.hidden && !comp.name?.includes('Metadata'))
+                            .map((comp, idx) => (
                             <div key={idx} className="flex justify-between text-xs font-bold border-b border-slate-50 dark:border-white/5 pb-3">
                                 <span className="text-slate-500 dark:text-slate-400">{comp.name}</span>
-                                <span className="text-slate-800 dark:text-white">{currencySymbol}{formatCurrency(comp.value)}</span>
+                                <span className="text-slate-800 dark:text-white">{currencySymbol}{formatCurrency(comp.value || comp.calculatedValue)}</span>
                             </div>
                         ))}
                         <div className="flex justify-between items-center py-4 bg-emerald-50/50 dark:bg-emerald-500/10 px-4 rounded-xl border border-emerald-100/50 dark:border-emerald-500/20">
@@ -204,10 +221,12 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
                 <div className="space-y-8">
                     <h4 className="text-xs font-black text-rose-500 uppercase tracking-widest mb-4">Deduction Liabilities</h4>
                     <div className="space-y-4">
-                        {(Array.isArray(payslip.breakdown?.deductions) ? payslip.breakdown.deductions : payslip.breakdown?.deductions?.components || []).map((comp, idx) => (
+                        {(Array.isArray(payslip.breakdown?.deductions) ? payslip.breakdown.deductions : payslip.breakdown?.deductions?.components || [])
+                            .filter(comp => !comp.hidden && !comp.name?.toLowerCase().includes('gratuity') && !comp.name?.includes('Metadata'))
+                            .map((comp, idx) => (
                             <div key={idx} className="flex justify-between text-xs font-bold border-b border-slate-50 dark:border-white/5 pb-3">
                                 <span className="text-slate-500 dark:text-slate-400">{comp.name}</span>
-                                <span className="text-rose-500">{currencySymbol}{formatCurrency(comp.value)}</span>
+                                <span className="text-rose-500">{currencySymbol}{formatCurrency(comp.value || comp.calculatedValue)}</span>
                             </div>
                         ))}
                         {payslip.attendance?.lopDays > 0 && payslip.breakdown?.lopDeduction > 0 && (

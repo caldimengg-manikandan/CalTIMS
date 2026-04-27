@@ -13,15 +13,15 @@ const defaultPolicy = {
     { name: 'Professional Tax', type: 'DEDUCTION', calculationType: 'fixed', value: 200, isStatutory: true }
   ],
   statutory: {
-    pf: { enabled: true, employeeRate: 12, employerRate: 12, wageLimit: 15000 },
+    pf: { enabled: true, employeePercent: 12, employerPercent: 12, threshold: 15000, restrictToCeiling: true },
     pt: { 
       enabled: true, 
       state: 'TN', 
-      frequency: 'MONTHLY', // MONTHLY, HALF_YEARLY, YEARLY
+      mode: 'MONTHLY', // MONTHLY, HALF_YEARLY, YEARLY
       deductionMonths: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
       slabs: [{ min: 0, max: 15000, amount: 0 }, { min: 15001, max: 99999999, amount: 200 }] 
     },
-    esi: { enabled: true, employeeRate: 0.75, employerRate: 3.25, wageLimit: 21000 },
+    esi: { enabled: true, employeePercent: 0.75, employerPercent: 3.25, threshold: 21000 },
     gratuity: { enabled: false, includeInCTC: true, showAccrued: false },
     tds: { 
       enabled: true, 
@@ -82,15 +82,16 @@ const migrateToUnifiedPolicy = async (organizationId = null) => {
         ...defaultPolicy.statutory,
         pf: {
           enabled: legacyPayroll.taxToggles?.pf ?? true,
-          employeeRate: legacyPayroll.pfRate || 12,
-          employerRate: legacyPayroll.pfEmployerRate || 12,
-          wageLimit: legacyPayroll.pfWageLimit || 15000
+          employeePercent: legacyPayroll.pfRate || 12,
+          employerPercent: legacyPayroll.pfEmployerRate || 12,
+          threshold: legacyPayroll.pfWageLimit || 15000,
+          restrictToCeiling: legacyPayroll.pfRestrictToCeiling ?? true
         },
         esi: {
           enabled: legacyPayroll.taxToggles?.esi ?? true,
-          employeeRate: legacyPayroll.esiRate || 0.75,
-          employerRate: legacyPayroll.esiEmployerRate || 3.25,
-          wageLimit: legacyPayroll.esiLimit || 21000
+          employeePercent: legacyPayroll.esiRate || 0.75,
+          employerPercent: legacyPayroll.esiEmployerRate || 3.25,
+          threshold: legacyPayroll.esiLimit || 21000
         },
         tds: {
           enabled: legacyPayroll.taxToggles?.tds ?? true,
@@ -100,7 +101,9 @@ const migrateToUnifiedPolicy = async (organizationId = null) => {
         },
         pt: {
           enabled: legacyPayroll.taxToggles?.pt ?? true,
-          slabs: legacyPayroll.ptSlabs || defaultPolicy.statutory.pt.slabs
+          slabs: legacyPayroll.ptSlabs || defaultPolicy.statutory.pt.slabs,
+          state: legacyPayroll.ptState || 'MH',
+          mode: legacyPayroll.ptMode || 'MONTHLY'
         }
       },
       attendance: {
@@ -139,12 +142,36 @@ const migrateToUnifiedPolicy = async (organizationId = null) => {
  */
 const getPolicy = async (organizationId = null) => {
   try {
+    if (!organizationId) {
+      logger.warn("getPolicy called without organizationId - accessing default active policy");
+    }
+
     const where = { isActive: true };
     if (organizationId) where.organizationId = organizationId;
     
-    let policy = await prisma.payrollPolicy.findFirst({ where });
+    let policy = await prisma.payrollPolicy.findFirst({ 
+      where,
+      orderBy: { version: 'desc' } 
+    });
+    
     if (!policy) {
-       return { ...defaultPolicy, organizationId };
+      // Try to migrate from old settings if they exist
+      logger.info(`No policy record for org ${organizationId}, attempting migration...`);
+      policy = await migrateToUnifiedPolicy(organizationId);
+      
+      // PERSIST the migrated policy so we have an actual record to update later
+      const { statutory, attendance, overtime, rounding, salaryComponents, leave, compliance, name } = policy;
+      const rules = { statutory, attendance, overtime, rounding, salaryComponents, leave, compliance };
+      
+      policy = await prisma.payrollPolicy.create({
+        data: {
+          name: name || 'Unified Payroll Policy',
+          rules: rules,
+          organizationId,
+          version: 1,
+          isActive: true
+        }
+      });
     }
     
     // Flatten rules into the root object for the frontend
@@ -157,10 +184,13 @@ const getPolicy = async (organizationId = null) => {
       finalRules.statutory.gratuity = { ...defaultPolicy.statutory.gratuity };
     }
     if (finalRules.statutory.pt && finalRules.statutory.pt.state === undefined) {
-      finalRules.statutory.pt.state = 'TN'; // Default to Tamil Nadu
+      finalRules.statutory.pt.state = 'MH'; // Default to Maharashtra for broad template use
     }
-    if (finalRules.statutory.pt && finalRules.statutory.pt.frequency === undefined) {
-      finalRules.statutory.pt.frequency = 'MONTHLY';
+    if (finalRules.statutory.pf && finalRules.statutory.pf.restrictToCeiling === undefined) {
+      finalRules.statutory.pf.restrictToCeiling = true;
+    }
+    if (finalRules.statutory.pt && finalRules.statutory.pt.mode === undefined) {
+      finalRules.statutory.pt.mode = 'MONTHLY';
       finalRules.statutory.pt.deductionMonths = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
     }
     if (!finalRules.attendance) {
@@ -217,21 +247,37 @@ const updatePolicy = async (policyData, organizationId = null) => {
   let policy = await prisma.payrollPolicy.findFirst({ where });
   
   if (!policy) {
+    logger.info(`No active policy found for org ${organizationId}, creating one.`);
     return await createPolicyVersion(policyData, organizationId);
   }
 
-  // Explicitly extract config fields to avoid nesting
-  const { statutory, attendance, overtime, rounding, salaryComponents, leave, compliance } = policyData;
-  const rules = { statutory, attendance, overtime, rounding, salaryComponents, leave, compliance };
+  // Explicitly extract config fields and merge with existing rules
+  const { statutory, attendance, overtime, rounding, salaryComponents, leave, compliance, name } = policyData;
+  const existingRules = (policy.rules && typeof policy.rules === 'object') ? policy.rules : {};
+  
+  const rules = { 
+    ...existingRules,
+    ...(statutory && { statutory }),
+    ...(attendance && { attendance }),
+    ...(overtime && { overtime }),
+    ...(rounding && { rounding }),
+    ...(salaryComponents && { salaryComponents }),
+    ...(leave && { leave }),
+    ...(compliance && { compliance })
+  };
 
   const dataToSave = {
-    name: policyData.name || policy.name,
+    name: name || policyData.name || policy.name,
     rules: rules,
     isActive: policyData.isActive !== undefined ? policyData.isActive : true
   };
 
   const updated = await prisma.payrollPolicy.update({
-    where: { id: policy.id },
+    where: { 
+      id: policy.id,
+      // Extra security: ensure we only update for the correct organization if provided
+      ...(organizationId && { organizationId }) 
+    },
     data: dataToSave
   });
 
@@ -251,15 +297,15 @@ const syncLegacyPayrollToPolicy = async (legacyPayroll, organizationId) => {
       ...(activePolicy.statutory || defaultPolicy.statutory),
       pf: {
         enabled: legacyPayroll.taxToggles?.pf ?? (activePolicy.statutory?.pf?.enabled ?? true),
-        employeeRate: legacyPayroll.pfRate || (activePolicy.statutory?.pf?.employeeRate || 12),
-        employerRate: legacyPayroll.pfEmployerRate || (activePolicy.statutory?.pf?.employerRate || 12),
-        wageLimit: legacyPayroll.pfWageLimit || (activePolicy.statutory?.pf?.wageLimit || 15000)
+        employeePercent: legacyPayroll.pfRate || (activePolicy.statutory?.pf?.employeePercent || 12),
+        employerPercent: legacyPayroll.pfEmployerRate || (activePolicy.statutory?.pf?.employerPercent || 12),
+        threshold: legacyPayroll.pfWageLimit || (activePolicy.statutory?.pf?.threshold || 15000)
       },
       esi: {
         enabled: legacyPayroll.taxToggles?.esi ?? (activePolicy.statutory?.esi?.enabled ?? true),
-        employeeRate: legacyPayroll.esiRate || (activePolicy.statutory?.esi?.employeeRate || 0.75),
-        employerRate: legacyPayroll.esiEmployerRate || (activePolicy.statutory?.esi?.employerRate || 3.25),
-        wageLimit: legacyPayroll.esiLimit || (activePolicy.statutory?.esi?.wageLimit || 21000)
+        employeePercent: legacyPayroll.esiRate || (activePolicy.statutory?.esi?.employeePercent || 0.75),
+        employerPercent: legacyPayroll.esiEmployerRate || (activePolicy.statutory?.esi?.employerPercent || 3.25),
+        threshold: legacyPayroll.esiLimit || (activePolicy.statutory?.esi?.threshold || 21000)
       },
       tds: {
         enabled: legacyPayroll.taxToggles?.tds ?? (activePolicy.statutory?.tds?.enabled ?? true),

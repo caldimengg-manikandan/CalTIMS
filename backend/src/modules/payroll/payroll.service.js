@@ -7,29 +7,55 @@ const { resolveExecutionOrder } = require('../formulaEngine/dependencyResolver')
 const { startOfMonth, endOfMonth, getDaysInMonth, format, isWeekend, eachDayOfInterval, isSameDay } = require('date-fns');
 const path = require('path');
 const logger = require('../../shared/utils/logger');
+const { calculatePF, calculateESI, calculatePT, getESIPeriodStart } = require('../../shared/utils/complianceEngine');
 const auditService = require('../audit/audit.service');
 const AppError = require('../../shared/utils/AppError');
-const { encrypt, decrypt } = require('../../shared/utils/security');
-
-// Helper to encrypt JSON blobs
-const encryptJson = (obj) => (obj && typeof obj === 'object') ? encrypt(JSON.stringify(obj)) : obj;
-// Helper to decrypt JSON blobs
-const decryptJson = (str) => {
-    if (!str || typeof str !== 'string') return str;
-    try {
-        const decrypted = decrypt(str);
-        return decrypted ? JSON.parse(decrypted) : str;
-    } catch (e) {
-        return str; 
-    }
-};
+const { encrypt, decrypt, encryptJson, decryptJson } = require('../../shared/utils/security');
 
 const formatProfile = (p) => {
     if (!p) return p;
+    const earnings = decryptJson(p.earnings) || [];
+    const deductions = decryptJson(p.deductions) || [];
+    
+    // Look for hidden statutory config in earnings/deductions
+    const statutoryItem = earnings.find(e => e._isStatutoryConfig) || deductions.find(d => d._isStatutoryConfig);
+    const config = statutoryItem ? statutoryItem._config : {};
+
+    // Support new nested structure and migrate from legacy flat booleans
+    const pf = config.pf || { 
+      mode: config.pfEnabled === false ? 'disabled' : (config.pfEnabled === true ? 'enabled' : 'default'),
+      enabled: config.pfEnabled !== false 
+    };
+    const esi = config.esi || { 
+      mode: config.esiEnabled === false ? 'disabled' : (config.esiEnabled === true ? 'enabled' : 'default'),
+      enabled: config.esiEnabled !== false 
+    };
+    const pt = config.pt || { 
+      mode: config.ptEnabled === false ? 'disabled' : (config.ptEnabled === true ? 'enabled' : 'default'),
+      enabled: config.ptEnabled !== false 
+    };
+    const gratuity = config.gratuity || { 
+      mode: config.gratuityEnabled === false ? 'disabled' : (config.gratuityEnabled === true ? 'enabled' : 'default'),
+      enabled: config.gratuityEnabled !== false 
+    };
+
+    const hasExplicitConfig = !!statutoryItem;
+
     return {
         ...p,
-        earnings: decryptJson(p.earnings),
-        deductions: decryptJson(p.deductions)
+        earnings,
+        deductions,
+        pf,
+        esi,
+        pt,
+        gratuity,
+        // Keep legacy fields for backward compatibility during migration
+        pfEnabled: pf.enabled,
+        esiEnabled: esi.enabled,
+        ptEnabled: pt.enabled,
+        gratuityEnabled: gratuity.enabled,
+        _statutory: config, // Raw config for calculation engine
+        _hasExplicitStatutory: hasExplicitConfig
     };
 };
 
@@ -113,17 +139,27 @@ const resolveComponentValue = (component, context, monthlyCTC) => {
  * Calculates actual working days in a month/period, excluding weekends and specific holidays.
  * Adjusted for joining dates.
  */
-const getWorkingDaysForPeriod = async (month, year, organizationId, employeeId) => {
-  const start = startOfMonth(new Date(year, month - 1));
-  const end = endOfMonth(start);
+const getWorkingDaysForPeriod = async (month, year, organizationId, employeeId, policy = null) => {
+  const monthDate = new Date(year, month - 1);
+  const start = startOfMonth(monthDate);
+  const end = endOfMonth(monthDate);
+  const calendarDaysInMonth = getDaysInMonth(monthDate);
 
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
-    select: { joiningDate: true }
+    select: { joiningDate: true, employeeCode: true }
   });
 
   const joiningDate = employee?.joiningDate ? new Date(employee.joiningDate) : null;
   const effectiveStart = (joiningDate && joiningDate > start && joiningDate < end) ? joiningDate : start;
+
+  // Calculate Pre-join Days (simple calendar days before joining)
+  let preJoinDays = 0;
+  if (joiningDate && joiningDate > start && joiningDate <= end) {
+      preJoinDays = joiningDate.getDate() - 1; // e.g. joins on 10th -> days 1-9 are pre-join
+  } else if (joiningDate && joiningDate > end) {
+      preJoinDays = calendarDaysInMonth; // joined in future
+  }
 
   const holidays = await prisma.holiday.findMany({
     where: {
@@ -134,7 +170,7 @@ const getWorkingDaysForPeriod = async (month, year, organizationId, employeeId) 
 
   const holidayDates = new Set(holidays.map(h => format(new Date(h.date), 'yyyy-MM-dd')));
 
-  // 1. Calculate Total Org Working Days (Denominator) - ALWAYS needed
+  // 1. Calculate Total Org Working Days (Denominator - based on actual worked days)
   let totalOrgWorkingDaysCount = 0;
   eachDayOfInterval({ start, end }).forEach(day => {
     if (!isWeekend(day) && !holidayDates.has(format(day, 'yyyy-MM-dd'))) {
@@ -142,13 +178,9 @@ const getWorkingDaysForPeriod = async (month, year, organizationId, employeeId) 
     }
   });
 
-  // 2. Calculate Individual Adjusted Working Days
+  // 2. Calculate Individual Adjusted Working Days (Working days after joining)
   let individualAdjustedWorkingDays = 0;
-  
-  // Future Joiner Logic: Only calculate if they joined before/during the period
-  if (joiningDate && joiningDate > end) {
-      individualAdjustedWorkingDays = 0;
-  } else {
+  if (joiningDate && joiningDate <= end) {
       eachDayOfInterval({ start: effectiveStart, end }).forEach(day => {
         if (!isWeekend(day) && !holidayDates.has(format(day, 'yyyy-MM-dd'))) {
           individualAdjustedWorkingDays++;
@@ -159,6 +191,8 @@ const getWorkingDaysForPeriod = async (month, year, organizationId, employeeId) 
   return {
     totalOrgWorkingDays: totalOrgWorkingDaysCount || 1,
     individualAdjustedWorkingDays: individualAdjustedWorkingDays || 0,
+    calendarDaysInMonth,
+    preJoinDays,
     joiningDate: employee?.joiningDate
   };
 };
@@ -172,40 +206,58 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
   const startDate = startOfMonth(new Date(year, month - 1));
   const endDate = endOfMonth(startDate);
 
-  // 1. Get precise working days for this employee (excludes weekends, holidays, and pre-joining days)
-  const workingDaysObj = await getWorkingDaysForPeriod(month, year, organizationId, user.employee?.id || user.id);
-  const workingDays = workingDaysObj.individualAdjustedWorkingDays;
-  const hoursPerDay = policy?.attendance?.workingHoursPerDay || 8;
+  // 1. Resolve Policy-Driven Standard Working Days (Denominator)
+  // Chain: Profile Override -> Global Policy -> Calendar Days (fallback)
+  const employee = user.employee;
+  const profile = formatProfile(employee?.payrollProfile);
+  
+  // Resolve attendance settings
+  const attConfig = profile?.override?.attendance || policy?.attendance || {};
+  const standardWorkingDays = attConfig.workingDaysPerMonth || getDaysInMonth(startDate);
+  
+  // 2. Fetch Precisely calculated working days (for joined ratio/proration)
+  const workingDaysObj = await getWorkingDaysForPeriod(month, year, organizationId, user.employee?.id || user.id, policy);
+  const individualOrgWorkingDays = workingDaysObj.individualAdjustedWorkingDays;
+  const hoursPerDay = attConfig.workingHoursPerDay || 8;
 
-  // 2. Fetch Approved Leaves
-  const leaves = await prisma.leave.findMany({
-    where: {
-      employeeId: user.employee?.id || user.id,
-      organizationId,
-      status: 'APPROVED',
-      isDeleted: false,
-      OR: [{ startDate: { lte: endDate }, endDate: { gte: startDate } }]
-    },
-    include: { type: true }
-  });
+  // 3. Fetch Approved Leaves & Holidays
+  const [leaves, holidays] = await Promise.all([
+    prisma.leave.findMany({
+      where: {
+        employeeId: user.employee?.id || user.id,
+        organizationId,
+        status: 'APPROVED',
+        isDeleted: false,
+        OR: [{ startDate: { lte: endDate }, endDate: { gte: startDate } }]
+      },
+      include: { type: true }
+    }),
+    prisma.holiday.findMany({
+      where: {
+        organizationId,
+        date: { gte: startDate, lte: endDate }
+      }
+    })
+  ]);
 
-  let lopDays = 0;
-  let paidLeaveDays = 0;
+  let unpaidLeaves = 0;
+  let paidLeaves = 0;
   leaves.forEach(l => {
-    // If leave type exists and has isDeductible = true, usually means it's a paid leave that deducts from balance
-    // For LOP, we'll check name or a specific flag if available. 
-    // Defaulting to: If it's not a known paid leave, treat as LOP.
     const typeName = (l.type?.name || '').toLowerCase();
-    const isPaid = typeName !== 'unpaid' && typeName !== 'lop' && typeName !== 'loss of pay';
-    
-    if (isPaid) paidLeaveDays += l.totalDays || 0;
-    else lopDays += l.totalDays || 0;
+    const isUnpaid = typeName === 'unpaid' || typeName === 'lop' || typeName === 'loss of pay';
+    if (isUnpaid) unpaidLeaves += l.totalDays || 0;
+    else paidLeaves += l.totalDays || 0;
   });
 
-  // 3. Present Days (Payable Days)
-  const presentDays = Math.max(0, workingDays - lopDays);
+  const holidayDays = holidays.length;
 
-  // 4. Fetch Actual Worked Hours (from Timesheets)
+  // 4. Implement User-Requested Formula:
+  // Payable Days = workingDays (Denominator) - unpaidLeaves + paidLeaves + holidays
+  // NOTE: If standardWorkingDays already includes paidLeaves/holidays as "payment days", 
+  // this formula might over-count. However, we follow the user's explicit logic.
+  const payableDays = Math.max(0, standardWorkingDays - unpaidLeaves + paidLeaves + holidayDays);
+
+  // 5. Fetch Actual Worked Hours (Timesheets)
   const timesheetWeeks = await prisma.timesheetWeek.findMany({
     where: {
       userId: user.id,
@@ -223,9 +275,6 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
   const overtimeEnabled = policy?.overtime?.enabled || false;
 
   timesheetWeeks.forEach(ts => {
-    // User Request: "It is five hours but showing only three" 
-    // Fix: Attribute the WHOLE week to the month in which it ENDS (weekEndDate).
-    // This is common payroll practice ensuring full weeks are paid together.
     const weekEndAt = new Date(ts.weekEndDate);
     const belongsToThisMonth = weekEndAt >= startDate && weekEndAt <= endDate;
     
@@ -236,8 +285,6 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
             const h = parseFloat(entry.hoursWorked) || 0;
             totalHours += h;
             if (h > 0 && !entry.isLeave) actualWorkedDays++;
-
-            // Weekly/Daily Overtime Calculation
             if (overtimeEnabled && !entry.isLeave && h > hoursPerDay) {
               totalOvertimeHours += (h - hoursPerDay);
             }
@@ -248,12 +295,17 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
   });
 
   return {
-    workingDays,
+    workingDays: standardWorkingDays,
+    payableDays,
+    unpaidLeaves,
+    paidLeaves,
+    holidayDays,
     totalOrgWorkingDays: workingDaysObj.totalOrgWorkingDays,
+    calendarDaysInMonth: workingDaysObj.calendarDaysInMonth,
+    preJoinDays: workingDaysObj.preJoinDays,
     joiningDate: workingDaysObj.joiningDate,
-    presentDays,
-    lopDays,
-    paidLeaveDays,
+    presentDays: payableDays, // For backward compatibility
+    lopDays: unpaidLeaves,    // For backward compatibility
     totalHours,
     overtimeHours: totalOvertimeHours,
     hoursPerDay,
@@ -264,61 +316,112 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
 
 
 /**
- * UNIVERSAL PAYROLL CALCULATION ENGINE
- * Rule: Single Source of Truth for all salary computations.
- * Signature: calculateSalaryBreakdown(profile, attendance, policy, month)
+ * UNIVERSAL PAYROLL CALCULATION ENGINE v3
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rule: Salary components are prorated via adjustedGross.
+ *       Statutory deductions are strictly driven by Employee's Payroll Profile.
  */
-const calculateSalaryBreakdown = (profile, attendance, policy, month = new Date().getMonth()) => {
-  const processingMonth = month !== undefined ? month : (attendance.month !== undefined ? attendance.month : new Date().getMonth());
-  const { 
-    workingDays = 1, 
-    totalOrgWorkingDays = 1, 
-    presentDays = 0, 
-    lopDays = 0, 
-    overtimeHours = 0, 
-    hoursPerDay = 8 
-  } = attendance;
+const calculateSalaryBreakdown = async (profile, attendance, policy, month, year) => {
+  const now = new Date();
+  const processingMonth = month !== undefined ? month : (attendance.month !== undefined ? attendance.month : (now.getMonth() + 1));
+  const processingYear = year !== undefined ? year : (attendance.year !== undefined ? attendance.year : now.getFullYear());
+  
+  const monthIdx = processingMonth - 1;
 
-  // 1. Engine Configuration (Rounding & Precision)
+  // ── 1. Rounding Config ────────────────────────────────────────────────────
   const roundingConfig = policy?.rounding || { decimals: 2, rule: 'ROUND_OFF' };
   const applyRounding = (val) => {
     const p = Math.pow(10, roundingConfig.decimals || 2);
-      if (roundingConfig.rule === 'ROUND_UP') return Math.ceil(val * p) / p;
+    if (roundingConfig.rule === 'ROUND_UP') return Math.ceil(val * p) / p;
     if (roundingConfig.rule === 'ROUND_DOWN') return Math.floor(val * p) / p;
     return Math.round(val * p) / p;
   };
 
-  // 2. Proration Logic (Formula: adjustedSalary = perDaySalary × payableDays)
-  // payableDays = presentDays
-  // baseSalary / workingDays (standardMonthlyDays)
-  const standardMonthlyDays = policy?.attendance?.workingDaysPerMonth || totalOrgWorkingDays;
-  // ratio = payableDays / workingDays
-  const prorationRatio = standardMonthlyDays > 0 ? (presentDays / standardMonthlyDays) : 0;
+  // ── 2. Calendar & Proration Foundation ───────────────────────────────────
+  const totalDaysInMonth = attendance.calendarDaysInMonth || getDaysInMonth(new Date(processingYear, monthIdx));
+  const rawPreJoinDays = attendance.preJoinDays || 0;
+  const rawLopDays = attendance.lopDays || 0;
+  const daysAfterJoin = Math.max(0, totalDaysInMonth - rawPreJoinDays);
 
-  const resolveRawVal = (comp, base) => {
-    let val = parseFloat(comp.value) || 0;
-    if (comp.calculationType?.toLowerCase() === 'percentage') {
-       val = (base * val) / 100;
+  if (daysAfterJoin <= 0) {
+    logger.info(`[PAYROLL MID-JOIN] ${profile.employeeId || 'Unknown'} joined after month ended. Salary = 0.`);
+    return {
+      workingDays: totalDaysInMonth, totalOrgWorkingDays: totalDaysInMonth, standardMonthlyDays: totalDaysInMonth,
+      payableDays: 0, lopDays: 0, perDaySalary: 0, adjustedGross: 0,
+      preJoinDays: rawPreJoinDays, grossPay: 0, totalDeductions: 0,
+      totalEmployerContribution: 0, netPay: 0, netSalary: 0, lopDeduction: 0,
+      earnings: [], deductions: [], employerContributions: [], gratuityProvision: 0, gratuityAccrued: 0,
+      performanceMetrics: { attendancePercentage: 0 }
+    };
+  }
+
+  const lopDays = Math.min(rawLopDays, daysAfterJoin);
+  const payableDays = Math.max(0, daysAfterJoin - lopDays);
+  const monthlySalary = (parseFloat(profile.annualCTC) || (parseFloat(profile.monthlyCTC) * 12) || 0) / 12;
+  const perDaySalary = applyRounding(monthlySalary / totalDaysInMonth);
+  const adjustedGross = applyRounding(perDaySalary * payableDays);
+  const prorationRatio = totalDaysInMonth > 0 ? payableDays / totalDaysInMonth : 0;
+
+  // ── 3. Resolve Statutory Logic (Profile-Driven) ───────────────────────────
+  // Helper to resolve effective config using Profile Mode overrides
+  const hasExplicitStatutory = profile._hasExplicitStatutory === true;
+  const resolveStatutory = (type, profileCfg, policyCfg) => {
+    const cfg = profileCfg?.[type] || { mode: 'default' };
+    const mode = cfg.mode || 'default';
+    
+    let resolved = { enabled: false, source: 'Policy' };
+    
+    if (mode === 'enabled') {
+      resolved = { ...policyCfg?.[type], ...cfg, enabled: true, source: 'Payroll Profile (Override: Enabled)' };
+    } else if (mode === 'disabled') {
+      resolved = { enabled: false, source: 'Payroll Profile (Override: Disabled)' };
+    } else {
+      // Default - use company policy settings (including enabled/disabled)
+      const policyConfig = policyCfg?.[type] || {};
+      resolved = { 
+        ...policyConfig, 
+        enabled: policyConfig.enabled === true, // Explicit boolean check
+        source: hasExplicitStatutory ? 'Company Policy (profile default)' : 'Company Policy (no profile config)'
+      };
     }
-    return val; 
+
+    logger.info(`[PAYROLL STATUTORY] ${type.toUpperCase()} | Mode: ${mode} | HasProfile: ${hasExplicitStatutory} | Resolved Enabled: ${resolved.enabled} | Source: ${resolved.source}`);
+    return resolved;
   };
 
-  const earningsList = (profile.earnings || []).map(e => ({ ...e, name: e.name === 'grativity' ? 'Gratuity' : e.name }));
-  const deductionsList = (profile.deductions || []).map(d => ({ ...d, name: d.name === 'grativity' ? 'Gratuity' : d.name }));
+  const pfConfig = resolveStatutory('pf', profile._statutory, policy?.statutory);
+  const esiConfig = resolveStatutory('esi', profile._statutory, policy?.statutory);
+  const ptConfig = resolveStatutory('pt', profile._statutory, policy?.statutory);
+  const gratuityConfig = resolveStatutory('gratuity', profile._statutory, policy?.statutory);
 
-  // Stage 1: Base Calculation (Full Month)
+  // ── Debug Logging ─────────────────────────────────────────────────────────
+  logger.info(
+    `[PAYROLL CALC] Emp: ${profile.employeeId} | CalDays: ${totalDaysInMonth} | ` +
+    `Payable: ${payableDays} | AdjustedGross: ${adjustedGross.toFixed(2)}`
+  );
+
+  // ── 4. Raw Helper ─────────────────────────────────────────────────────────
+  const resolveRawVal = (comp, base) => {
+    let val = parseFloat(comp.value) || 0;
+    if (comp.calculationType?.toLowerCase() === 'percentage') val = (base * val) / 100;
+    return val;
+  };
+
+  // ── 5. Base Gross (Full-Month, Unprorated) ────────────────────────────────
+  const earningsList = (profile.earnings || [])
+    .filter(e => !e.hidden && !e._isStatutoryConfig && !(e.name || '').toLowerCase().includes('metadata'));
+
   let baseGross = 0;
   const baseBreakdown = {};
-  const monthlySalary = (parseFloat(profile.annualCTC) || (parseFloat(profile.monthlyCTC) * 12) || 0) / 12;
 
-  // Pass 1: Independent Earnings
+  // Pass 1: CTC-dependent
   earningsList.filter(e => !e.basedOn || ['CTC', 'Monthly CTC', 'Annual CTC'].includes(e.basedOn)).forEach(e => {
     const val = resolveRawVal(e, monthlySalary);
     baseBreakdown[e.name] = val;
     baseGross += val;
   });
 
-  // Pass 2: Dependent Earnings
+  // Pass 2: Dependent
   earningsList.filter(e => e.basedOn && !['CTC', 'Monthly CTC', 'Annual CTC'].includes(e.basedOn)).forEach(e => {
     const base = baseBreakdown[e.basedOn] || 0;
     const val = resolveRawVal(e, base);
@@ -326,134 +429,128 @@ const calculateSalaryBreakdown = (profile, attendance, policy, month = new Date(
     baseGross += val;
   });
 
-  // Stage 2: Statutory Logic
-  const statutoryDeductions = [];
-  const basicSalary = baseBreakdown['Basic Salary'] || baseBreakdown['Basic'] || baseBreakdown['basic salary'] || (baseGross * 0.5);
-
-  if (policy?.statutory?.pf?.enabled) {
-    const pf = policy.statutory.pf;
-    const pfWageBase = Math.min(basicSalary, pf.wageLimit || 15000);
-    const pfAmount = (pfWageBase * (pf.employeeRate || 12)) / 100;
-    statutoryDeductions.push({ name: 'Provident Fund (PF)', baseVal: pfAmount, isStatutory: true });
-  }
-
-  if (policy?.statutory?.esi?.enabled) {
-      const esi = policy.statutory.esi;
-      if (baseGross <= (esi.wageLimit || 21000)) {
-          const esiAmount = (baseGross * (esi.employeeRate || 0.75)) / 100;
-          statutoryDeductions.push({ name: 'ESI', baseVal: esiAmount, isStatutory: true });
-      }
-  }
-
-  if (policy?.statutory?.pt?.enabled) {
-      const pt = policy.statutory.pt;
-      // Frequency Logic: MONTHLY (always), HALF_YEARLY/YEARLY (only if match)
-      const months = pt.deductionMonths || [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-      const isPaymentMonth = months.includes(processingMonth);
-
-      if (isPaymentMonth || pt.frequency === 'MONTHLY') {
-          const slabs = pt.slabs || [];
-          const slab = slabs.find(s => baseGross >= s.min && baseGross <= (s.max || 99999999));
-          if (slab && slab.amount > 0) {
-              statutoryDeductions.push({ name: 'Professional Tax (PT)', baseVal: slab.amount, isStatutory: true, state: pt.state });
-          }
-      }
-  }
-
-  // Gratuity Calculation
-  let gratuityProvision = 0;
-  let gratuityAccrued = 0;
-  if (policy?.statutory?.gratuity?.enabled) {
-      const gConfig = policy.statutory.gratuity;
-      // Monthly Provision: basic * (15/26) / 12
-      gratuityProvision = (basicSalary * (15 / 26)) / 12;
-      
-      if (gConfig.includeInCTC) {
-          statutoryDeductions.push({ name: 'Gratuity', baseVal: gratuityProvision, isStatutory: true });
-      }
-
-      // Accrued Gratuity (Informational): basic * tenure * (15/26)
-      if (gConfig.showAccrued && attendance.joiningDate) {
-          const join = new Date(attendance.joiningDate);
-          const now = new Date(); // Using current date for tenure as of today
-          const tenureYears = (now - join) / (1000 * 60 * 60 * 24 * 365.25);
-          
-          if (tenureYears >= 5) {
-              gratuityAccrued = basicSalary * tenureYears * (15 / 26);
-          }
-      }
-  }
-
-  // Pass 3: Resolved Base Deductions
-  const profileDeductions = deductionsList.filter(d => {
-    const name = d.name.toLowerCase();
-    const isStatutoryPF = name.includes('provident fund') || name === 'pf';
-    const isStatutoryESI = name.includes('esi') || name.includes('state insurance');
-    const isStatutoryPT = name.includes('professional tax') || name === 'pt';
-    const isStatutoryGratuity = name.includes('gratuity') || name.includes('grativity');
-
-    if (isStatutoryPF && policy?.statutory?.pf?.enabled) return false;
-    if (isStatutoryESI && policy?.statutory?.esi?.enabled) return false;
-    if (isStatutoryPT && policy?.statutory?.pt?.enabled) return false;
-    if (isStatutoryGratuity && policy?.statutory?.gratuity?.enabled) return false;
-    return true;
-  }).map(d => {
-    let base = 0;
-    if (d.basedOn === 'Gross') base = baseGross;
-    else if (['CTC', 'Monthly CTC'].includes(d.basedOn)) base = monthlySalary;
-    else base = baseBreakdown[d.basedOn] || 0;
-    return { name: d.name, baseVal: resolveRawVal(d, base) };
-  });
-
-  const allDeductionsRaw = [...profileDeductions, ...statutoryDeductions];
-  let baseDeductions = 0;
-  allDeductionsRaw.forEach(d => baseDeductions += d.baseVal);
-
-  // Stage 3: Attendance-Based Adjustment (Single Source of Truth)
-  // Apply proration to EACH component
-  const finalEarnings = earningsList.map(e => ({
+  // ── 6. Prorated Earnings ──────────────────────────────────────────────────
+  const earnings = earningsList.map(e => ({
     name: e.name,
     value: applyRounding((baseBreakdown[e.name] || 0) * prorationRatio)
   }));
 
-  const finalDeductions = allDeductionsRaw.map(d => ({
-    name: d.name,
-    value: applyRounding(d.baseVal * prorationRatio)
-  }));
+  const proratedGross = applyRounding(baseGross * prorationRatio);
+  const proratedBasic = applyRounding(
+    (baseBreakdown['Basic Salary'] || baseBreakdown['Basic'] || (baseGross * 0.5)) * prorationRatio
+  );
+  const proratedDA = applyRounding(
+    (baseBreakdown['DA'] || baseBreakdown['Dearness Allowance'] || 0) * prorationRatio
+  );
 
-  // Overtime
-  let overtimePay = 0;
-  if (overtimeHours > 0 && policy?.overtime?.enabled) {
-    const denominator = standardMonthlyDays || 30;
-    const hourlyRate = (monthlySalary / denominator) / hoursPerDay;
-    const multiplier = policy.overtime.multiplier || 1.5;
-    overtimePay = applyRounding(overtimeHours * hourlyRate * multiplier);
-    finalEarnings.push({ name: 'Overtime Pay', value: overtimePay, meta: { hours: overtimeHours } });
+  // ── 7. Statutory Deductions (applied on adjustedGross) ────────────────────────
+  const statutoryDeductions = [];
+
+  // PF
+  if (pfConfig.enabled) {
+    const pfResult = calculatePF(proratedBasic, proratedDA, pfConfig);
+    statutoryDeductions.push({
+      name: 'Provident Fund (PF)',
+      value: pfResult.employeePF,
+      isStatutory: true,
+      meta: { employerEPS: pfResult.employerEPS, totalEmployer: pfResult.totalEmployer, source: pfConfig.source }
+    });
   }
 
-  const grossPay = applyRounding(baseGross * prorationRatio);
-  const totalDeductions = applyRounding(baseDeductions * prorationRatio);
-  const netPay = applyRounding(grossPay - totalDeductions + overtimePay);
+  // ESI
+  if (esiConfig.enabled) {
+    // Eligibility must be based on the FULL-MONTH equivalent salary (monthlySalary = annualCTC / 12),
+    // NOT the prorated/adjusted gross. This prevents mid-month joiners from being incorrectly
+    // flagged as eligible simply because their prorated pay falls below the ₹21,000 threshold.
+    const esiResult = calculateESI(adjustedGross, esiConfig, false, monthlySalary);
+    logger.info(
+      `[PAYROLL ESI] EmpId: ${profile.employeeId} | ` +
+      `FullMonthSalary: ${monthlySalary.toFixed(2)} | ` +
+      `ProratedGross: ${adjustedGross.toFixed(2)} | ` +
+      `Threshold: ${esiConfig.threshold} | ` +
+      `Eligible: ${esiResult.isEligible}`
+    );
+    if (esiResult.isEligible) {
+      statutoryDeductions.push({
+        name: 'ESI',
+        value: esiResult.employeeESI,
+        isStatutory: true,
+        meta: { employerESI: esiResult.employerESI, source: esiConfig.source }
+      });
+    } else {
+      logger.info(`[PAYROLL ESI] Skip: FullMonthSalary ${monthlySalary} exceeds threshold ${esiConfig.threshold}. No ESI deducted.`);
+    }
+  }
+
+  // PT
+  if (ptConfig.enabled) {
+    const ptAmount = calculatePT(adjustedGross, monthIdx, ptConfig);
+    if (ptAmount > 0) {
+      statutoryDeductions.push({
+        name: 'Professional Tax (PT)',
+        value: ptAmount,
+        isStatutory: true,
+        meta: { state: ptConfig.state, source: ptConfig.source }
+      });
+    }
+  }
+
+  // ── 8. Employer Contributions & Provisions ───────────────────────────────
+  const employerContributions = [];
+  if (gratuityConfig.enabled) {
+    const gAmount = applyRounding((proratedBasic * (15 / 26)) / 12);
+    employerContributions.push({ name: 'Gratuity Provision', value: gAmount, isStatutory: true, meta: { source: gratuityConfig.source } });
+  }
+
+  if (pfConfig.enabled && pfConfig.employerPercent > 0) {
+    const pfRes = calculatePF(proratedBasic, proratedDA, pfConfig);
+    employerContributions.push({ name: 'Employer PF Share', value: pfRes.totalEmployer, isStatutory: true });
+  }
+
+  // ── 9. Profile Deductions (Prorated) ──────────────────────────────────────
+  const finalProfileDeductions = (profile.deductions || [])
+    .filter(d => !d.hidden && !d._isStatutoryConfig && !(d.name || '').toLowerCase().includes('metadata'))
+    .filter(d => {
+       const n = (d.name || '').toLowerCase();
+       if ((n.includes('pf') || n.includes('provident')) && pfConfig.enabled) return false;
+       if ((n.includes('esi')) && esiConfig.enabled) return false;
+       if ((n.includes('tax') || n.includes('pt')) && ptConfig.enabled) return false;
+       return true;
+    })
+    .map(d => ({
+      name: d.name,
+      value: applyRounding((parseFloat(d.value) || 0) * prorationRatio)
+    }));
+
+  const finalDeductions = [...finalProfileDeductions, ...statutoryDeductions];
+  
+  if (perDaySalary * rawLopDays > 0) {
+    finalDeductions.push({ name: 'LOP Deduction', value: applyRounding(perDaySalary * rawLopDays), isLOP: true });
+  }
+
+  const totalDeductions = applyRounding(finalDeductions.reduce((sum, d) => sum + (d.value || 0), 0));
+  const netPay = applyRounding(proratedGross - totalDeductions);
 
   return {
-    workingDays,
-    totalOrgWorkingDays,
-    standardMonthlyDays,
-    presentDays,
+    workingDays: daysAfterJoin, // This is "Adjusted Working Days"
+    payableDays,
     lopDays,
-    overtimeHours,
-    overtimePay,
-    grossPay,
+    perDaySalary,
+    adjustedGross,
+    grossPay: proratedGross,
     totalDeductions,
+    totalEmployerContribution: employerContributions.reduce((sum, c) => sum + (c.value || 0), 0),
     netPay,
-    netSalary: netPay, // for compatibility
-    earnings: finalEarnings,
+    netSalary: netPay,
+    earnings,
     deductions: finalDeductions,
-    gratuityAccrued: applyRounding(gratuityAccrued),
-    gratuityProvision: applyRounding(gratuityProvision),
-    lopDeduction: (lopDays > 0 && standardMonthlyDays > 0) ? applyRounding((baseGross / standardMonthlyDays) * lopDays) : 0,
+    employerContributions,
+    // Unified metrics for UI
+    standardMonthlyDays: totalDaysInMonth,
+    presentDays: payableDays,
+    daysAfterJoin,
     performanceMetrics: {
-        attendancePercentage: standardMonthlyDays > 0 ? (presentDays / standardMonthlyDays) * 100 : 0
+      attendancePercentage: totalDaysInMonth > 0 ? (payableDays / totalDaysInMonth) * 100 : 0
     }
   };
 };
@@ -484,7 +581,7 @@ const simulateUserPayroll = async (userId, month, year, organizationId, options 
   const attendance = await calculateAttendance(user, month, year, effectivePolicy, profile.payrollType || 'Monthly', organizationId);
 
   // 2. Use Centralized Calculation Engine
-  const calculation = calculateSalaryBreakdown(profile, attendance, effectivePolicy, month);
+  const calculation = await calculateSalaryBreakdown(profile, attendance, effectivePolicy, month, year);
 
 
   return {
@@ -499,7 +596,14 @@ const simulateUserPayroll = async (userId, month, year, organizationId, options 
     month,
     year,
     currencySymbol: policy.currencySymbol || '₹',
-    attendance,
+    attendance: {
+      ...attendance,
+      workingDays: calculation.workingDays,
+      payableDays: calculation.payableDays,
+      lopDays: calculation.lopDays,
+      standardMonthlyDays: calculation.standardMonthlyDays,
+      presentDays: calculation.presentDays
+    },
     ...calculation,
     employeeInfo: {
       name: user.name,
@@ -678,7 +782,17 @@ const ensureBatchExists = async (month, year, organizationId) => {
 
     // Transaction Persistence
     const transaction = await prisma.$transaction(async (tx) => {
-      // 1. Delete non-paid records for this cycle
+      // 1. Delete dependent records first (to avoid foreign key constraint violations)
+      // Delete any payslips associated with processed records we are about to delete
+      await tx.payslip.deleteMany({
+        where: { 
+          month, 
+          year, 
+          organizationId,
+          processedPayroll: { isPaid: false }
+        }
+      });
+
       await tx.processedPayroll.deleteMany({
         where: { month, year, organizationId, isPaid: false }
       });
@@ -1249,10 +1363,9 @@ const markAsPaid = async ({ month, year, organizationId, processedBy }) => {
  * Implements locking if payroll is already processed for the month.
  */
 const upsertFullPayrollProfile = async (data, organizationId, performerId) => {
-    const { employeeId, annualCTC, earnings, deductions, bankDetails } = data;
+    let { employeeId, userId, annualCTC, earnings, deductions, bankDetails } = data;
 
     // 1. Check for Active Payroll Lock
-    // If a payroll run exists for the CURRENT month/year and is PROCESSING it's locked.
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
@@ -1266,6 +1379,44 @@ const upsertFullPayrollProfile = async (data, organizationId, performerId) => {
     }
 
     return await prisma.$transaction(async (tx) => {
+        // 1.5 Healing: Resolve employeeId if missing but userId is present
+        if (!employeeId && userId) {
+            let employee = await tx.employee.findUnique({
+                where: { userId }
+            });
+
+            if (!employee) {
+                // Determine next employee code
+                const lastEmp = await tx.employee.findFirst({
+                    where: { organizationId },
+                    orderBy: { employeeCode: 'desc' },
+                    select: { employeeCode: true }
+                });
+                
+                let nextNumber = 1;
+                if (lastEmp && lastEmp.employeeCode) {
+                    const match = lastEmp.employeeCode.match(/\d+$/);
+                    if (match) nextNumber = parseInt(match[0]) + 1;
+                }
+                const employeeCode = `EMP-${nextNumber.toString().padStart(4, '0')}`;
+
+                employee = await tx.employee.create({
+                    data: {
+                        userId,
+                        organizationId,
+                        employeeCode,
+                        status: 'ACTIVE',
+                        joiningDate: new Date()
+                    }
+                });
+            }
+            employeeId = employee.id;
+        }
+
+        if (!employeeId) {
+            throw new AppError('Employee ID or User ID is required to setup payroll profile', 400);
+        }
+
         // 2. Upsert Payroll Profile
         const profile = await tx.payrollProfile.upsert({
             where: { employeeId },
@@ -1390,6 +1541,8 @@ const getPayrollPreview = async (organizationId, month, year, overtimeEnabled) =
                 working: sim.workingDays,
                 present: sim.presentDays,
                 lop: sim.lopDays,
+                perDaySalary: sim.perDaySalary,
+                preJoinDays: sim.preJoinDays,
                 overtimeHours: sim.overtimeHours,
                 overtimePay: sim.overtimePay,
                 status: 'READY'
