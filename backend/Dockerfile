@@ -15,7 +15,7 @@ RUN npm install --production
 
 # Copy Prisma schema and generate client
 COPY prisma ./prisma
-RUN npx prisma generate
+RUN npx prisma@5.22.0 generate
 
 # Copy the rest of the application
 COPY . .
