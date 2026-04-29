@@ -562,7 +562,11 @@ const userService = {
     });
     if (!user || user.isDeleted) throw new AppError('User not found', 404);
 
-    const leaveTypes = await prisma.leaveType.findMany({ where: { organizationId } });
+    // If organizationId is null (new OAuth user), skip leave types lookup
+    const leaveTypes = organizationId 
+      ? await prisma.leaveType.findMany({ where: { organizationId } })
+      : [];
+      
     return formatUser(user, leaveTypes);
   },
 
