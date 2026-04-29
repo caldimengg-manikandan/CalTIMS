@@ -79,13 +79,15 @@ app.use(
       ].filter(Boolean);
 
       // Add domain-only version of CLIENT_URL or hardcoded domain
-      if (process.env.CLIENT_URL || true) {
+      if (process.env.CLIENT_URL) {
         try {
           const url = new URL(process.env.CLIENT_URL);
           allowedOrigins.push(url.origin);
         } catch (e) {
-          // Fallback if URL is invalid
-          allowedOrigins.push(process.env.CLIENT_URL.split('/')[2]);
+          // Safe fallback
+          if (typeof process.env.CLIENT_URL === 'string') {
+            allowedOrigins.push(process.env.CLIENT_URL.split('/')[2]);
+          }
         }
       }
       
