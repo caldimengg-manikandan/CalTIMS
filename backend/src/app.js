@@ -73,12 +73,13 @@ app.use(
     origin: function (origin, callback) {
       const allowedOrigins = [
         process.env.CLIENT_URL,
+        'https://caldimproducts.com',
         'http://localhost:3000',
         'http://127.0.0.1:3000'
       ].filter(Boolean);
 
-      // Add domain-only version of CLIENT_URL to allowed origins
-      if (process.env.CLIENT_URL) {
+      // Add domain-only version of CLIENT_URL or hardcoded domain
+      if (process.env.CLIENT_URL || true) {
         try {
           const url = new URL(process.env.CLIENT_URL);
           allowedOrigins.push(url.origin);
