@@ -9,9 +9,11 @@ let io;
 
 const init = (server) => {
   io = new Server(server, {
+    path: '/api/socket.io',
     cors: {
       origin: [
         process.env.CLIENT_URL,
+        'https://caldimproducts.com',
         'http://localhost:3000',
         'http://127.0.0.1:3000'
       ].filter(Boolean),

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuthStore } from '@/store/authStore';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 
 export const useSocket = (event, callback) => {
   const socketRef = useRef(null);
@@ -13,6 +13,7 @@ export const useSocket = (event, callback) => {
 
     // Initialize socket connection
     socketRef.current = io(SOCKET_URL, {
+      path: '/caltims/api/socket.io',
       withCredentials: true,
       transports: ['websocket', 'polling'],
       auth: { token }
