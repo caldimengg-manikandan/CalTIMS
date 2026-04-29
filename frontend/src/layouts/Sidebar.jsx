@@ -83,11 +83,37 @@ const navSections = [
 
 export default function Sidebar() {
     const { user, logout } = useAuthStore()
-    const { sidebarOpen, setSidebar } = useUIStore()
+    const { sidebarOpen, setSidebar, sidebarWidth, setSidebarWidth } = useUIStore()
     const { general, payroll, fetchGeneralSettings, fetchPayrollSettings } = useSettingsStore()
     const { isFeatureLocked, planType } = useFeatureAccess()
     const navigate = useNavigate()
     const location = useLocation()
+
+    const [isResizing, setIsResizing] = useState(false)
+
+    // Resize Logic
+    useEffect(() => {
+        if (!isResizing) return
+
+        const handleMouseMove = (e) => {
+            const newWidth = Math.min(Math.max(e.clientX, 180), 480)
+            setSidebarWidth(newWidth)
+        }
+
+        const handleMouseUp = () => {
+            setIsResizing(false)
+            document.body.style.cursor = 'default'
+        }
+
+        document.addEventListener('mousemove', handleMouseMove)
+        document.addEventListener('mouseup', handleMouseUp)
+        document.body.style.cursor = 'col-resize'
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+        }
+    }, [isResizing])
 
     useEffect(() => {
         if (!general) fetchGeneralSettings()
@@ -157,14 +183,25 @@ export default function Sidebar() {
     if (!user) return null
 
     return (
-        <aside className={clsx(
-            'fixed inset-y-0 left-0 z-50 flex flex-col bg-white dark:bg-[#080d14] border-r border-slate-100 dark:border-slate-800/60 transition-all duration-300',
-            'shadow-[1px_0_16px_0_rgb(0_0_0/0.04)]',
-            'group/sidebar',
-            sidebarOpen
-                ? 'w-64 translate-x-0'
-                : 'w-[280px] -translate-x-full md:w-[68px] md:translate-x-0 md:hover:w-64 hover:shadow-xl hover:shadow-black/5'
-        )}>
+        <aside 
+            style={{ width: sidebarOpen ? `${sidebarWidth}px` : undefined }}
+            className={clsx(
+                'fixed inset-y-0 left-0 z-50 flex flex-col bg-white dark:bg-[#080d14] border-r border-slate-100 dark:border-slate-800/60 transition-[transform,background-color] duration-300',
+                'shadow-[1px_0_16px_0_rgb(0_0_0/0.04)]',
+                'group/sidebar',
+                !sidebarOpen && 'w-[280px] -translate-x-full md:w-[68px] md:translate-x-0 md:hover:w-64 hover:shadow-xl hover:shadow-black/5'
+            )}
+        >
+            {/* Resize Handle */}
+            {sidebarOpen && (
+                <div 
+                    onMouseDown={(e) => {
+                        e.preventDefault()
+                        setIsResizing(true)
+                    }}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/50 group-hover/sidebar:opacity-100 transition-opacity z-[60]"
+                />
+            )}
             <style>{`
                 @keyframes logo-3d {
                     0%   { transform: perspective(1000px) rotateX(0deg) rotateY(0deg); }

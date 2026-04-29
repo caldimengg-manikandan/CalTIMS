@@ -12,11 +12,16 @@ export const useUIStore = create((set) => {
 
   return {
     sidebarOpen: true,
+    sidebarWidth: parseInt(localStorage.getItem('sidebarWidth')) || 260,
     theme: initTheme,
     darkMode: initTheme === 'dark' || initTheme === 'midnight',
 
     toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
     setSidebar: (val) => set({ sidebarOpen: val }),
+    setSidebarWidth: (width) => {
+      localStorage.setItem('sidebarWidth', width);
+      set({ sidebarWidth: width });
+    },
 
     // Unsaved Changes Tracking
     hasUnsavedChanges: false,

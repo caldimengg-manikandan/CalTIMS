@@ -13,7 +13,7 @@ import OnboardingTour from '@/features/onboarding/components/OnboardingTour'
 
 export default function AppLayout() {
     useInactivityTimer()
-    const { sidebarOpen } = useUIStore()
+    const { sidebarOpen, sidebarWidth } = useUIStore()
     const { general } = useSettingsStore()
     const { applyTheme } = useThemeStore()
 
@@ -52,10 +52,13 @@ export default function AppLayout() {
             )}
 
             {/* Main content */}
-            <div className={clsx(
-                'flex flex-col flex-1 overflow-hidden transition-all duration-300',
-                sidebarOpen ? 'md:ml-64' : 'md:ml-[68px]'
-            )}>
+            <div 
+                style={{ marginLeft: sidebarOpen && window.innerWidth >= 768 ? `${sidebarWidth}px` : undefined }}
+                className={clsx(
+                    'flex flex-col flex-1 overflow-hidden transition-[margin,transform] duration-300',
+                    !sidebarOpen && 'md:ml-[68px]'
+                )}
+            >
                 <TrialBanner />
                 <Navbar />
                 <PasswordRotationPolicy />

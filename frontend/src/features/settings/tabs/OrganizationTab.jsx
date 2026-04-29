@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
     Globe, Clock, Settings2, Save, ChevronDown, 
-    Shield, AlertCircle, Building2, Landmark, 
+    Shield, AlertCircle, Info, Building2, Landmark, 
     MapPin, Coins, Calendar, CheckCircle2, 
     Circle, AlertTriangle
 } from 'lucide-react'
@@ -135,9 +135,12 @@ export default function OrganizationTab() {
         dateFormat: 'DD/MM/YYYY',
         companyLogo: '',
         address: '',
+        aboutInstitution: '',
+        phoneNumber: '',
         country: '',
         currency: 'INR',
         fiscalYearStart: 'April',
+        fiscalYearEnd: 'March',
         workWeek: 'Mon-Fri',
         enableEnterpriseRBAC: false,
         workingHoursPerDay: 8,
@@ -168,6 +171,10 @@ export default function OrganizationTab() {
 
     const saveMutation = useMutation({
         mutationFn: async () => {
+            if (form.fiscalYearStart === form.fiscalYearEnd) {
+                throw new Error('Fiscal Year Start and End months cannot be the same')
+            }
+
             let finalLogoUrl = form.companyLogo
 
             if (logoFile) {
@@ -201,7 +208,7 @@ export default function OrganizationTab() {
             setLogoFile(null)
             qc.invalidateQueries(['settings'])
         },
-        onError: e => toast.error(e.response?.data?.message || 'Save failed'),
+        onError: e => toast.error(e.response?.data?.message || e.message || 'Save failed'),
     })
 
     const handleLogoUpload = (e) => {
@@ -251,13 +258,13 @@ export default function OrganizationTab() {
     // Completion Status Logic
     const getSectionStatus = (type) => {
         if (type === 'identity') {
-            const fields = [form.companyName, form.address, form.country]
+            const fields = [form.companyName, form.address, form.country, form.aboutInstitution, form.phoneNumber]
             if (fields.every(f => !!f)) return 'complete'
             if (fields.some(f => !!f)) return 'incomplete'
             return 'missing'
         }
         if (type === 'financial') {
-            return (form.currency && form.fiscalYearStart) ? 'complete' : 'incomplete'
+            return (form.currency && form.fiscalYearStart && form.fiscalYearEnd && form.fiscalYearStart !== form.fiscalYearEnd) ? 'complete' : 'incomplete'
         }
         if (type === 'localization') {
             return (form.timezone && form.dateFormat && form.workWeek) ? 'complete' : 'incomplete'
@@ -266,6 +273,8 @@ export default function OrganizationTab() {
     }
 
     if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
     return (
         <div className="space-y-8 pb-10">
@@ -328,11 +337,30 @@ export default function OrganizationTab() {
                                 </div>
 
                                 <div className="md:col-span-2">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">About Institution</label>
+                                        <span className={`text-[9px] font-bold tracking-widest uppercase ${form.aboutInstitution?.length >= 500 ? 'text-rose-500' : 'text-slate-400'}`}>
+                                            {form.aboutInstitution?.length || 0} / 500
+                                        </span>
+                                    </div>
+                                    <div className="relative group">
+                                        <Info className="absolute left-4 top-5 text-slate-400 group-focus-within:text-primary transition-colors" size={16} />
+                                        <textarea
+                                            className="input w-full h-24 pl-12 py-4 resize-none text-sm font-medium bg-slate-50/50 dark:bg-white/5"
+                                            placeholder="A brief overview of the institution..."
+                                            value={form.aboutInstitution}
+                                            maxLength={500}
+                                            onChange={e => upd('aboutInstitution', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="md:col-span-2">
                                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Primary Headquarters</label>
                                     <div className="relative group">
                                         <MapPin className="absolute left-4 top-5 text-slate-400 group-focus-within:text-primary transition-colors" size={16} />
                                         <textarea
-                                            className="input w-full h-28 pl-12 py-4 resize-none text-sm font-medium bg-slate-50/50 dark:bg-white/5"
+                                            className="input w-full h-24 pl-12 py-4 resize-none text-sm font-medium bg-slate-50/50 dark:bg-white/5"
                                             placeholder="Physical address for correspondence..."
                                             value={form.address}
                                             onChange={e => upd('address', e.target.value)}
@@ -353,21 +381,24 @@ export default function OrganizationTab() {
                                     </div>
                                 </div>
 
-                                {/* <div className="flex flex-col items-center justify-center p-4 bg-slate-50/50 dark:bg-white/5 rounded-2xl border border-dashed border-slate-200 dark:border-white/10 group hover:border-primary/50 transition-all cursor-pointer" onClick={() => logoInputRef.current?.click()}>
-                                    {form.companyLogo ? (
-                                        <div className="relative w-16 h-16 rounded-xl overflow-hidden shadow-md">
-                                            <img src={form.companyLogo} alt="Logo" className="w-full h-full object-cover" />
-                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                                <Save className="text-white" size={16} />
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-primary transition-colors">
-                                            <Globe size={20} />
-                                        </div>
-                                    )}
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-2">Institution Brand Mark</p>
-                                </div> */}
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Institution Phone Number</label>
+                                    <div className="relative group">
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors font-bold text-xs">+1</div>
+                                        <input
+                                            type="text"
+                                            className="input w-full h-12 pl-12 text-sm font-bold bg-slate-50/50 dark:bg-white/5"
+                                            placeholder="1234567890"
+                                            value={form.phoneNumber}
+                                            maxLength={10}
+                                            onChange={e => {
+                                                const val = e.target.value.replace(/\D/g, '')
+                                                upd('phoneNumber', val)
+                                            }}
+                                        />
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 mt-2 font-medium">Standard 10-digit format enforced.</p>
+                                </div>
                             </div>
                         </SectionCard>
                     </div>
@@ -399,21 +430,44 @@ export default function OrganizationTab() {
                                     <p className="text-[9px] text-slate-400 mt-2 font-medium">Affects payroll & project billing calculations.</p>
                                 </div>
 
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Fiscal Year Start</label>
-                                    <div className="relative group">
-                                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={16} />
-                                        <select
-                                            className="input w-full h-12 pl-12 appearance-none pr-9 font-bold bg-slate-50/50 dark:bg-white/5"
-                                            value={form.fiscalYearStart}
-                                            onChange={e => upd('fiscalYearStart', e.target.value)}
-                                        >
-                                            {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(month => (
-                                                <option key={month} value={month}>{month}</option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Fiscal Year Start</label>
+                                        <div className="relative group">
+                                            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={16} />
+                                            <select
+                                                className={`input w-full h-12 pl-10 appearance-none pr-6 text-xs font-bold bg-slate-50/50 dark:bg-white/5 ${form.fiscalYearStart === form.fiscalYearEnd ? 'border-rose-500 text-rose-500' : ''}`}
+                                                value={form.fiscalYearStart}
+                                                onChange={e => upd('fiscalYearStart', e.target.value)}
+                                            >
+                                                {months.map(month => (
+                                                    <option key={month} value={month}>{month}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Fiscal Year End</label>
+                                        <div className="relative group">
+                                            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={16} />
+                                            <select
+                                                className={`input w-full h-12 pl-10 appearance-none pr-6 text-xs font-bold bg-slate-50/50 dark:bg-white/5 ${form.fiscalYearStart === form.fiscalYearEnd ? 'border-rose-500 text-rose-500' : ''}`}
+                                                value={form.fiscalYearEnd}
+                                                onChange={e => upd('fiscalYearEnd', e.target.value)}
+                                            >
+                                                {months.map(month => (
+                                                    <option key={month} value={month}>{month}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    {form.fiscalYearStart === form.fiscalYearEnd && (
+                                        <div className="col-span-2 mt-1">
+                                            <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1">
+                                                <AlertCircle size={10} /> Start and end months cannot be the same.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </SectionCard>
@@ -461,17 +515,34 @@ export default function OrganizationTab() {
 
                                 <div className="md:col-span-2 space-y-6 pt-6 border-t border-slate-100 dark:border-white/5">
                                     <div>
-                                        <div className="flex justify-between items-end mb-3">
+                                        <div className="flex justify-between items-center mb-3">
                                             <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Standard Work Day Baseline</label>
-                                            <span className="px-3 py-1 rounded-full bg-primary text-[10px] font-black text-white">{form.workingHoursPerDay} HOURS</span>
+                                            <div className="flex items-center gap-2">
+                                                <div className="relative">
+                                                    <input 
+                                                        type="number"
+                                                        min={1} max={12} step={0.25}
+                                                        value={form.workingHoursPerDay}
+                                                        onChange={e => upd('workingHoursPerDay', parseFloat(e.target.value) || 0)}
+                                                        className="w-20 h-9 bg-primary/10 dark:bg-primary/20 border-0 rounded-xl text-center text-xs font-black text-primary focus:ring-2 focus:ring-primary/50 transition-all outline-none"
+                                                    />
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-primary/50 pointer-events-none uppercase">HRS</span>
+                                                </div>
+                                            </div>
                                         </div>
                                         <input
                                             type="range"
-                                            min={1} max={12} step={0.5}
+                                            min={1} max={12} step={0.25}
                                             value={form.workingHoursPerDay}
                                             onChange={e => upd('workingHoursPerDay', parseFloat(e.target.value))}
-                                            className="w-full accent-primary h-2 bg-slate-100 dark:bg-white/5 rounded-full appearance-none cursor-pointer"
+                                            className="w-full accent-primary h-2 bg-slate-100 dark:bg-white/5 rounded-full appearance-none cursor-pointer mb-2"
                                         />
+                                        <div className="flex justify-between text-[8px] font-black text-slate-300 uppercase tracking-widest px-1">
+                                            <span>1h</span>
+                                            <span>4h</span>
+                                            <span>8h</span>
+                                            <span>12h</span>
+                                        </div>
                                     </div>
 
                                         <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10 hover:border-primary/30 transition-all">
