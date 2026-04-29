@@ -14,64 +14,56 @@ const requiredEnv = [
 const missingEnv = requiredEnv.filter(key => !process.env[key]);
 
 if (missingEnv.length > 0) {
-  const errorMsg = `CRITICAL: Missing required OAuth environment variables: ${missingEnv.join(', ')}`;
-  logger.error(errorMsg);
-  // In production, we should throw to prevent misconfigured startup
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(errorMsg);
-  }
+  const errorMsg = `WARNING: Missing OAuth environment variables: ${missingEnv.join(', ')}. Social login will be disabled.`;
+  logger.warn(errorMsg);
 }
 
-console.log('--- Passport Config Loaded ---');
-console.log('GOOGLE_CALLBACK_URL:', process.env.GOOGLE_CALLBACK_URL);
-console.log('------------------------------');
-
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.GOOGLE_CALLBACK_URL,
-    passReqToCallback: true
-  },
-  async (req, accessToken, refreshToken, profile, done) => {
-    try {
-      const email = profile.emails[0].value;
-      const name = profile.displayName;
-      const provider = 'google';
-
-      // Use the unified socialLogin logic
-      const user = await authService.socialLogin({ email, name, provider, req });
-      
-      return done(null, user);
-    } catch (error) {
-      logger.error('Google OAuth Strategy Error:', error.message);
-      return done(error, null);
+// Only initialize Google strategy if variables are present
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  passport.use(new GoogleStrategy({
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL,
+      passReqToCallback: true
+    },
+    async (req, accessToken, refreshToken, profile, done) => {
+      try {
+        const email = profile.emails[0].value;
+        const name = profile.displayName;
+        const provider = 'google';
+        const user = await authService.socialLogin({ email, name, provider, req });
+        return done(null, user);
+      } catch (error) {
+        logger.error('Google OAuth Strategy Error:', error.message);
+        return done(error, null);
+      }
     }
-  }
-));
+  ));
+}
 
-passport.use(new MicrosoftStrategy({
-    clientID: process.env.MICROSOFT_CLIENT_ID,
-    clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
-    callbackURL: process.env.MICROSOFT_CALLBACK_URL,
-    scope: ['user.read'],
-    passReqToCallback: true
-  },
-  async (req, accessToken, refreshToken, profile, done) => {
-    try {
-      const email = profile.emails[0].value;
-      const name = profile.displayName;
-      const provider = 'microsoft';
-
-      // Use the unified socialLogin logic
-      const user = await authService.socialLogin({ email, name, provider, req });
-      
-      return done(null, user);
-    } catch (error) {
-      logger.error('Microsoft OAuth Strategy Error:', error.message);
-      return done(error, null);
+// Only initialize Microsoft strategy if variables are present
+if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) {
+  passport.use(new MicrosoftStrategy({
+      clientID: process.env.MICROSOFT_CLIENT_ID,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+      callbackURL: process.env.MICROSOFT_CALLBACK_URL,
+      scope: ['user.read'],
+      passReqToCallback: true
+    },
+    async (req, accessToken, refreshToken, profile, done) => {
+      try {
+        const email = profile.emails[0].value;
+        const name = profile.displayName;
+        const provider = 'microsoft';
+        const user = await authService.socialLogin({ email, name, provider, req });
+        return done(null, user);
+      } catch (error) {
+        logger.error('Microsoft OAuth Strategy Error:', error.message);
+        return done(error, null);
+      }
     }
-  }
-));
+  ));
+}
 
 // Simple serialize/deserialize since we're using JWT-based stateless auth
 // and only using Passport for the OAuth handshake
