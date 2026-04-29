@@ -30,7 +30,7 @@ services:
     depends_on:
       - postgres
     ports:
-      - "5000:5000"
+      - "5002:5000"
     networks:
       - caltims_network
 
@@ -41,7 +41,7 @@ services:
     container_name: frontend_caltims
     restart: always
     ports:
-      - "3000:80"
+      - "3005:80"
     depends_on:
       - backend
     networks:
