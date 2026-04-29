@@ -16,7 +16,7 @@ fi
 
 # Deploy using Docker Compose
 echo "🏗️ Building and starting containers..."
-docker-compose up -d --build
+docker compose up -d --build
 
 echo "✅ Docker deployment finished successfully!"
 echo "📡 Your services should be running at:"

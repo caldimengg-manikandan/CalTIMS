@@ -37,7 +37,7 @@ nano .env
 ### 3. Build and Deploy
 Run the following command in the project root:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 This will:
 - Build the frontend (Vite build) and package it into an Nginx container.
