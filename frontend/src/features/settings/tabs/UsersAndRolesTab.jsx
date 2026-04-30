@@ -9,8 +9,10 @@ import {
     Shield, Users, Save, Plus, Trash2, Search, 
     ChevronRight, ChevronDown, Check, X, 
     AlertCircle, LayoutDashboard, Database, 
-    FileText, Download, UserCheck, Clock, Settings 
+    FileText, Download, UserCheck, Clock, Settings,
+    GripVertical, ListChecks, CheckSquare, Square
 } from 'lucide-react'
+import { Reorder, AnimatePresence } from 'framer-motion'
 
 const MODULE_ICONS = {
     'Payroll': Database,
@@ -329,6 +331,14 @@ const ROLE_TEMPLATES = {
             "Leave Management": { "Leave Tracker": ["view"] },
             "Support": { "Help & Support": ["view"] }
         }
+    },
+    'Maintenance': {
+        name: 'Maintenance Mode',
+        description: 'Restricted: Only General Settings accessible during audits/updates',
+        permissions: {
+            "Settings": { "General": ["view"] },
+            "Support": { "Help & Support": ["view"] }
+        }
     }
 }
 
@@ -336,10 +346,13 @@ export default function UsersAndRolesTab() {
     const qc = useQueryClient()
     const [roles, setRoles] = useState([])
     const [activeRoleIdx, setActiveRoleIdx] = useState(0)
+    const [selectedRoleIdxs, setSelectedRoleIdxs] = useState([])
+    const [isBulkMode, setIsBulkMode] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
     const [originalRoles, setOriginalRoles] = React.useState([])
     const [isDirty, setIsDirty] = useState(false)
     const [confirmDeleteIndex, setConfirmDeleteIndex] = useState(null)
+    const [isReordering, setIsReordering] = useState(false)
 
     const { data, isLoading } = useQuery({
         queryKey: ['settings'],
@@ -403,32 +416,42 @@ export default function UsersAndRolesTab() {
 
     const handleTogglePermissions = (leaves, status) => {
         const newRoles = [...roles]
-        const role = { ...newRoles[activeRoleIdx] }
-        const permissions = { ...role.permissions }
+        const targetIndices = isBulkMode ? selectedRoleIdxs : [activeRoleIdx]
 
-        leaves.forEach(([mod, sub, act]) => {
-            if (!permissions[mod]) permissions[mod] = {}
-            if (!permissions[mod][sub]) permissions[mod][sub] = []
-            
-            const actions = [...permissions[mod][sub]]
-            const idx = actions.indexOf(act)
-            
-            if (status && idx === -1) {
-                actions.push(act)
-            } else if (!status && idx > -1) {
-                actions.splice(idx, 1)
-            }
-            
-            permissions[mod][sub] = actions
+        if (targetIndices.length === 0) {
+            toast.error('No roles selected for bulk update')
+            return
+        }
 
-            // Cleanup
-            if (permissions[mod][sub].length === 0) delete permissions[mod][sub]
-            if (Object.keys(permissions[mod]).length === 0) delete permissions[mod]
+        targetIndices.forEach(idx => {
+            const role = { ...newRoles[idx] }
+            const permissions = { ...role.permissions }
+
+            leaves.forEach(([mod, sub, act]) => {
+                if (!permissions[mod]) permissions[mod] = {}
+                if (!permissions[mod][sub]) permissions[mod][sub] = []
+                
+                const actions = [...permissions[mod][sub]]
+                const existingIdx = actions.indexOf(act)
+                
+                if (status && existingIdx === -1) {
+                    actions.push(act)
+                } else if (!status && existingIdx > -1) {
+                    actions.splice(existingIdx, 1)
+                }
+                
+                permissions[mod][sub] = actions
+
+                // Cleanup
+                if (permissions[mod][sub].length === 0) delete permissions[mod][sub]
+                if (Object.keys(permissions[mod]).length === 0) delete permissions[mod]
+            })
+
+            role.permissions = permissions
+            role.templateType = 'Custom'
+            newRoles[idx] = role
         })
 
-        role.permissions = permissions
-        role.templateType = 'Custom' // Any manual toggle turns it into custom
-        newRoles[activeRoleIdx] = role
         setRoles(newRoles)
     }
 
@@ -505,29 +528,103 @@ export default function UsersAndRolesTab() {
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
                 {/* 1. ROLE LIST */}
-                <div className="lg:col-span-1 space-y-3 sticky top-24">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-2 flex items-center gap-2">
-                        <Users size={12} />
-                        Identity Roles
-                    </label>
-                    <div className="space-y-1">
-                        {roles.map((role, idx) => (
-                            <button
-                                key={role.id || role.name || idx}
-                                onClick={() => setActiveRoleIdx(idx)}
-                                className={`w-full text-left px-4 py-3 rounded-2xl transition-all ${
-                                    activeRoleIdx === idx 
-                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-[1.02]' 
-                                    : 'bg-white dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/10'
-                                }`}
+                <div className="lg:col-span-1 space-y-4 sticky top-24">
+                    <div className="flex items-center justify-between px-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                            <Shield size={12} />
+                            Identity Roles
+                        </label>
+                        <div className="flex items-center gap-1">
+                            <button 
+                                onClick={() => {
+                                    setIsBulkMode(!isBulkMode)
+                                    if (!isBulkMode) setSelectedRoleIdxs([activeRoleIdx])
+                                    else setSelectedRoleIdxs([])
+                                }}
+                                className={`p-1.5 rounded-lg transition-all ${isBulkMode ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
+                                title={isBulkMode ? "Disable Bulk Selection" : "Enable Bulk Selection"}
                             >
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold truncate">{role.name}</span>
-                                    {role.isSystem && <Shield size={12} className={activeRoleIdx === idx ? 'text-indigo-200' : 'text-slate-300'} />}
-                                </div>
+                                <ListChecks size={14} />
                             </button>
-                        ))}
+                            <button 
+                                onClick={() => setIsReordering(!isReordering)}
+                                className={`p-1.5 rounded-lg transition-all ${isReordering ? 'bg-amber-500 text-white shadow-lg shadow-amber-200' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
+                                title={isReordering ? "Exit Reorder Mode" : "Reorder Priority (DnD)"}
+                            >
+                                <GripVertical size={14} />
+                            </button>
+                        </div>
                     </div>
+
+                    {isReordering ? (
+                        <Reorder.Group axis="y" values={roles} onReorder={setRoles} className="space-y-1">
+                            {roles.map((role, idx) => (
+                                <Reorder.Item 
+                                    key={role.id || role.name || idx} 
+                                    value={role}
+                                    className="w-full text-left px-4 py-3 rounded-2xl bg-white dark:bg-white/5 border-2 border-dashed border-amber-200 dark:border-amber-500/20 text-slate-600 dark:text-slate-400 cursor-grab active:cursor-grabbing flex items-center justify-between"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <GripVertical size={14} className="text-amber-500" />
+                                        <span className="text-xs font-bold truncate">{role.name}</span>
+                                    </div>
+                                    <div className="text-[8px] font-black uppercase text-amber-500">P{idx + 1}</div>
+                                </Reorder.Item>
+                            ))}
+                            <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-[9px] font-medium text-amber-600 text-center border border-amber-100 dark:border-amber-500/20">
+                                Drag to set overlap priority (P1 is highest)
+                            </div>
+                        </Reorder.Group>
+                    ) : (
+                        <div className="space-y-1">
+                            {roles.map((role, idx) => (
+                                <div key={role.id || role.name || idx} className="group relative">
+                                    <button
+                                        onClick={() => {
+                                            if (isBulkMode) {
+                                                if (selectedRoleIdxs.includes(idx)) {
+                                                    setSelectedRoleIdxs(selectedRoleIdxs.filter(i => i !== idx))
+                                                } else {
+                                                    setSelectedRoleIdxs([...selectedRoleIdxs, idx])
+                                                }
+                                            } else {
+                                                setActiveRoleIdx(idx)
+                                            }
+                                        }}
+                                        className={`w-full text-left px-4 py-3 rounded-2xl transition-all flex items-center justify-between ${
+                                            (isBulkMode ? selectedRoleIdxs.includes(idx) : activeRoleIdx === idx)
+                                            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-[1.02]' 
+                                            : 'bg-white dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/10'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            {isBulkMode && (
+                                                <div className="shrink-0">
+                                                    {selectedRoleIdxs.includes(idx) ? <CheckSquare size={14} /> : <Square size={14} />}
+                                                </div>
+                                            )}
+                                            <span className="text-xs font-bold truncate">{role.name}</span>
+                                        </div>
+                                        {role.isSystem && <Shield size={12} className={(isBulkMode ? selectedRoleIdxs.includes(idx) : activeRoleIdx === idx) ? 'text-indigo-200' : 'text-slate-300'} />}
+                                    </button>
+                                </div>
+                            ))}
+                            
+                            {isBulkMode && (
+                                <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 space-y-2">
+                                    <p className="text-[10px] font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-widest text-center">
+                                        Bulk Mode: {selectedRoleIdxs.length} Selected
+                                    </p>
+                                    <button 
+                                        onClick={() => setSelectedRoleIdxs(roles.map((_, i) => i))}
+                                        className="w-full py-1.5 text-[9px] font-black uppercase tracking-widest text-indigo-600 bg-white dark:bg-white/5 rounded-lg border border-indigo-100 dark:border-indigo-500/20"
+                                    >
+                                        Select All
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* 2. PERMISSION TREE */}
@@ -540,15 +637,27 @@ export default function UsersAndRolesTab() {
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Edit Role Definition</span>
-                                                {currentRole.isSystem && <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[8px] font-black uppercase">Core System Role</span>}
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500">
+                                                    {isBulkMode ? `Updating ${selectedRoleIdxs.length} Roles` : 'Edit Role Definition'}
+                                                </span>
+                                                {currentRole.isSystem && !isBulkMode && <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[8px] font-black uppercase">Core System Role</span>}
                                             </div>
-                                            <input
-                                                value={currentRole.name}
-                                                onChange={(e) => handleUpdateRoleName(activeRoleIdx, e.target.value)}
-                                                disabled={currentRole.isSystem}
-                                                className="w-full text-xl font-black text-slate-800 dark:text-white bg-transparent border-none p-0 focus:ring-0 placeholder:text-slate-300"
-                                            />
+                                            {isBulkMode ? (
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {selectedRoleIdxs.map(i => (
+                                                        <span key={i} className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9px] font-black">
+                                                            {roles[i]?.name}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <input
+                                                    value={currentRole.name}
+                                                    onChange={(e) => handleUpdateRoleName(activeRoleIdx, e.target.value)}
+                                                    disabled={currentRole.isSystem}
+                                                    className="w-full text-xl font-black text-slate-800 dark:text-white bg-transparent border-none p-0 focus:ring-0 placeholder:text-slate-300"
+                                                />
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-4">
                                             <div className="relative group/search">

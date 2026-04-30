@@ -93,6 +93,7 @@ export default function TimesheetPolicyTab() {
                     </div>
                     <AddChipInput
                         placeholder="e.g. Code Review, Client Meeting..."
+                        maxLength={50}
                         onAdd={(val) => {
                             if (!taskCategories.includes(val)) setTaskCategories([...taskCategories, val])
                             else toast.error('Category already exists')
@@ -125,70 +126,152 @@ export default function TimesheetPolicyTab() {
 
                 <SectionCard title="Permission Log" subtitle="Configure limits for permission row entries" icon={CalendarClock}>
                     <div className="space-y-6">
-                        {/* Per-day permission hours */}
-                        <div className="p-5 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
-                            <div className="flex justify-between items-end mb-3">
+                        <div className="p-6 rounded-3xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10 group transition-all hover:bg-white dark:hover:bg-white/[0.07] hover:shadow-xl hover:shadow-slate-200/50 dark:hover:shadow-none">
+                            <div className="flex justify-between items-start mb-8">
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Per-Day Hrs</p>
-                                    <p className="text-[10px] text-slate-500 font-medium">Max hours allowed per permission day</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Per-Day Maximum</p>
+                                    <p className="text-[10px] text-slate-400 font-medium">Cap on daily permission entries</p>
                                 </div>
-                                <span className="px-2 py-1 rounded bg-amber-50 dark:bg-amber-500/10 text-[10px] font-black text-amber-600 dark:text-amber-400 shrink-0">
-                                    {policy.permissionMaxHoursPerDay} HRS
-                                </span>
+                                <div className="bg-amber-500 px-3 py-1.5 rounded-xl shadow-lg shadow-amber-500/20">
+                                    <span className="text-[11px] font-black text-white">{policy.permissionMaxHoursPerDay} HRS</span>
+                                </div>
                             </div>
-                            <input
-                                type="range" min={0.5} max={8} step={0.5}
-                                value={policy.permissionMaxHoursPerDay}
-                                onChange={e => upd('permissionMaxHoursPerDay', parseFloat(e.target.value))}
-                                className="w-full accent-amber-500 cursor-pointer"
-                            />
-                            <div className="flex justify-between text-[9px] text-slate-500 mt-1">
-                                <span>0.5h</span><span>8h</span>
+                            
+                            <div className="relative px-2">
+                                <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full flex justify-between px-2 pointer-events-none">
+                                    {[0, 2, 4, 6, 8].map(h => (
+                                        <div key={h} className="relative flex flex-col items-center">
+                                            <div className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${policy.permissionMaxHoursPerDay >= h ? 'bg-amber-500 scale-125 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'bg-slate-200 dark:bg-white/10'}`} />
+                                            <span className={`absolute top-4 text-[8px] font-black transition-colors ${Math.round(policy.permissionMaxHoursPerDay) === h ? 'text-amber-600' : 'text-slate-300 dark:text-slate-600'}`}>
+                                                {h}H
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <input
+                                    type="range" min={0.5} max={8} step={0.5}
+                                    value={policy.permissionMaxHoursPerDay}
+                                    onChange={e => upd('permissionMaxHoursPerDay', parseFloat(e.target.value))}
+                                    className="relative w-full h-1.5 bg-slate-100 dark:bg-white/5 rounded-full appearance-none cursor-pointer z-10 accent-amber-500
+                                        [&::-webkit-slider-thumb]:appearance-none 
+                                        [&::-webkit-slider-thumb]:w-5 
+                                        [&::-webkit-slider-thumb]:h-5 
+                                        [&::-webkit-slider-thumb]:rounded-full 
+                                        [&::-webkit-slider-thumb]:bg-slate-900 
+                                        [&::-webkit-slider-thumb]:dark:bg-white 
+                                        [&::-webkit-slider-thumb]:border-4 
+                                        [&::-webkit-slider-thumb]:border-amber-500 
+                                        [&::-webkit-slider-thumb]:shadow-lg 
+                                        [&::-webkit-slider-thumb]:hover:scale-110 
+                                        [&::-webkit-slider-thumb]:transition-all
+                                        [&::-webkit-slider-runnable-track]:bg-transparent"
+                                    style={{
+                                        background: `linear-gradient(to right, #f59e0b 0%, #f59e0b ${(policy.permissionMaxHoursPerDay - 0.5) / 7.5 * 100}%, transparent ${(policy.permissionMaxHoursPerDay - 0.5) / 7.5 * 100}%, transparent 100%)`
+                                    }}
+                                />
                             </div>
+                            <div className="mt-8" />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Max days per week */}
-                            <div className="p-5 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
-                                <div className="flex justify-between items-end mb-3">
+                            <div className="p-5 rounded-3xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10 group transition-all hover:bg-white dark:hover:bg-white/[0.07]">
+                                <div className="flex justify-between items-start mb-8">
                                     <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Days / Week</p>
-                                        <p className="text-[10px] text-slate-500 font-medium">Max permission days per week</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Weekly Limit</p>
+                                        <p className="text-[10px] text-slate-400 font-medium">Max days / week</p>
                                     </div>
-                                    <span className="px-2 py-1 rounded bg-primary-100/50 dark:bg-primary-500/10 text-[10px] font-black text-primary-700 dark:text-primary-400 shrink-0">
-                                        {policy.permissionMaxDaysPerWeek === 0 ? '∞' : `${policy.permissionMaxDaysPerWeek}d`}
-                                    </span>
+                                    <div className="bg-primary px-3 py-1 rounded-xl shadow-lg shadow-primary/20">
+                                        <span className="text-[11px] font-black text-white">
+                                            {policy.permissionMaxDaysPerWeek === 0 ? '∞' : `${policy.permissionMaxDaysPerWeek}D`}
+                                        </span>
+                                    </div>
                                 </div>
-                                <input
-                                    type="range" min={0} max={5} step={1}
-                                    value={policy.permissionMaxDaysPerWeek}
-                                    onChange={e => upd('permissionMaxDaysPerWeek', parseInt(e.target.value))}
-                                    className="w-full accent-primary cursor-pointer"
-                                />
-                                <div className="flex justify-between text-[9px] text-slate-500 mt-1">
-                                    <span>Unlimited</span><span>5 days</span>
+
+                                <div className="relative px-2">
+                                    <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full flex justify-between px-2 pointer-events-none">
+                                        {[0, 1, 2, 3, 4, 5].map(h => (
+                                            <div key={h} className="relative flex flex-col items-center">
+                                                <div className={`w-1 h-1 rounded-full transition-all duration-500 ${policy.permissionMaxDaysPerWeek >= h ? 'bg-primary scale-125' : 'bg-slate-200 dark:bg-white/10'}`} />
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <input
+                                        type="range" min={0} max={5} step={1}
+                                        value={policy.permissionMaxDaysPerWeek}
+                                        onChange={e => upd('permissionMaxDaysPerWeek', parseInt(e.target.value))}
+                                        className="relative w-full h-1 bg-slate-100 dark:bg-white/5 rounded-full appearance-none cursor-pointer z-10 accent-primary
+                                            [&::-webkit-slider-thumb]:appearance-none 
+                                            [&::-webkit-slider-thumb]:w-4 
+                                            [&::-webkit-slider-thumb]:h-4 
+                                            [&::-webkit-slider-thumb]:rounded-full 
+                                            [&::-webkit-slider-thumb]:bg-slate-900 
+                                            [&::-webkit-slider-thumb]:dark:bg-white 
+                                            [&::-webkit-slider-thumb]:border-2 
+                                            [&::-webkit-slider-thumb]:border-primary 
+                                            [&::-webkit-slider-thumb]:shadow-lg 
+                                            [&::-webkit-slider-thumb]:hover:scale-110 
+                                            [&::-webkit-slider-thumb]:transition-all
+                                            [&::-webkit-slider-runnable-track]:bg-transparent"
+                                        style={{
+                                            background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${policy.permissionMaxDaysPerWeek / 5 * 100}%, transparent ${policy.permissionMaxDaysPerWeek / 5 * 100}%, transparent 100%)`
+                                        }}
+                                    />
+                                </div>
+                                <div className="flex justify-between text-[8px] font-bold text-slate-300 mt-4 px-1 uppercase tracking-tighter">
+                                    <span>∞</span><span>5D</span>
                                 </div>
                             </div>
 
                             {/* Max days per month */}
-                            <div className="p-5 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
-                                <div className="flex justify-between items-end mb-3">
+                            <div className="p-5 rounded-3xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10 group transition-all hover:bg-white dark:hover:bg-white/[0.07]">
+                                <div className="flex justify-between items-start mb-8">
                                     <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Days / Month</p>
-                                        <p className="text-[10px] text-slate-500 font-medium">Max permission days per month</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Monthly Limit</p>
+                                        <p className="text-[10px] text-slate-400 font-medium">Max days / month</p>
                                     </div>
-                                    <span className="px-2 py-1 rounded bg-primary-100/50 dark:bg-primary-500/10 text-[10px] font-black text-primary-700 dark:text-primary-400 shrink-0">
-                                        {policy.permissionMaxDaysPerMonth === 0 ? '∞' : `${policy.permissionMaxDaysPerMonth}d`}
-                                    </span>
+                                    <div className="bg-primary px-3 py-1 rounded-xl shadow-lg shadow-primary/20">
+                                        <span className="text-[11px] font-black text-white">
+                                            {policy.permissionMaxDaysPerMonth === 0 ? '∞' : `${policy.permissionMaxDaysPerMonth}D`}
+                                        </span>
+                                    </div>
                                 </div>
-                                <input
-                                    type="range" min={0} max={20} step={1}
-                                    value={policy.permissionMaxDaysPerMonth}
-                                    onChange={e => upd('permissionMaxDaysPerMonth', parseInt(e.target.value))}
-                                    className="w-full accent-primary cursor-pointer"
-                                />
-                                <div className="flex justify-between text-[9px] text-slate-500 mt-1">
-                                    <span>Unlimited</span><span>20 days</span>
+
+                                <div className="relative px-2">
+                                    <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full flex justify-between px-2 pointer-events-none">
+                                        {[0, 5, 10, 15, 20].map(h => (
+                                            <div key={h} className="relative flex flex-col items-center">
+                                                <div className={`w-1 h-1 rounded-full transition-all duration-500 ${policy.permissionMaxDaysPerMonth >= h ? 'bg-primary scale-125' : 'bg-slate-200 dark:bg-white/10'}`} />
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <input
+                                        type="range" min={0} max={20} step={1}
+                                        value={policy.permissionMaxDaysPerMonth}
+                                        onChange={e => upd('permissionMaxDaysPerMonth', parseInt(e.target.value))}
+                                        className="relative w-full h-1 bg-slate-100 dark:bg-white/5 rounded-full appearance-none cursor-pointer z-10 accent-primary
+                                            [&::-webkit-slider-thumb]:appearance-none 
+                                            [&::-webkit-slider-thumb]:w-4 
+                                            [&::-webkit-slider-thumb]:h-4 
+                                            [&::-webkit-slider-thumb]:rounded-full 
+                                            [&::-webkit-slider-thumb]:bg-slate-900 
+                                            [&::-webkit-slider-thumb]:dark:bg-white 
+                                            [&::-webkit-slider-thumb]:border-2 
+                                            [&::-webkit-slider-thumb]:border-primary 
+                                            [&::-webkit-slider-thumb]:shadow-lg 
+                                            [&::-webkit-slider-thumb]:hover:scale-110 
+                                            [&::-webkit-slider-thumb]:transition-all
+                                            [&::-webkit-slider-runnable-track]:bg-transparent"
+                                        style={{
+                                            background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${policy.permissionMaxDaysPerMonth / 20 * 100}%, transparent ${policy.permissionMaxDaysPerMonth / 20 * 100}%, transparent 100%)`
+                                        }}
+                                    />
+                                </div>
+                                <div className="flex justify-between text-[8px] font-bold text-slate-300 mt-4 px-1 uppercase tracking-tighter">
+                                    <span>∞</span><span>20D</span>
                                 </div>
                             </div>
                         </div>
@@ -199,28 +282,90 @@ export default function TimesheetPolicyTab() {
                     <div className="space-y-8 py-2">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div>
-                                <div className="flex justify-between items-end mb-4">
+                                <div className="flex justify-between items-center mb-6">
                                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Min Threshold</label>
-                                    <span className="px-2 py-1 rounded bg-primary-100/50 dark:bg-primary-500/10 text-[10px] font-black text-primary-700 dark:text-primary-400">{policy.minHoursPerDay} HRS</span>
+                                    <div className="bg-indigo-600 px-3 py-1 rounded-xl shadow-lg shadow-indigo-500/20">
+                                        <span className="text-[11px] font-black text-white">{policy.minHoursPerDay} HRS</span>
+                                    </div>
                                 </div>
-                                <input
-                                    type="range" min={0} max={8} step={0.5}
-                                    value={policy.minHoursPerDay}
-                                    onChange={e => upd('minHoursPerDay', parseFloat(e.target.value))}
-                                    className="w-full accent-primary cursor-pointer"
-                                />
+                                
+                                <div className="relative px-2">
+                                    <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full flex justify-between px-2 pointer-events-none">
+                                        {[0, 2, 4, 6, 8].map(h => (
+                                            <div key={h} className="relative flex flex-col items-center">
+                                                <div className={`w-1 h-1 rounded-full transition-all duration-500 ${policy.minHoursPerDay >= h ? 'bg-indigo-600 scale-125 shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'bg-slate-200 dark:bg-white/10'}`} />
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <input
+                                        type="range" min={0} max={8} step={0.5}
+                                        value={policy.minHoursPerDay}
+                                        onChange={e => upd('minHoursPerDay', parseFloat(e.target.value))}
+                                        className="relative w-full h-1 bg-slate-100 dark:bg-white/5 rounded-full appearance-none cursor-pointer z-10 accent-indigo-600
+                                            [&::-webkit-slider-thumb]:appearance-none 
+                                            [&::-webkit-slider-thumb]:w-4 
+                                            [&::-webkit-slider-thumb]:h-4 
+                                            [&::-webkit-slider-thumb]:rounded-full 
+                                            [&::-webkit-slider-thumb]:bg-slate-900 
+                                            [&::-webkit-slider-thumb]:dark:bg-white 
+                                            [&::-webkit-slider-thumb]:border-2 
+                                            [&::-webkit-slider-thumb]:border-indigo-600 
+                                            [&::-webkit-slider-thumb]:shadow-lg 
+                                            [&::-webkit-slider-thumb]:hover:scale-110 
+                                            [&::-webkit-slider-thumb]:transition-all
+                                            [&::-webkit-slider-runnable-track]:bg-transparent"
+                                        style={{
+                                            background: `linear-gradient(to right, #4f46e5 0%, #4f46e5 ${policy.minHoursPerDay / 8 * 100}%, transparent ${policy.minHoursPerDay / 8 * 100}%, transparent 100%)`
+                                        }}
+                                    />
+                                </div>
+                                <div className="flex justify-between text-[8px] font-bold text-slate-300 mt-4 px-1 uppercase tracking-tighter">
+                                    <span>0H</span><span>8H</span>
+                                </div>
                             </div>
                             <div>
-                                <div className="flex justify-between items-end mb-4">
+                                <div className="flex justify-between items-center mb-6">
                                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Max Capacity</label>
-                                    <span className="px-2 py-1 rounded bg-primary-100/50 dark:bg-primary-500/10 text-[10px] font-black text-primary-700 dark:text-primary-400">{policy.maxHoursPerDay} HRS</span>
+                                    <div className="bg-indigo-600 px-3 py-1 rounded-xl shadow-lg shadow-indigo-500/20">
+                                        <span className="text-[11px] font-black text-white">{policy.maxHoursPerDay} HRS</span>
+                                    </div>
                                 </div>
-                                <input
-                                    type="range" min={8} max={24} step={0.5}
-                                    value={policy.maxHoursPerDay}
-                                    onChange={e => upd('maxHoursPerDay', parseFloat(e.target.value))}
-                                    className="w-full accent-primary cursor-pointer"
-                                />
+
+                                <div className="relative px-2">
+                                    <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full flex justify-between px-2 pointer-events-none">
+                                        {[8, 12, 16, 20, 24].map(h => (
+                                            <div key={h} className="relative flex flex-col items-center">
+                                                <div className={`w-1 h-1 rounded-full transition-all duration-500 ${policy.maxHoursPerDay >= h ? 'bg-indigo-600 scale-125 shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'bg-slate-200 dark:bg-white/10'}`} />
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <input
+                                        type="range" min={8} max={24} step={0.5}
+                                        value={policy.maxHoursPerDay}
+                                        onChange={e => upd('maxHoursPerDay', parseFloat(e.target.value))}
+                                        className="relative w-full h-1 bg-slate-100 dark:bg-white/5 rounded-full appearance-none cursor-pointer z-10 accent-indigo-600
+                                            [&::-webkit-slider-thumb]:appearance-none 
+                                            [&::-webkit-slider-thumb]:w-4 
+                                            [&::-webkit-slider-thumb]:h-4 
+                                            [&::-webkit-slider-thumb]:rounded-full 
+                                            [&::-webkit-slider-thumb]:bg-slate-900 
+                                            [&::-webkit-slider-thumb]:dark:bg-white 
+                                            [&::-webkit-slider-thumb]:border-2 
+                                            [&::-webkit-slider-thumb]:border-indigo-600 
+                                            [&::-webkit-slider-thumb]:shadow-lg 
+                                            [&::-webkit-slider-thumb]:hover:scale-110 
+                                            [&::-webkit-slider-thumb]:transition-all
+                                            [&::-webkit-slider-runnable-track]:bg-transparent"
+                                        style={{
+                                            background: `linear-gradient(to right, #4f46e5 0%, #4f46e5 ${(policy.maxHoursPerDay - 8) / 16 * 100}%, transparent ${(policy.maxHoursPerDay - 8) / 16 * 100}%, transparent 100%)`
+                                        }}
+                                    />
+                                </div>
+                                <div className="flex justify-between text-[8px] font-bold text-slate-300 mt-4 px-1 uppercase tracking-tighter">
+                                    <span>8H</span><span>24H</span>
+                                </div>
                             </div>
                         </div>
 

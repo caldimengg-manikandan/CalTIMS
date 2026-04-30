@@ -1837,5 +1837,6 @@ module.exports = {
   getReadinessCheck,
   getPayrollPreview,
   formatProfile,
-  formatProcessedPayroll
+  formatProcessedPayroll,
+  formatPayslip
 };

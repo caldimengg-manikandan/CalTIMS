@@ -259,7 +259,7 @@ function ProjectFormModal({ project, onClose }) {
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Client Name</label>
                             <input {...register('clientName')} maxLength={100} className="input" placeholder="Optional" />
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5" title="Format: DD/MM/YYYY">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Start Date *</label>
                             <input 
                                 {...register('startDate')} 
@@ -282,7 +282,7 @@ function ProjectFormModal({ project, onClose }) {
                             />
                             {errors.startDate && <p className="text-[10px] text-rose-500">{errors.startDate.message}</p>}
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5" title="Format: DD/MM/YYYY">
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">End Date *</label>
                             <input 
                                 {...register('endDate')} 

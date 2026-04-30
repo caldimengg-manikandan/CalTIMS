@@ -461,7 +461,7 @@ export default function ReportsPage() {
                             <Filter size={16} /> Filters
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2" title="Format: DD/MM/YYYY">
                             <input type="date" className="input py-2 text-sm w-36 bg-slate-50 dark:bg-slate-800"
                                 value={range.from} 
                                 max="9999-12-31"

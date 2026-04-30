@@ -239,7 +239,7 @@ export default function EmployeeFormPage() {
                         {errors.phone && <p className="text-[10px] text-red-500 font-medium">{typeof errors.phone === 'string' ? errors.phone : 'Invalid phone number'}</p>}
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5" title="Format: DD/MM/YYYY">
                         <label className="text-sm font-medium text-slate-700 dark:text-white">Joining Date *</label>
                         <input name="joinDate" type="date" max="9999-12-31" className={getInputClass('joinDate')}
                             value={formData.joinDate} onChange={handleChange} />

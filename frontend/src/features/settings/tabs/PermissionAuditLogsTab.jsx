@@ -120,18 +120,24 @@ export default function PermissionAuditLogsTab() {
                         <option value="DELETE_ROLE">Delete Role</option>
                     </select>
 
-                    <div className="flex items-center bg-slate-50 dark:bg-black/20 rounded-xl px-2">
+                    <div className="flex items-center bg-slate-50 dark:bg-black/20 rounded-xl px-2" title="Format: DD/MM/YYYY">
                         <Calendar size={12} className="text-slate-400 ml-1" />
                         <input 
                             type="date" 
                             className="bg-transparent border-none text-[11px] font-bold text-slate-600 dark:text-slate-400 focus:ring-0 py-2 w-28"
                             value={filters.startDate}
+                            max="9999-12-31"
                             onChange={e => {
-                                const newStart = e.target.value;
+                                let val = e.target.value;
+                                const parts = val.split('-');
+                                if (parts[0] && parts[0].length > 4) {
+                                    parts[0] = parts[0].slice(0, 4);
+                                    val = parts.join('-');
+                                }
                                 setFilters(f => ({ 
                                     ...f, 
-                                    startDate: newStart,
-                                    endDate: f.endDate && newStart > f.endDate ? newStart : f.endDate
+                                    startDate: val,
+                                    endDate: f.endDate && val > f.endDate ? val : f.endDate
                                 }))
                             }}
                         />
@@ -141,7 +147,16 @@ export default function PermissionAuditLogsTab() {
                             className="bg-transparent border-none text-[11px] font-bold text-slate-600 dark:text-slate-400 focus:ring-0 py-2 w-28"
                             value={filters.endDate}
                             min={filters.startDate}
-                            onChange={e => setFilters(f => ({ ...f, endDate: e.target.value }))}
+                            max="9999-12-31"
+                            onChange={e => {
+                                let val = e.target.value;
+                                const parts = val.split('-');
+                                if (parts[0] && parts[0].length > 4) {
+                                    parts[0] = parts[0].slice(0, 4);
+                                    val = parts.join('-');
+                                }
+                                setFilters(f => ({ ...f, endDate: val }))
+                            }}
                         />
                     </div>
 

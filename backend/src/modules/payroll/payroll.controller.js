@@ -411,7 +411,8 @@ exports.getPayslip = async (req, res, next) => {
     const payslip = await prisma.payslip.findFirst({ 
         where: { id: req.params.id, organizationId: req.organizationId }
     });
-    res.status(200).json({ success: true, data: payslip });
+    if (!payslip) return res.status(404).json({ success: false, message: 'Payslip not found' });
+    res.status(200).json({ success: true, data: payrollService.formatPayslip(payslip) });
   } catch (err) { next(err); }
 };
 
@@ -478,17 +479,19 @@ exports.getPayslipByUserId = async (req, res, next) => {
             return res.status(404).json({ success: false, message: 'Payroll record not found for this period.' });
         }
 
-        res.status(200).json({ success: true, data: payroll });
+        res.status(200).json({ success: true, data: payrollService.formatProcessedPayroll(payroll) });
     } catch (err) { next(err); }
 };
 
 exports.downloadPayslipPDF = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const payslip = await prisma.payslip.findFirst({ 
+    let payslip = await prisma.payslip.findFirst({ 
         where: { id, organizationId: req.organizationId }
     });
     if (!payslip) return res.status(404).json({ success: false, message: 'Payslip record not found' });
+    
+    payslip = payrollService.formatPayslip(payslip);
     
     // Use the optimized payslip service which handles template rendering and PDF generation
     const pdfBuffer = await payslipService.generatePayslipPdf(payslip.processedPayrollId, req.organizationId);
@@ -507,10 +510,12 @@ exports.downloadPayslipPDF = async (req, res, next) => {
 exports.sendPayslipEmail = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const payslip = await prisma.payslip.findFirst({ 
+    let payslip = await prisma.payslip.findFirst({ 
         where: { id, organizationId: req.organizationId }
     });
     if (!payslip) return res.status(404).json({ success: false, message: 'Payslip record not found' });
+    
+    payslip = payrollService.formatPayslip(payslip);
     
     const email = payslip.employeeInfo?.email;
     if (!email) return res.status(400).json({ success: false, message: 'Employee email address is missing from snapshot.' });

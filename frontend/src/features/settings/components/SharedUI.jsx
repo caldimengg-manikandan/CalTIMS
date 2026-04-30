@@ -33,28 +33,36 @@ export function Chip({ label, onRemove, disabled }) {
     )
 }
 
-export function AddChipInput({ onAdd, placeholder, disabled }) {
+export function AddChipInput({ onAdd, placeholder, disabled, maxLength = 50 }) {
     const [val, setVal] = useState('')
     const handle = () => {
         if (val.trim()) { onAdd(val.trim()); setVal('') }
     }
     return (
-        <div className="flex gap-2 mt-3">
-            <input
-                className="input flex-1 text-sm"
-                placeholder={placeholder}
-                value={val}
-                onChange={e => setVal(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handle()}
-                disabled={disabled}
-            />
-            <button
-                onClick={handle}
-                disabled={disabled || !val.trim()}
-                className="btn-primary px-3 py-2 rounded-lg text-sm flex items-center gap-1 disabled:opacity-40"
-            >
-                <Plus size={14} /> Add
-            </button>
+        <div className="space-y-2 mt-3">
+            <div className="flex gap-2">
+                <input
+                    className="input flex-1 text-sm"
+                    placeholder={placeholder}
+                    value={val}
+                    onChange={e => setVal(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handle()}
+                    disabled={disabled}
+                    maxLength={maxLength}
+                />
+                <button
+                    onClick={handle}
+                    disabled={disabled || !val.trim()}
+                    className="btn-primary px-3 py-2 rounded-lg text-sm flex items-center gap-1 disabled:opacity-40"
+                >
+                    <Plus size={14} /> Add
+                </button>
+            </div>
+            {val.length > 0 && (
+                <p className={`text-[10px] font-bold text-right transition-colors ${val.length >= maxLength ? 'text-rose-500' : 'text-slate-400'}`}>
+                    {val.length} / {maxLength} characters
+                </p>
+            )}
         </div>
     )
 }

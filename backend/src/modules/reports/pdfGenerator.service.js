@@ -13,16 +13,19 @@ class PDFGeneratorService {
 
     async _getBrowser() {
         if (!this.browser || !this.browser.connected) {
+            console.log('[PDFGenerator] Launching Puppeteer browser...');
             this.browser = await puppeteer.launch({
                 headless: 'new',
                 args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none']
             });
+            console.log('[PDFGenerator] Browser launched successfully.');
         }
         return this.browser;
     }
 
     async _renderHtmlToPdf(payroll, settings = {}, customHtml = null) {
         const browser = await this._getBrowser();
+        console.log('[PDFGenerator] Creating new page...');
         const page = await browser.newPage();
         try {
             let html = '';
@@ -33,7 +36,9 @@ class PDFGeneratorService {
                 const templateData = payslipTemplateService.prepareDataForTemplate(payroll, settings);
                 html = payslipTemplateService.renderTemplate(template.htmlContent, templateData, template.backgroundImageUrl);
             }
+            console.log('[PDFGenerator] Setting page content...');
             await page.setContent(html, { waitUntil: ['load', 'domcontentloaded'], timeout: 30000 });
+            console.log('[PDFGenerator] Content set. Adding style tag...');
             await page.addStyleTag({
                 content: `
                     @page { size: A4; margin: 0; }
@@ -56,12 +61,17 @@ class PDFGeneratorService {
                     .no-print { display: none !important; }
                 `
             });
+            console.log('[PDFGenerator] Style added. Generating PDF...');
             const pdfBuffer = await page.pdf({
                 format: 'A4', printBackground: true,
                 margin: { top: '0', right: '0', bottom: '0', left: '0' },
                 preferCSSPageSize: true
             });
+            console.log(`[PDFGenerator] PDF Generated successfully (${pdfBuffer.length} bytes).`);
             return pdfBuffer;
+        } catch (err) {
+            console.error('[PDFGenerator] ERROR rendering PDF:', err.message);
+            throw err;
         } finally {
             await page.close();
         }

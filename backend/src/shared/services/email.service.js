@@ -569,7 +569,10 @@ const emailService = {
     const payslipService = require('../../modules/payroll/payslip.service');
     
     try {
+        console.log(`[EmailService] Generating PDF for ${recipientEmail}...`);
         const buffer = await payslipService.generatePayslipBuffer(payroll, organizationId);
+        console.log(`[EmailService] PDF Generated (${buffer.length} bytes). Sending email...`);
+
         const monthName = new Date(payroll.year, payroll.month - 1).toLocaleString('default', { month: 'long' });
         const fileName = `Payslip_${payroll.employeeInfo?.employeeId || 'NA'}_${monthName}_${payroll.year}.pdf`;
 
@@ -583,9 +586,11 @@ const emailService = {
           attachments: [{ filename: fileName, content: buffer, contentType: 'application/pdf' }]
         });
 
+        console.log(`[EmailService] Email sent successfully to ${recipientEmail}: ${info.messageId}`);
         logger.info(`[EmailService] Payslip delivered to ${recipientEmail}: ID ${info.messageId}`);
         return true;
     } catch (err) {
+        console.error(`[EmailService] ERROR sending to ${recipientEmail}:`, err.message);
         logger.error(`[EmailService] Failed to send payslip to ${recipientEmail}: ${err.message}`, { stack: err.stack });
         throw err; // bubble up for controller
     }

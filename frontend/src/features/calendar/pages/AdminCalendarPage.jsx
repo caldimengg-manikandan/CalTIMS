@@ -130,18 +130,32 @@ function EventModal({ event, onClose, onSave, isSaving }) {
 
                     {/* Dates */}
                     <div className="grid grid-cols-2 gap-4">
-                        <div>
+                        <div title="Format: DD/MM/YYYY">
                             <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide mb-1.5">Start Date *</label>
-                            <input type="date" value={form.startDate} onChange={e => {
-                                update('startDate', e.target.value)
-                                if (e.target.value > form.endDate) update('endDate', e.target.value)
+                            <input type="date" value={form.startDate} max="9999-12-31" onChange={e => {
+                                let val = e.target.value;
+                                const parts = val.split('-');
+                                if (parts[0] && parts[0].length > 4) {
+                                    parts[0] = parts[0].slice(0, 4);
+                                    val = parts.join('-');
+                                }
+                                update('startDate', val)
+                                if (val > form.endDate) update('endDate', val)
                             }}
                                 className="w-full border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none bg-white dark:bg-slate-800"
                             />
                         </div>
-                        <div>
+                        <div title="Format: DD/MM/YYYY">
                             <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide mb-1.5">End Date *</label>
-                            <input type="date" value={form.endDate} min={form.startDate} onChange={e => update('endDate', e.target.value)}
+                            <input type="date" value={form.endDate} min={form.startDate} max="9999-12-31" onChange={e => {
+                                let val = e.target.value;
+                                const parts = val.split('-');
+                                if (parts[0] && parts[0].length > 4) {
+                                    parts[0] = parts[0].slice(0, 4);
+                                    val = parts.join('-');
+                                }
+                                update('endDate', val)
+                            }}
                                 className="w-full border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none bg-white dark:bg-slate-800"
                             />
                         </div>

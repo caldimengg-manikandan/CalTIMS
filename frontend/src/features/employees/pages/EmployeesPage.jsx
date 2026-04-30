@@ -293,7 +293,7 @@ function EmployeeForm({ formId, formData, onChange, onSubmit, isEdit = false, er
                         />
                         {errors.phone && <p className="text-[10px] text-red-500 font-medium">{typeof errors.phone === 'string' ? errors.phone : 'Invalid phone number'}</p>}
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5" title="Format: DD/MM/YYYY">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Joining Date *</label>
                         <input name="joinDate" type="date" max="9999-12-31" className={getInputClass('joinDate')} value={formData.joinDate} onChange={onChange} />
                     </div>
@@ -513,6 +513,14 @@ export default function EmployeesPage() {
         let { name, value } = e.target
         if (['phone', 'accountNumber', 'uan', 'aadhaar'].includes(name)) value = value.replace(/\D/g, '')
         
+        if (name === 'joinDate') {
+            const parts = value.split('-');
+            if (parts[0] && parts[0].length > 4) {
+                parts[0] = parts[0].slice(0, 4);
+                value = parts.join('-');
+            }
+        }
+
         setAddForm(p => ({ ...p, [name]: value }))
         if (addErrors[name]) setAddErrors(prev => {
             const up = { ...prev }; delete up[name]; return up
@@ -542,6 +550,14 @@ export default function EmployeesPage() {
 
         let { name, value } = e.target
         if (['phone', 'accountNumber', 'uan', 'aadhaar'].includes(name)) value = value.replace(/\D/g, '')
+
+        if (name === 'joinDate') {
+            const parts = value.split('-');
+            if (parts[0] && parts[0].length > 4) {
+                parts[0] = parts[0].slice(0, 4);
+                value = parts.join('-');
+            }
+        }
 
         setEditForm(p => ({ ...p, [name]: value }))
         if (editErrors[name]) setEditErrors(prev => {

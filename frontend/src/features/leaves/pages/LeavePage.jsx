@@ -188,11 +188,16 @@ function ApplyLeaveModal({ onClose, balance }) {
                     </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5" title="Format: DD/MM/YYYY">
                         <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Start Date <span className="text-slate-400 font-normal">(*)</span></label>
                         <input type="date" className="input" max="9999-12-31" value={form.startDate}
                             onChange={e => {
-                                const val = e.target.value;
+                                let val = e.target.value;
+                                const parts = val.split('-');
+                                if (parts[0] && parts[0].length > 4) {
+                                    parts[0] = parts[0].slice(0, 4);
+                                    val = parts.join('-');
+                                }
                                 setForm(f => ({ 
                                     ...f, 
                                     startDate: val,
@@ -200,10 +205,18 @@ function ApplyLeaveModal({ onClose, balance }) {
                                 }))
                             }} required />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5" title="Format: DD/MM/YYYY">
                         <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">End Date <span className="text-slate-400 font-normal">(*)</span></label>
                         <input type="date" className="input" max="9999-12-31" value={form.endDate} min={form.startDate}
-                            onChange={e => setForm(f => ({ ...f, endDate: e.target.value, isHalfDay: false }))} required />
+                            onChange={e => {
+                                let val = e.target.value;
+                                const parts = val.split('-');
+                                if (parts[0] && parts[0].length > 4) {
+                                    parts[0] = parts[0].slice(0, 4);
+                                    val = parts.join('-');
+                                }
+                                setForm(f => ({ ...f, endDate: val, isHalfDay: false }))
+                            }} required />
                     </div>
                 </div>
                 <div className="flex items-center gap-2 mb-2">

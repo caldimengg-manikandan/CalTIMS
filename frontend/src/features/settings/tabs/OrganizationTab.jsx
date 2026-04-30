@@ -17,28 +17,35 @@ import { DaySelector, StatusBadge, ImpactPanel } from '../components/SettingsCom
 const getFormattedTimezones = () => {
     return Intl.supportedValuesOf('timeZone').map(tz => {
         try {
+            // Use 'longOffset' to get ISO 8601 compliant GMT+HH:MM format
             const formatter = new Intl.DateTimeFormat('en-US', {
                 timeZone: tz,
-                timeZoneName: 'shortOffset'
+                timeZoneName: 'longOffset'
             });
             const parts = formatter.formatToParts(new Date());
-            const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT';
+            const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT+00:00';
+            
+            // Convert 'GMT+05:30' to ISO 8601 style 'UTC+05:30'
+            const iso8601Offset = offsetPart.replace('GMT', 'UTC');
+            
             let name = tz.replace(/_/g, ' ');
             if (tz === 'UTC') name = 'UTC (Coordinated Universal Time)';
+            
             return {
                 value: tz,
-                label: `(${offsetPart}) ${name}`
+                label: `[${iso8601Offset}] ${name}`
             };
         } catch (e) {
             return { value: tz, label: tz.replace(/_/g, ' ') };
         }
     }).sort((a, b) => {
         const parseOffset = (label) => {
-            const match = label.match(/GMT([+-]?)(\d+)?(?::(\d+))?/);
+            // Extract offset like +05:30 from [UTC+05:30]
+            const match = label.match(/UTC([+-])(\d{2}):(\d{2})/);
             if (!match) return 0;
             const sign = match[1] === '-' ? -1 : 1;
-            const hrs = parseInt(match[2] || 0) * 60;
-            const mins = parseInt(match[3] || 0);
+            const hrs = parseInt(match[2]) * 60;
+            const mins = parseInt(match[3]);
             return sign * (hrs + mins);
         };
         return parseOffset(a.label) - parseOffset(b.label) || a.label.localeCompare(b.label);
@@ -356,26 +363,38 @@ export default function OrganizationTab() {
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Primary Headquarters</label>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Primary Headquarters</label>
+                                        <span className={`text-[9px] font-bold tracking-widest uppercase ${form.address?.length >= 300 ? 'text-rose-500' : 'text-slate-400'}`}>
+                                            {form.address?.length || 0} / 300
+                                        </span>
+                                    </div>
                                     <div className="relative group">
                                         <MapPin className="absolute left-4 top-5 text-slate-400 group-focus-within:text-primary transition-colors" size={16} />
                                         <textarea
                                             className="input w-full h-24 pl-12 py-4 resize-none text-sm font-medium bg-slate-50/50 dark:bg-white/5"
                                             placeholder="Physical address for correspondence..."
                                             value={form.address}
+                                            maxLength={300}
                                             onChange={e => upd('address', e.target.value)}
                                         />
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Operational Country</label>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Operational Country</label>
+                                        <span className={`text-[9px] font-bold tracking-widest uppercase ${form.country?.length >= 100 ? 'text-rose-500' : 'text-slate-400'}`}>
+                                            {form.country?.length || 0} / 100
+                                        </span>
+                                    </div>
                                     <div className="relative">
                                         <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                         <input
                                             className="input w-full h-12 pl-12 text-sm font-bold bg-slate-50/50 dark:bg-white/5"
                                             placeholder="United States"
                                             value={form.country}
+                                            maxLength={100}
                                             onChange={e => upd('country', e.target.value)}
                                         />
                                     </div>
@@ -514,35 +533,62 @@ export default function OrganizationTab() {
                                 </div>
 
                                 <div className="md:col-span-2 space-y-6 pt-6 border-t border-slate-100 dark:border-white/5">
-                                    <div>
-                                        <div className="flex justify-between items-center mb-3">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Standard Work Day Baseline</label>
-                                            <div className="flex items-center gap-2">
-                                                <div className="relative">
-                                                    <input 
-                                                        type="number"
-                                                        min={1} max={12} step={0.25}
-                                                        value={form.workingHoursPerDay}
-                                                        onChange={e => upd('workingHoursPerDay', parseFloat(e.target.value) || 0)}
-                                                        className="w-20 h-9 bg-primary/10 dark:bg-primary/20 border-0 rounded-xl text-center text-xs font-black text-primary focus:ring-2 focus:ring-primary/50 transition-all outline-none"
-                                                    />
-                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-primary/50 pointer-events-none uppercase">HRS</span>
-                                                </div>
+                                    <div className="pt-2">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <div className="flex flex-col">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Standard Work Day Baseline</label>
+                                                <p className="text-[9px] text-slate-400 font-medium mt-0.5">Average operational hours per business day</p>
+                                            </div>
+                                            <div className="bg-slate-900 dark:bg-white px-4 py-2 rounded-2xl shadow-lg flex items-center gap-2 group transition-all hover:scale-105">
+                                                <input 
+                                                    type="number"
+                                                    min={1} max={12} step={0.25}
+                                                    value={form.workingHoursPerDay}
+                                                    onChange={e => upd('workingHoursPerDay', parseFloat(e.target.value) || 0)}
+                                                    className="w-12 bg-transparent border-0 text-right text-sm font-black text-white dark:text-slate-900 focus:ring-0 outline-none p-0"
+                                                />
+                                                <span className="text-[10px] font-black text-white/50 dark:text-slate-900/50 uppercase tracking-widest">HRS</span>
                                             </div>
                                         </div>
-                                        <input
-                                            type="range"
-                                            min={1} max={12} step={0.25}
-                                            value={form.workingHoursPerDay}
-                                            onChange={e => upd('workingHoursPerDay', parseFloat(e.target.value))}
-                                            className="w-full accent-primary h-2 bg-slate-100 dark:bg-white/5 rounded-full appearance-none cursor-pointer mb-2"
-                                        />
-                                        <div className="flex justify-between text-[8px] font-black text-slate-300 uppercase tracking-widest px-1">
-                                            <span>1h</span>
-                                            <span>4h</span>
-                                            <span>8h</span>
-                                            <span>12h</span>
+                                        
+                                        <div className="relative px-2 group">
+                                            {/* Track Points (Dots) */}
+                                            <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full flex justify-between px-2 pointer-events-none">
+                                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(h => (
+                                                    <div key={h} className="relative flex flex-col items-center">
+                                                        <div className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${form.workingHoursPerDay >= h ? 'bg-indigo-500 scale-125 shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'bg-slate-200 dark:bg-white/10'}`} />
+                                                        <span className={`absolute top-4 text-[8px] font-black transition-colors ${Math.round(form.workingHoursPerDay) === h ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-300 dark:text-slate-600'}`}>
+                                                            {h}H
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {/* Range Input */}
+                                            <input
+                                                type="range"
+                                                min={1} max={12} step={0.25}
+                                                value={form.workingHoursPerDay}
+                                                onChange={e => upd('workingHoursPerDay', parseFloat(e.target.value))}
+                                                className="relative w-full h-1.5 bg-slate-100 dark:bg-white/5 rounded-full appearance-none cursor-pointer z-10 accent-indigo-600
+                                                    [&::-webkit-slider-thumb]:appearance-none 
+                                                    [&::-webkit-slider-thumb]:w-6 
+                                                    [&::-webkit-slider-thumb]:h-6 
+                                                    [&::-webkit-slider-thumb]:rounded-full 
+                                                    [&::-webkit-slider-thumb]:bg-slate-900 
+                                                    [&::-webkit-slider-thumb]:dark:bg-white 
+                                                    [&::-webkit-slider-thumb]:border-4 
+                                                    [&::-webkit-slider-thumb]:border-indigo-500 
+                                                    [&::-webkit-slider-thumb]:shadow-xl 
+                                                    [&::-webkit-slider-thumb]:hover:scale-110 
+                                                    [&::-webkit-slider-thumb]:transition-all
+                                                    [&::-webkit-slider-runnable-track]:bg-transparent"
+                                                style={{
+                                                    background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${(form.workingHoursPerDay - 1) / 11 * 100}%, transparent ${(form.workingHoursPerDay - 1) / 11 * 100}%, transparent 100%)`
+                                                }}
+                                            />
                                         </div>
+                                        <div className="mt-8" /> {/* Spacer for labels */}
                                     </div>
 
                                         <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/10 hover:border-primary/30 transition-all">

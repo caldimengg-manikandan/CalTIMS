@@ -3955,6 +3955,21 @@ export const BankTransferExport = () => {
    const [statusFilter, setStatusFilter] = React.useState('All');
    const [isPreviewOpen, setIsPreviewOpen] = React.useState(false);
    const [isConfirmOpen, setIsConfirmOpen] = React.useState(false);
+   const [selectedIds, setSelectedIds] = React.useState([]);
+
+   const toggleSelection = (id) => {
+      setSelectedIds(prev =>
+         prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+      );
+   };
+
+   const handleSelectAll = () => {
+      if (selectedIds.length === filteredNodes.length) {
+         setSelectedIds([]);
+      } else {
+         setSelectedIds(filteredNodes.map(n => n.id));
+      }
+   };
 
    const { data: usersData } = useQuery({
       queryKey: ['usersList'],
@@ -4009,20 +4024,32 @@ export const BankTransferExport = () => {
       return nodes;
    }, [history, month, year, bankFilter, statusFilter, validatePayout]);
 
+   // Sync selection with filtered nodes when filters change
+   React.useEffect(() => {
+      setSelectedIds(filteredNodes.map(n => n.id));
+   }, [filteredNodes]);
+
+   const selectedNodes = React.useMemo(() => {
+      return filteredNodes.filter(n => selectedIds.includes(n.id));
+   }, [filteredNodes, selectedIds]);
+
    const stats = React.useMemo(() => {
       const totalLiquidity = filteredNodes.reduce((acc, curr) => acc + (curr.breakdown?.netPay || 0), 0);
+      const selectedLiquidity = selectedNodes.reduce((acc, curr) => acc + (curr.breakdown?.netPay || 0), 0);
       return {
          totalLiquidity,
+         selectedLiquidity,
          nodeCount: filteredNodes.length,
+         selectedCount: selectedNodes.length,
          readyCount: filteredNodes.filter(n => n.validation.type === 'Ready').length,
          pendingCount: filteredNodes.filter(n => n.validation.type === 'Pending').length,
          errorCount: filteredNodes.filter(n => n.validation.type === 'Error').length,
       };
-   }, [filteredNodes]);
+   }, [filteredNodes, selectedNodes]);
 
    const headers = ['Account Number', 'Beneficiary Name', 'Bank Name', 'IFSC', 'Amount', 'Description'];
    const previewRows = React.useMemo(() => {
-      return filteredNodes.map(h => [
+      return selectedNodes.map(h => [
          h.employee?.user?.accountNumber || h.bankDetails?.accountNumber || 'NOT-MAPPED',
          h.employee?.user?.name || h.employeeInfo?.name || 'Unknown',
          h.employee?.user?.bankName || h.bankDetails?.bankName || 'NOT-MAPPED',
@@ -4030,11 +4057,11 @@ export const BankTransferExport = () => {
          h.breakdown?.netPay,
          `Salary_${month}_${year}`
       ]);
-   }, [filteredNodes, month, year]);
+   }, [selectedNodes, month, year]);
 
    const downloadBankFile = () => {
-      if (!filteredNodes.length) {
-         toast.error('No validated payouts found for export');
+      if (!selectedNodes.length) {
+         toast.error('No selected payouts for export');
          return;
       }
       const csvContent = [headers.join(','), ...previewRows.map(r => r.join(','))].join('\n');
@@ -4065,10 +4092,10 @@ export const BankTransferExport = () => {
 
                <button
                   onClick={() => setIsPreviewOpen(true)}
-                  disabled={!filteredNodes.length}
+                  disabled={!selectedIds.length}
                   className="px-4 py-2 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 text-white rounded-lg text-sm font-bold transition-all shadow-md shadow-indigo-200 dark:shadow-none disabled:opacity-50"
                >
-                  Generate File
+                  Generate File ({selectedIds.length})
                </button>
             </div>
          </div>
@@ -4145,6 +4172,16 @@ export const BankTransferExport = () => {
                      <table className="w-full text-left">
                         <thead>
                            <tr className="bg-slate-50/50 dark:bg-white/5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 dark:border-[#333333]">
+                              <th className="px-6 py-4 w-10">
+                                 <div className="flex items-center justify-center">
+                                    <input 
+                                       type="checkbox" 
+                                       checked={selectedIds.length === filteredNodes.length && filteredNodes.length > 0}
+                                       onChange={handleSelectAll}
+                                       className="w-4 h-4 rounded border-slate-300 dark:border-white/10 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                    />
+                                 </div>
+                              </th>
                               <th className="px-8 py-4">Employee Name</th>
                               <th className="px-8 py-4">Employee ID</th>
                               <th className="px-8 py-4">Bank Details</th>
@@ -4154,7 +4191,17 @@ export const BankTransferExport = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-50 dark:divide-white/5">
                            {filteredNodes.length > 0 ? filteredNodes.map((h, i) => (
-                              <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group">
+                              <tr key={i} className={`hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group ${selectedIds.includes(h.id) ? 'bg-indigo-50/30 dark:bg-indigo-500/5' : ''}`}>
+                                 <td className="px-6 py-4">
+                                    <div className="flex items-center justify-center">
+                                       <input 
+                                          type="checkbox" 
+                                          checked={selectedIds.includes(h.id)}
+                                          onChange={() => toggleSelection(h.id)}
+                                          className="w-4 h-4 rounded border-slate-300 dark:border-white/10 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                       />
+                                    </div>
+                                 </td>
                                  <td className="px-8 py-4">
                                     <div className="flex items-center gap-3">
                                        <div className="w-10 h-10 rounded-full bg-slate-900 dark:bg-indigo-500 flex items-center justify-center text-white text-xs font-black shadow-inner">
@@ -4186,14 +4233,7 @@ export const BankTransferExport = () => {
                               </tr>
                            )) : (
                               <tr>
-                                 <td colSpan={5} className="px-8 py-20 text-center">
-                                    <div className="flex flex-col items-center gap-3">
-                                       <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-full text-slate-300 dark:text-gray-600">
-                                          <Search size={32} />
-                                       </div>
-                                       <p className="text-sm font-bold text-slate-400">No payout records match your current selection</p>
-                                    </div>
-                                 </td>
+                                 <td colSpan={6} className="px-8 py-20 text-center text-slate-400 text-sm font-medium">No records found.</td>
                               </tr>
                            )}
                         </tbody>
@@ -4204,26 +4244,23 @@ export const BankTransferExport = () => {
                   <div className="p-6 bg-slate-900 dark:bg-[#1a1a1a] flex flex-col md:flex-row items-center justify-between gap-6">
                      <div className="flex items-center gap-6">
                         <div className="flex flex-col">
-                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Ready to Disburse</span>
-                           <h4 className="text-white font-bold">{stats.readyCount} Employees</h4>
+                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Selected for Export</span>
+                           <h4 className="text-white font-bold">{stats.selectedCount} / {stats.nodeCount} Employees</h4>
                         </div>
                         <div className="h-8 w-px bg-white/10 hidden md:block" />
-                        {/* <div className="flex flex-col">
-                           <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Issues Found</span>
-                           <h4 className="text-white font-bold">{stats.pendingCount + stats.errorCount} Records</h4>
-                        </div> */}
+                        <div className="flex flex-col">
+                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Selected Payout</span>
+                           <h4 className="text-white font-bold">{currencySymbol}{formatCurrency(stats.selectedLiquidity)}</h4>
+                        </div>
                      </div>
 
                      <div className="flex items-center gap-3 w-full md:w-auto">
-                        {/* <button className="flex-1 md:flex-none px-6 py-2 border border-white/20 text-white rounded-lg text-xs font-bold hover:bg-white/5 transition-all uppercase tracking-widest">
-                           Fix Issues
-                        </button> */}
                         <button
                            onClick={() => setIsPreviewOpen(true)}
-                           disabled={!filteredNodes.length}
+                           disabled={!selectedIds.length}
                            className="flex-1 md:flex-none px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold transition-all uppercase tracking-widest shadow-lg shadow-indigo-500/20 dark:shadow-none disabled:opacity-30"
                         >
-                           Preview & Export
+                           Preview & Export ({selectedIds.length})
                         </button>
                      </div>
                   </div>
@@ -4296,7 +4333,7 @@ export const BankTransferExport = () => {
             onClose={() => setIsConfirmOpen(false)}
             onConfirm={downloadBankFile}
             title="Generate Bank Transfer File?"
-            message={`You are about to generate a transfer file for ${stats.nodeCount} employees totaling ${currencySymbol}${formatCurrency(stats.totalLiquidity)}. Ensure all details are verified.`}
+            message={`You are about to generate a transfer file for ${stats.selectedCount} selected employees totaling ${currencySymbol}${formatCurrency(stats.selectedLiquidity)}. Ensure all details are verified.`}
 
             confirmText="Generate & Download"
             type="primary"

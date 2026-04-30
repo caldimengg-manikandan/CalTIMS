@@ -166,7 +166,7 @@ function AnnouncementModal({ existing, onClose, onSuccess }) {
                     </div>
 
                     {/* Expiry Date */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5" title="Format: DD/MM/YYYY">
                         <label className="label flex items-center gap-1.5">
                             <Calendar size={13} className="text-slate-400" /> Expires On
                             <span className="text-slate-400 font-normal text-xs">(optional)</span>
@@ -175,7 +175,15 @@ function AnnouncementModal({ existing, onClose, onSuccess }) {
                             type="date"
                             className="input"
                             value={form.expiresAt}
-                            onChange={e => set('expiresAt', e.target.value)}
+                            onChange={e => {
+                                let val = e.target.value;
+                                const parts = val.split('-');
+                                if (parts[0] && parts[0].length > 4) {
+                                    parts[0] = parts[0].slice(0, 4);
+                                    val = parts.join('-');
+                                }
+                                set('expiresAt', val)
+                            }}
                             min={new Date().toISOString().slice(0, 10)}
                             max="9999-12-31"
                         />
